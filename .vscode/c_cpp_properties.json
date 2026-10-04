@@ -1,0 +1,16 @@
+{
+    "configurations": [
+        {
+            "name": "SDCC",
+            "includePath": [
+                "${workspaceFolder}/Shelfkit-Hub/include",
+                "${workspaceFolder}/shared/sdk/libmf/include",
+                "${workspaceFolder}/shared/sdk/libaxdvk2/include",
+                "C:/Program Files/SDCC/include",
+                "C:/Program Files/SDCC/non-free/include"
+            ],
+            "defines": [],
+            "cStandard": "c11"
+        }
+    ]
+}

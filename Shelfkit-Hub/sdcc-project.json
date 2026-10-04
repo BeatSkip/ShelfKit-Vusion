@@ -1,0 +1,33 @@
+{
+  "name": "Shelfkit-Hub",
+  "board": "axsem-8052f143",
+  "sources": [
+    "src"
+  ],
+  "includes": [
+    "include",
+    "../shared/sdk/libmf/include",
+    "../shared/sdk/libaxdvk2/include"
+  ],
+  "defines": [],
+  "libraries": [
+    "../shared/lib"
+  ],
+  "components": [
+    "../shared/components"
+  ],
+  "build": {
+    "output_dir": "build",
+    "output_name": "firmware",
+    "hooks": {}
+  },
+  "upload": {
+    "tool": "python",
+    "args": [
+      "../tooling/axsem-flasher.py",
+      "${outputHex}",
+      "-p",
+      "${config:comPort}"
+    ]
+  }
+}
