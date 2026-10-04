@@ -5,6 +5,9 @@
             "includePath": [
                 "${workspaceFolder}/include",
                 "${workspaceFolder}/../shared/sdk/libmf/include",
+                "${workspaceFolder}/../shared/firmware/axradio/inc",
+                "${workspaceFolder}/../shared/firmware/shelfhw/inc",
+                "${workspaceFolder}/../shared/firmware/shelflink/inc",
                 "C:/Program Files/SDCC/include",
                 "C:/Program Files/SDCC/include/mcs51",
                 "C:/Program Files/SDCC/non-free/include"

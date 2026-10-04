@@ -2,12 +2,18 @@
   "name": "Shelfkit-Hub",
   "board": "axsem-8052f143",
   "sources": [
-    "src"
+    "src",
+    "../shared/firmware/axradio",
+    "../shared/firmware/shelfhw",
+    "../shared/firmware/shelflink"
   ],
   "includes": [
     "include",
     "../shared/sdk/libmf/include",
-    "../shared/sdk/libaxdvk2/include"
+    "../shared/sdk/libaxdvk2/include",
+    "../shared/firmware/axradio/inc",
+    "../shared/firmware/shelfhw/inc",
+    "../shared/firmware/shelflink/inc"
   ],
   "defines": [],
   "libraries": [

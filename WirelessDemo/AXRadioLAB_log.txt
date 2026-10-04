@@ -1,0 +1,40 @@
+Started Radiolab Application GUI
+
+Codeblocks path: C:\Program Files\AxCodeBlocks\bin
+
+Status for directoy: 0
+
+Created Template sub-directories Successfully
+
+Status for copying files: 0
+
+Copied template directory files successfully
+
+The chosen radio is AX5043
+
+The chosen device is ax8052F143 
+
+Minikit selected, value 1
+
+AX8052F143 Minikit 
+
+Replace AX5043 or AX5044_45
+
+Replace AX5043 or AX5044_45
+
+Replace AX5043 or AX5044_45
+
+Replace AX5043 or AX5044_45
+
+Replace AX5043 or AX5044_45
+
+Replace AX5043 or AX5044_45
+
+SDCC is built
+
+Project built is C:\Program Files\AxCodeBlocks\bin\axcodeblocks.exe "c:\Users\Beatskip\Documents\Development\WirelessDemo\MASTER\MASTER.cbp"
+
+Status for opening AX:CodeBlocks -FAILURE: -3
+
+ERROR while opening AX:CodeBlocks 
+

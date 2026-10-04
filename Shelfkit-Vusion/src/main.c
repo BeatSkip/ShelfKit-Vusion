@@ -1,207 +1,137 @@
 /**
  * @file main.c
- * @brief Show the polyform logo on the e-paper, log over UART TX
+ * @brief ShelfKit tag (Vusion): polls the hub every SHELF_POLL_INTERVAL_S seconds
  *
- * Boots, brings up the e-paper display (GDEW026Z39, 2.6"), uploads the
- * polyform boot image (both black/white and red planes), refreshes the
- * panel, powers it down, and flashes the blue LED once when the refresh
- * has finished. The panel holds the image in deep sleep.
- *
- * UART0 is TX-only debug logging at 38400 8N1 on PB4, using the same
- * register-level output path as the flash-dump firmware (avoids the
- * broken libmf FIFO tables). RX is never enabled, so PB5 stays free for
- * the panel's reset line.
+ * Every poll is a reliable request (see shared/firmware/shelflink): the tag
+ * sends POLL, the radio drops back into receive mode by itself, and the hub's
+ * POLL_RSP is the acknowledgement. Without one the poll is retried with a
+ * jittered back-off, up to SL_MAX_ATTEMPTS transmissions. Results and link
+ * statistics are logged on UART0 TX (PB4, 38400 8N1): green LED = poll
+ * acknowledged, red LED = poll failed.
  */
 
 #include <ax8052f143.h>
-#include <libmf.h>
 #include <libmftypes.h>
-#include <libmfuart.h>
-#include <libmfuart0.h>
-#include "hal.h"
-#include "board.h"
+#include <libmfwtimer.h>
+#include "axradio.h"
+#include "shelfhw.h"
+#include "shelflink.h"
+#include "shelfmsg.h"
+#include "shelf_config.h"
 #include "pwr.h"
-#include "spi.h"
-#include "epd.h"
-#include "epd_image.h"      /* epd_image_bw / epd_image_red */
 
-/* ── UART TX debug logging (register-level) ──────────────────────────── */
+static struct wtimer_desc __xdata poll_timer;
+static uint8_t __xdata poll_payload[SM_POLL_LEN];
+static uint8_t __xdata last_attempts;
+static int8_t __xdata last_hub_rssi;
+static uint16_t __xdata polls_done;
 
-static void uart_putc(uint8_t c)
+static void log_stats(void)
 {
-    while (!(U0STATUS & 0x04))      /* wait for U0TXEMPTY */
-        ;
-    U0SHREG = c;
-    U0CTRL |= 0x08;                 /* arm the TX-done flag, like iocore */
+    log_puts("stats req=");
+    log_dec(sl_stats.tx_req);
+    log_puts(" ok=");
+    log_dec(sl_stats.tx_ok);
+    log_puts(" fail=");
+    log_dec(sl_stats.tx_fail);
+    log_puts(" air=");
+    log_dec(sl_stats.tx_att);
+    log_puts(" err=");
+    log_dec(sl_stats.tx_err);
+    log_puts(" rxbad=");
+    log_dec(sl_stats.rx_bad);
+    log_puts(" stray=");
+    log_dec(sl_stats.rx_stray);
+    log_nl();
 }
 
-static void uart_puts(const char *s)
+static void on_done(const struct sl_done __xdata *done)
 {
-    while (*s)
-        uart_putc((uint8_t)*s++);
-}
+    uint8_t attempts = done->attempts;
+    const struct sl_rx __xdata *rsp = done->rsp;
 
-/* ── small helpers ────────────────────────────────────────────────────── */
+    polls_done++;
+    last_attempts = attempts;
+    shelfhw_led(SHELFHW_LED_GREEN, 0);
+    shelfhw_led(SHELFHW_LED_RED, 0);
 
-static void ms_delay(uint16_t ms)
-{
-    while (ms--)
-        delay(1000);
-}
-
-/* BUSY helpers are level-agnostic (work with either tag polarity):
- * wait for an edge away from a level, then wait for a return to it. */
-
-static void wait_busy_change(uint8_t from_level, uint16_t timeout_ms)
-{
-    uint16_t t = timeout_ms;
-    while (EPD_BUSY == from_level) {
-        if (!--t)
-            break;
-        delay(1000);
+    if (done->result == SL_OK) {
+        log_puts("poll ok att=");
+        log_dec(attempts);
+        log_puts(" rssi=");
+        log_sdec(rsp->rssi);
+        if (rsp->len >= SM_RSP_LEN) {
+            last_hub_rssi = (int8_t)rsp->payload[SM_RSP_RSSI];
+            log_puts(" hubrssi=");
+            log_sdec(last_hub_rssi);
+        }
+        log_nl();
+        shelfhw_led(SHELFHW_LED_GREEN, 1);
+    } else {
+        log_puts("poll FAILED after ");
+        log_dec(attempts);
+        log_puts(" attempts");
+        log_nl();
+        shelfhw_led(SHELFHW_LED_RED, 1);
     }
+
+    if (polls_done % SHELF_STATS_EVERY == 0)
+        log_stats();
 }
 
-static void wait_busy_return(uint8_t to_level, uint16_t timeout_ms)
+static void poll_cb(struct wtimer_desc __xdata *desc)
 {
-    uint16_t t = timeout_ms;
-    while (EPD_BUSY != to_level) {
-        if (!--t)
-            break;
-        delay(1000);
-    }
+    uint16_t up = (uint16_t)(wtimer0_curtime() / SHELFHW_TICKS_PER_S);
+
+    /* Periodic, anchored to the previous expiry so the interval does not drift */
+    desc->time += (uint32_t)SHELF_POLL_INTERVAL_S * SHELFHW_TICKS_PER_S;
+    wtimer0_addabsolute(desc);
+
+    poll_payload[SM_POLL_UPTIME_LO] = (uint8_t)up;
+    poll_payload[SM_POLL_UPTIME_HI] = (uint8_t)(up >> 8);
+    poll_payload[SM_POLL_ATTEMPTS] = last_attempts;
+    poll_payload[SM_POLL_RSSI] = (uint8_t)last_hub_rssi;
+
+    if (sl_send(SL_NODE_HUB, SL_T_POLL, poll_payload, SM_POLL_LEN) != SL_OK)
+        log_puts("poll skipped, previous still in flight\r\n");
 }
 
-static void epd_write_cmd(uint8_t cmd)
+void main(void)
 {
-    EPD_DC = 0;
-    spi_select(SPI_DEV_EPD);
-    spi_transfer(cmd);
-    spi_deselect(SPI_DEV_EPD);
-    EPD_DC = 1;
-}
+    uint8_t r;
 
-static void epd_write_data(uint8_t data)
-{
-    spi_select(SPI_DEV_EPD);
-    spi_transfer(data);
-    spi_deselect(SPI_DEV_EPD);
-}
-
-/* ── start the display ────────────────────────────────────────────────── */
-
-static void epd_init_panel(void)
-{
-    uint8_t idle;
-
-    /* DC out (PA0), RST out (PB5), BUSY in (PB2); CS (PA1) per spi_init */
-    DIRA |= 0x01;
-    DIRB |= 0x20;
-    DIRB &= (uint8_t)~0x04;
-    EPD_DC = 1;
-    EPD_RST = 1;
-
-    /* Hardware reset: 100 ms low, 100 ms settle */
-    EPD_RST = 0;
-    ms_delay(100);
-    EPD_RST = 1;
-    ms_delay(100);
-
-    /* Booster soft start */
-    epd_write_cmd(0x06);
-    epd_write_data(0x17);
-    epd_write_data(0x17);
-    epd_write_data(0x17);
-
-    /* Power on and let the booster pulse settle */
-    idle = EPD_BUSY;
-    epd_write_cmd(0x04);
-    wait_busy_change(idle, 1500);
-    wait_busy_return(idle, 2500);
-
-    /* Panel setting: LUT from OTP, BWR */
-    epd_write_cmd(0x00);
-    epd_write_data(0x0F);
-
-    /* Resolution: 152 x 296 (from epd.h), 3-byte form */
-    epd_write_cmd(0x61);
-    epd_write_data((uint8_t)EPD_W);
-    epd_write_data((uint8_t)((uint16_t)EPD_H >> 8));
-    epd_write_data((uint8_t)EPD_H);
-
-    /* VCOM and data interval */
-    epd_write_cmd(0x50);
-    epd_write_data(0x77);
-}
-
-void main()
-{
-    uint8_t idle;
-
-    periph_init();
-
-    /* Power rails via the PA2/PA5 transistor lines (see pwr.h) */
+    shelfhw_init();
+#if SHELF_POWER_LINES
     pwr_init();
     pwr_on();
+#endif
+    log_puts("\r\n*** ShelfKit tag, node ");
+    log_hex16(SHELF_NODE_ID);
+    log_puts(" net ");
+    log_hex8(SHELF_NET_ID);
+    log_nl();
 
-    /* UART0 TX debug output, 38400 8N1 on PB4 (PALTB muxes PB4 to
-     * U0TX). Only the TX direction is used; RX stays disabled so the
-     * panel reset line on PB5 is untouched. */
-    PALTB |= 0x10;
-    DIRB |= 0x10;
-    DIRB &= (uint8_t)~0x20;
-    PORTB |= 0x30;
-
-    /* Start the 20 MHz FRC oscillator, slaved to the 32 kHz LPX crystal
-     * - the AXSEM bootloader's sequence, needed for exact 38400. */
-    FRCOSCREF = 19531;
-    FRCOSCKFILT = 2800;
-    LPXOSCGM = 0x90;
-    OSCFORCERUN |= 0x04;
-    FRCOSCCONFIG = (6 << 3) | CLKSRC_LPXOSC;
-    WTCFGB = (1 << 3) | CLKSRC_LPXOSC;
-    {
-        uint8_t i = 128;
-        OSCCALIB = 0x01;
-        IE_5 = 1;
-        do {
-            while (!(OSCCALIB & 0x40))
-                enter_standby();
-            (void)FRCOSCFREQ1;
-        } while (--i);
-        IE_5 = 0;
-        OSCCALIB = 0x00;
+    r = sl_init(SHELF_NODE_ID, SHELF_NET_ID, 0, on_done);
+    if (r != AXRADIO_ERR_NOERROR) {
+        log_puts("radio init failed, err=");
+        log_dec(r);
+        log_nl();
+        shelfhw_led(SHELFHW_LED_RED, 1);
+        for (;;)
+            shelfhw_poll();
     }
+    log_puts("radio ok, pll rng=");
+    log_dec(axradio_get_pllrange());
+    log_puts(", polling every ");
+    log_dec(SHELF_POLL_INTERVAL_S);
+    log_puts(" s");
+    log_nl();
+    shelfhw_led(SHELFHW_LED_BLUE, 1);
 
-    uart_timer0_baud(CLKSRC_FRCOSC, 38400, 20000000);
-    uart0_init(0, 8, 1);
-
-    uart_puts("\r\n*** polyform demo ***\r\n");
-
-    spi_init();
-    epd_init_panel();
-    uart_puts("panel init ok\r\n");
-
-    /* Upload the polyform logo: black/white plane, then red plane */
-    uart_puts("uploading image\r\n");
-    epd_upload(0x10, epd_image_bw, EPD_PLANE_BYTES);
-    epd_upload(0x13, epd_image_red, EPD_PLANE_BYTES);
-
-    /* Refresh and wait for the panel to finish */
-    uart_puts("refreshing\r\n");
-    idle = EPD_BUSY;
-    epd_write_cmd(0x12);
-    wait_busy_change(idle, 3000);
-    wait_busy_return(idle, 30000);
-    uart_puts("refresh done\r\n");
-
-    /* Panell off (keeps the image), then signal completion */
-    epd_write_cmd(0x02);            /* POF */
-
-    PIN_SET_HIGH(LEDB_PORT, LEDB_PIN);   /* blue LED: one flash */
-    ms_delay(300);
-    PIN_SET_LOW(LEDB_PORT, LEDB_PIN);   /* blue LED: one flash */
+    poll_timer.handler = poll_cb;
+    poll_timer.time = SHELFHW_TICKS_PER_S;
+    wtimer0_addrelative(&poll_timer);
 
     for (;;)
-        ;
+        shelfhw_poll();
 }
