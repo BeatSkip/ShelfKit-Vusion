@@ -1,3 +1,6 @@
 {
-    "sdcc.comPort": "COM4"
+    "sdcc.comPort": "COM3",
+    "sdcc.monitorBaud": 38400,
+    "sdcc.monitorEol": "lf",
+    "sdcc.buildMode": "release"
 }

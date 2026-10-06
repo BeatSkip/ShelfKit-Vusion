@@ -1,0 +1,60 @@
+[22:15:23.982 tag] AX8052 Bootloader V1.1 Checksum 0xA7D2
+[22:15:23.982 hub] sum 0xA7D2
+---- link summary ----
+no tag polls seen yet
+[22:15:40.565 tag] AX8052 Bootloader V1.1 Checksum 0xA7D2
+---- link summary ----
+no tag polls seen yet
+---- link summary ----
+no tag polls seen yet
+[22:18:19.710 tag] 0xA7D2
+[22:18:19.711 hub] AX8052 Bootloader V1.1 Checksum 0xA7D2
+---- link summary ----
+no tag polls seen yet
+[22:18:34.324 hub] *** ShelfKit hub, node 0001 net 5a
+[22:18:34.324 hub] radio ok, pll rng=10, listening
+[22:18:34.340 tag]  0100 net 5a
+[22:18:34.340 tag]  pll rng=10, polling every 5 s
+[22:18:35.489 tag] 6 hubrssi=-26
+[22:18:35.489 hub] POLL src=0100 seq=08 rssi=-26 up=1s att=0 hubrssi=0
+[22:18:41.158 hub] POLL src=0100 seq=09 rssi=-25 up=6s att=1 hubrssi=-26
+[22:18:41.158 tag] =-25
+[22:18:46.828 tag] poll ok att=1 rssi=-26 hubrssi=-26
+[22:18:46.828 hub] POLL src=0100 seq=0a rssi=-26 up=11s att=1 hubrssi=-25
+[22:18:52.491 hub] POLL src=0100 seq=0b rssi=-25 up=16s att=1 hubrssi=-26
+[22:18:58.158 hub] POLL src=0100 seq=0c rssi=-26 up=21s att=1 hubrssi=-25
+[22:18:58.158 tag] poll ok att=1 rssi=-26 hubrssi=-26
+[22:19:03.833 tag] poll ok att=1 rssi=-27 hubrssi=-26
+[22:19:03.833 hub] POLL src=0100 seq=0d rssi=-26 up=26s att=1 hubrssi=-26
+[22:19:09.502 tag] ubrssi=-25
+[22:19:09.502 hub] POLL src=0100 seq=0e rssi=-25 up=31s att=1 hubrssi=-26
+[22:19:15.162 hub] POLL src=0100 seq=0f rssi=-25 up=36s att=1 hubrssi=-25
+[22:19:15.162 tag] poll ok att=1 rssi=-26 hubrssi=-25
+[22:19:20.840 tag]  ok att=1 rssi=-27 hubrssi=-25
+[22:19:20.840 hub] POLL src=0100 seq=10 rssi=-25 up=41s att=1 hubrssi=-25
+[22:19:26.499 hub] POLL src=0100 seq=11 rssi=-26 up=46s att=1 hubrssi=-25
+[22:19:26.514 tag] poll ok att=1 rssi=-26 hubrssi=-26
+[22:19:26.514 tag] stats req=10 ok=10 fail=0 air=10 err=0 rxbad=0 stray=0
+[22:19:32.164 hub] POLL src=0100 seq=12 rssi=-26 up=51s att=1 hubrssi=-26
+[22:19:32.164 tag] poll ok att=1 rssi=-27 hubrssi=-26
+[22:19:37.841 tag] poll ok att=1 rssi=-26 hubrssi=-25
+[22:19:37.841 hub] POLL src=0100 seq=13 rssi=-25 up=56s att=1 hubrssi=-26
+[22:19:43.511 tag] poll ok att=1 rssi=-27 hubrssi=-26
+[22:19:43.511 hub] POLL src=0100 seq=14 rssi=-26 up=61s att=1 hubrssi=-25
+[22:19:49.170 hub] POLL src=0100 seq=15 rssi=-25 up=66s att=1 hubrssi=-26
+[22:19:49.170 tag] 25
+[22:19:54.847 hub] POLL src=0100 seq=16 rssi=-26 up=71s att=1 hubrssi=-25
+[22:19:54.847 tag] poll ok att=1 rssi=-27 hubrssi=-26
+[22:20:00.505 hub] POLL src=0100 seq=17 rssi=-25 up=76s att=1 hubrssi=-26
+[22:20:00.505 tag] poll ok att=1 rssi=-27 hubrssi=-25
+[22:20:06.180 hub] POLL src=0100 seq=18 rssi=-25 up=81s att=1 hubrssi=-25
+[22:20:11.845 hub] POLL src=0100 seq=19 rssi=-26 up=86s att=1 hubrssi=-25
+[22:20:11.845 tag] i=-27 hubrssi=-26
+[22:20:17.519 hub] POLL src=0100 seq=1a rssi=-26 up=91s att=1 hubrssi=-26
+[22:20:17.519 tag] poll ok att=1 rssi=-26 hubrssi=-26
+---- link summary ----
+tag polls : 11  ok 11 (100.0 %)  failed 0
+attempts  : 1 att: 11
+rssi at tag (min/avg/max): -27/-26/-26 dBm
+rssi at hub (min/avg/max): -26/-26/-25 dBm
+hub heard : 19 polls, 0 flagged retry, 0 duplicates

@@ -102,7 +102,7 @@ def open_port(port):
     ser.baudrate = BAUD
     ser.timeout = 0.2
     ser.dtr = False          # boot pin released
-    ser.rts = False          # reset released
+    ser.rts = True          # reset released
     ser.open()
     return ser
 
