@@ -10,7 +10,9 @@
                 "C:/Program Files/SDCC/non-free/include"
             ],
             "defines": [],
-            "cStandard": "c11"
+            "cStandard": "c11",
+            "intelliSenseMode": "windows-msvc-x64"
         }
-    ]
+    ],
+    "version": 4
 }
