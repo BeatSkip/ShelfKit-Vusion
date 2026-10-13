@@ -70,7 +70,7 @@ static void epd_delay_ms(uint16_t ms)
 
 /* ── public API ───────────────────────────────────────────────────────── */
 
-void epd_init(void)
+void epd_open(void)
 {
     /* Control pins: DC out, RST out, BUSY in. CS (PA1) is set up by
      * spi_init(). NOTE: RST shares PB5 with the UART RX function - the
@@ -111,9 +111,27 @@ void epd_init(void)
     /* VCOM and data interval */
     epd_cmd(0x50);
     epd_data(0x77);
+}
+
+void epd_init(void)
+{
+    epd_open();
 
     /* Start with a clean white screen */
     epd_clear(0xFF, 0xFF);
+}
+
+void epd_stream_begin(uint8_t cmd)
+{
+    epd_cmd(cmd);
+}
+
+void epd_stream_write(const uint8_t __xdata *data, uint8_t len)
+{
+    spi_select(SPI_DEV_EPD);
+    while (len--)
+        spi_transfer(*data++);
+    spi_deselect(SPI_DEV_EPD);
 }
 
 void epd_sleep(void)

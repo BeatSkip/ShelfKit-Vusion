@@ -1,11 +1,16 @@
 /**
  * @file main.c
- * @brief ShelfKit hub: always listening, answers tag polls
+ * @brief ShelfKit hub: always listening, answers tag polls, forwards host data to tags
  *
  * The radio runs in always-on receive mode (see shared/firmware/shelflink).
  * Every POLL a tag sends is answered with a POLL_RSP carrying the RSSI the hub
  * measured, which doubles as the tag's acknowledgement. Each frame is logged
- * on UART0 TX (PB4, 38400 8N1); the green LED toggles per valid frame.
+ * on UART0 TX (PB4, 38400 8N1); the green LED toggles per valid frame. The
+ * "POLL src=<addr> ..." line is the tag's announcement to the host.
+ *
+ * The host answers over UART0 RX (PB5) with line commands (see below) that make
+ * the hub send a reliable DATA frame to a tag address - used to push images.
+ * The main loop therefore never sleeps.
  *
  * The answer goes out before anything is logged - the tag only waits
  * SL_RSP_TIMEOUT_MS for it.
@@ -47,6 +52,123 @@ static void log_rx(const struct sl_rx __xdata *rx)
     log_nl();
 }
 
+/* ── host commands on UART0 RX ───────────────────────────────────────────
+ *
+ * One command per line, hex only, '\n' terminated ('\r' ignored):
+ *   P                          -> "PONG"
+ *   S<addr:4><payload...><chk:2>   reliable DATA frame to node addr
+ *                              -> "SENT <addr> ok|fail att=N" when finished
+ * chk makes the sum of all decoded bytes (addr, payload, chk) 0 mod 256. A bad
+ * line is answered with "ERR <why>" and ignored; the host retries.
+ */
+#define LINE_MAX    (1 + 4 + 2 * SL_MAX_PAYLOAD + 2)
+
+static char __xdata line[LINE_MAX];
+static uint8_t __xdata line_len;
+static uint8_t __xdata line_overflow;
+static uint8_t __xdata cmd_buf[2 + SL_MAX_PAYLOAD + 1];
+static uint16_t __xdata cmd_dst;
+
+static int8_t hexval(char c)
+{
+    if (c >= '0' && c <= '9')
+        return (int8_t)(c - '0');
+    if (c >= 'a' && c <= 'f')
+        return (int8_t)(c - 'a' + 10);
+    if (c >= 'A' && c <= 'F')
+        return (int8_t)(c - 'A' + 10);
+    return -1;
+}
+
+static void cmd_send(void)
+{
+    uint8_t digits = (uint8_t)(line_len - 1);
+    uint8_t n, i, sum = 0;
+    uint16_t dst;
+    int8_t hi, lo;
+
+    if (digits < 6 || (digits & 1)) {
+        log_puts("ERR len\r\n");
+        return;
+    }
+    n = (uint8_t)(digits / 2);
+    if (n > sizeof(cmd_buf)) {
+        log_puts("ERR len\r\n");
+        return;
+    }
+    for (i = 0; i < n; i++) {
+        hi = hexval(line[1 + 2 * i]);
+        lo = hexval(line[2 + 2 * i]);
+        if (hi < 0 || lo < 0) {
+            log_puts("ERR hex\r\n");
+            return;
+        }
+        cmd_buf[i] = (uint8_t)((hi << 4) | lo);
+        sum += cmd_buf[i];
+    }
+    if (sum) {
+        log_puts("ERR chk\r\n");
+        return;
+    }
+    dst = (uint16_t)cmd_buf[0] | ((uint16_t)cmd_buf[1] << 8);
+    if (dst == SHELF_NODE_ID || dst == 0) {
+        log_puts("ERR addr\r\n");
+        return;
+    }
+    switch (sl_send(dst, SL_T_DATA, cmd_buf + 2, (uint8_t)(n - 3))) {
+    case SL_OK:
+        cmd_dst = dst;
+        break;
+    case SL_ERR_BUSY:
+        log_puts("ERR busy\r\n");
+        break;
+    default:
+        log_puts("ERR send\r\n");
+        break;
+    }
+}
+
+static void host_line(void)
+{
+    if (line_overflow) {
+        log_puts("ERR len\r\n");
+    } else if (line_len) {
+        if (line[0] == 'P')
+            log_puts("PONG\r\n");
+        else if (line[0] == 'S')
+            cmd_send();
+        else
+            log_puts("ERR cmd\r\n");
+    }
+    line_len = 0;
+    line_overflow = 0;
+}
+
+static void host_poll(void)
+{
+    int16_t c;
+
+    while ((c = host_rx_getc()) >= 0) {
+        if (c == '\n') {
+            host_line();
+        } else if (c != '\r') {
+            if (line_len < LINE_MAX)
+                line[line_len++] = (char)c;
+            else
+                line_overflow = 1;
+        }
+    }
+}
+
+static void on_done(const struct sl_done __xdata *done)
+{
+    log_puts("SENT ");
+    log_hex16(cmd_dst);
+    log_puts(done->result == SL_OK ? " ok att=" : " fail att=");
+    log_dec(done->attempts);
+    log_nl();
+}
+
 static void on_rx(const struct sl_rx __xdata *rx)
 {
     if (rx->type == SL_T_POLL) {
@@ -73,7 +195,7 @@ void main(void)
     log_hex8(SHELF_NET_ID);
     log_nl();
 
-    r = sl_init(SHELF_NODE_ID, SHELF_NET_ID, on_rx, 0);
+    r = sl_init(SHELF_NODE_ID, SHELF_NET_ID, on_rx, on_done);
     if (r != AXRADIO_ERR_NOERROR) {
         log_puts("radio init failed, err=");
         log_dec(r);
@@ -88,6 +210,9 @@ void main(void)
     log_nl();
     shelfhw_led(SHELFHW_LED_BLUE, 1);
 
-    for (;;)
-        shelfhw_poll();
+    host_rx_init();
+    for (;;) {
+        shelfhw_poll_awake();
+        host_poll();
+    }
 }

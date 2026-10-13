@@ -169,7 +169,7 @@ uint8_t __xdata buf[EPD_PLANE_BYTES];   /* 5624 bytes; 0 = ink, 1 = white */
 spi_init();                             /* call after periph_init() */
 epd_init();                             /* resets the panel, clears it to white */
 
-epd_plane_ink(buf, 10, 10);             /* bit 0 = ink, MSB = leftmost pixel */
+epd_plane_ink(buf, 10, 10);             /* bit 0 = ink, MSB = leftmost pixel; needs #define EPD_PIXEL_HELPERS before epd.h */
 epd_upload(0x10, buf, EPD_PLANE_BYTES); /* black/white plane */
 
 /* refill buf with the red plane (bit 0 = red ink) and send it */

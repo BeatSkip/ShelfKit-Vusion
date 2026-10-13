@@ -46,6 +46,14 @@
  * white. Requires spi_init() to have been called first. */
 void epd_init(void);
 
+/* Everything epd_init() does except the final clear-to-white refresh. */
+void epd_open(void);
+
+/* Stream a plane in pieces: epd_stream_begin(0x10 or 0x13) selects the plane,
+ * then any number of epd_stream_write() calls append bytes to it. */
+void epd_stream_begin(uint8_t cmd);
+void epd_stream_write(const uint8_t __xdata *data, uint8_t len);
+
 /* Put the panel into deep sleep (minimal power). */
 void epd_sleep(void);
 
@@ -72,6 +80,10 @@ void epd_refresh(void);
 void epd_display(const uint8_t *bw_plane, const uint8_t *red_plane);
 
 /* ── Pixel helpers (operate on a plane buffer) ────────────────────────── */
+/* Opt-in: define EPD_PIXEL_HELPERS before including this header. Even when
+ * unused, every file that includes them gets 12 bytes of internal RAM for
+ * their parameters, and the tag has none to spare. */
+#ifdef EPD_PIXEL_HELPERS
 /* Mark a pixel with ink (black in the BW plane, red in the red plane). */
 static inline void epd_plane_ink(uint8_t *plane, uint16_t x, uint16_t y)
 {
@@ -89,5 +101,6 @@ static inline uint8_t epd_plane_get(const uint8_t *plane, uint16_t x, uint16_t y
 {
     return (plane[((uint16_t)y * EPD_W + x) >> 3] & (uint8_t)(0x80 >> (x & 7))) ? 0 : 1;
 }
+#endif /* EPD_PIXEL_HELPERS */
 
 #endif /* EPD_DRIVER_H */

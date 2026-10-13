@@ -101,6 +101,19 @@ def to_planes(img, dither):
     return out_bw, out_red
 
 
+def load_planes(path, rotate=90, dither=False):
+    """Open a PNG, rotate it for the panel and return (bw, red) planes."""
+    img = Image.open(path).convert("RGBA")
+    if rotate:
+        # PIL rotates counterclockwise; ROTATE_270 = 90 deg clockwise,
+        # which puts the source LEFT edge at the top of the result.
+        img = img.rotate((360 - rotate) % 360, expand=True)
+    if img.size != (152, 296):
+        sys.exit(f"{path}: rotated size {img.size[0]}x{img.size[1]} != 152x296 "
+                 f"(EPD_W x EPD_H in epd.h); resize the source accordingly")
+    return to_planes(img, dither)
+
+
 def c_array(name, data):
     lines = [f"const unsigned char {name}[EPD_PLANE_BYTES] = {{"]
     for i in range(0, len(data), 16):

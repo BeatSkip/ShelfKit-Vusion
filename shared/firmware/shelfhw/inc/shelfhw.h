@@ -44,6 +44,16 @@ void shelfhw_init(void);
  * radio engine delivers its events), then sleeps until the next interrupt. */
 void shelfhw_poll(void);
 
+/* Same as shelfhw_poll() but never enters standby, so the caller can poll
+ * host_rx_getc() between calls. For the always-powered hub only. */
+void shelfhw_poll_awake(void);
+
+/* Host command input on UART0 RX (PB5). Hub only: on the tag PB5 is the EPD
+ * reset line. Polled, there is no interrupt and no buffer beyond the UART's own
+ * holding register - the host protocol is line based with a checksum. */
+void host_rx_init(void);
+int16_t host_rx_getc(void);     /* byte 0..255, or -1 if none waiting */
+
 void shelfhw_led(uint8_t led, uint8_t on);
 void shelfhw_led_toggle(uint8_t led);
 

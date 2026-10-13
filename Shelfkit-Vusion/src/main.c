@@ -7,7 +7,8 @@
  * POLL_RSP is the acknowledgement. Without one the poll is retried with a
  * jittered back-off, up to SL_MAX_ATTEMPTS transmissions. Results and link
  * statistics are logged on UART0 TX (PB4, 38400 8N1): green LED = poll
- * acknowledged, red LED = poll failed.
+ * acknowledged, red LED = poll failed. The tag always listens, so the hub can
+ * push an image to it (see img_rx.c) after seeing a poll.
  */
 
 #include <ax8052f143.h>
@@ -18,6 +19,7 @@
 #include "shelflink.h"
 #include "shelfmsg.h"
 #include "shelf_config.h"
+#include "img_rx.h"
 #include "pwr.h"
 
 static struct wtimer_desc __xdata poll_timer;
@@ -79,6 +81,12 @@ static void on_done(const struct sl_done __xdata *done)
         log_stats();
 }
 
+static void on_rx(const struct sl_rx __xdata *rx)
+{
+    if (rx->type == SL_T_DATA)
+        (void)img_rx_data(rx->payload, rx->len);
+}
+
 static void poll_cb(struct wtimer_desc __xdata *desc)
 {
     uint16_t up = (uint16_t)(wtimer0_curtime() / SHELFHW_TICKS_PER_S);
@@ -86,6 +94,9 @@ static void poll_cb(struct wtimer_desc __xdata *desc)
     /* Periodic, anchored to the previous expiry so the interval does not drift */
     desc->time += (uint32_t)SHELF_POLL_INTERVAL_S * SHELFHW_TICKS_PER_S;
     wtimer0_addabsolute(desc);
+
+    if (img_rx_active())
+        return;
 
     poll_payload[SM_POLL_UPTIME_LO] = (uint8_t)up;
     poll_payload[SM_POLL_UPTIME_HI] = (uint8_t)(up >> 8);
@@ -111,7 +122,7 @@ void main(void)
     log_hex8(SHELF_NET_ID);
     log_nl();
 
-    r = sl_init(SHELF_NODE_ID, SHELF_NET_ID, 0, on_done);
+    r = sl_init(SHELF_NODE_ID, SHELF_NET_ID, on_rx, on_done);
     if (r != AXRADIO_ERR_NOERROR) {
         log_puts("radio init failed, err=");
         log_dec(r);

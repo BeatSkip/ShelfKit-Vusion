@@ -96,6 +96,44 @@ wtimer0 runs from the on-chip LPOSC, nominally 640 Hz. Measured poll interval is
 5 s, i.e. the LPOSC runs ~10 % slow. Not a problem for polling; use the 32 kHz crystal (`LOWFREQ_QUARZ`
 style, 8192 Hz) for anything time-critical. Wall-clock timestamps from the monitor are the reference.
 
+## Image push (host -> hub -> tag)
+
+The tag announces itself with its normal POLL; the hub prints `POLL src=<addr> ...` on UART0 TX; the host
+decides whether that tag needs a new image and, if so, tells the hub over UART0 RX (PB5) to send it.
+The hub never decides anything and never stores an image. The tag is always listening, so the hub can
+transmit to it at any time.
+
+```
+tag  --POLL-->  hub  --"POLL src=0100 ..."-->  host  (image for 0100 new?)
+tag  <--DATA(BEGIN, CHUNK..., END)--  hub  <--"S0100<payload><chk>"--  host
+```
+
+**Host -> hub** (hex lines, `\n` terminated, `tooling/hubhost.py` implements the host side):
+
+| Line | Hub does |
+|---|---|
+| `P` | answers `PONG` |
+| `S<addr:4><payload 0..32 B><chk:2>` | reliable DATA frame to node `addr` (shelflink retries, 4 transmissions), then prints `SENT <addr> ok\|fail att=N`. `chk` = two's complement of the byte sum. A bad line gets `ERR len\|hex\|chk\|addr\|cmd\|busy\|send` and is ignored; the host resends. |
+
+The hub's main loop never sleeps (`shelfhw_poll_awake()`), it polls the UART between wtimer callbacks. UART RX is polled
+with only the one-byte holding register, so the protocol is strictly request/response from the host (one command in
+flight, wait for `SENT`), checksummed, and retried on timeout. While the hub logs a `POLL` line (~18 ms) incoming bytes
+can be lost, which the checksum + retry covers.
+
+**Hub -> tag** (DATA payloads, `shelfmsg.h`): `BEGIN`, then 28-byte `CHUNK`s (plane, 16-bit offset in the plane), then
+`END`. The tag has no RAM for a frame buffer (5624 B per plane): each chunk is shifted straight into the IL0373's frame
+memory (`epd_stream_*`). Out-of-order/repeated chunks are ignored (offset must equal the next expected one), `END`
+refreshes only when both planes are complete. BEGIN resets the panel (~0.5 s) and END refreshes it (~15 s), both after
+the ACK, so the host pauses after them (1.5 s / 20 s). The tag does not poll while a transfer runs.
+A full image is ~404 messages, roughly 20-30 s.
+
+Host: `python tooling/hubhost.py COM4 serve images/` pushes `images/<addr>.png` to a tag when it announces itself and the
+file is new or changed (state in `images/.sent.json`); `send <addr> <png>` pushes once; `ping` checks the channel.
+
+**Status: builds and links for both targets (SDCC 3.6.0, hub 37.5 KB, tag 37.2 KB, tag internal RAM no worse than before)
+and the host-side framing is checked, but this has not been run on hardware.** To verify on the boards: (1) `hubhost.py COM4 ping`
+- if there is no PONG the PB5 receive setup (`host_rx_init`, input + pull-up, no PALTB bit) is the first suspect; (2) `send` an
+image to a tag and watch the tag's `img begin / img refresh / img done` log lines.
 ## Debug output and tools
 
 Both firmwares log on UART0 TX (PB4, 38400 8N1). LEDs: blue = radio up, green = poll ok / hub frame

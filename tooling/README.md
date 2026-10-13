@@ -6,6 +6,7 @@ deliberately kept out of any target's `src/` so the SDCC build does not compile 
 | File | What it does |
 |---|---|
 | `png2epd.py` | Converts a PNG into the two 1-bit C arrays the e-paper driver uploads (`epd_image.c` / `epd_image.h`) |
+| `hubhost.py` | Host side of the image push: watches the hub's POLL src=... announcements and sends new images to tags over the hub's serial port (`serve`, `send`, `ping`); see Documentation/wireless-link.md |
 | `flashdump.py` | Resets the tag (BOOT pin via DTR, RESET via RTS) and captures the flash hexdump the parked firmware prints — to console and to a timestamped file |
 | `axsem-flasher.py` | Programs an Intel HEX file over the AX8052 serial bootloader: `?` banner → `K` erase → hex lines → `R` run |
 | `flashdump_main.c` | The **parked** flash-dump firmware — a drop-in replacement for a target's `src/main.c` |

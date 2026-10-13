@@ -27,4 +27,27 @@
 
 #define SM_CMD_NONE         0
 
+/*
+ * Image transfer (hub -> tag), carried in DATA frames. The tag streams the
+ * chunks straight into the e-paper controller, so nothing is buffered and the
+ * chunks must arrive in order (the hub waits for each ACK before the next).
+ *
+ *   [0]  opcode
+ *   BEGIN  : (no more bytes)  wakes the panel, ready for plane 0
+ *   CHUNK  : [1] plane (SM_PLANE_*), [2..3] offset in the plane (LE),
+ *            [4..] data, 1..SM_IMG_CHUNK bytes
+ *   END    : refreshes the panel if both planes arrived complete
+ *
+ * Planes are in the epd.h framebuffer format, plane 0 (black/white) first.
+ */
+#define SM_OP_IMG_BEGIN     1
+#define SM_OP_IMG_CHUNK     2
+#define SM_OP_IMG_END       3
+
+#define SM_PLANE_BW         0
+#define SM_PLANE_RED        1
+
+#define SM_IMG_HDR          4
+#define SM_IMG_CHUNK        28      /* SL_MAX_PAYLOAD - SM_IMG_HDR */
+
 #endif /* SHELFMSG_H */

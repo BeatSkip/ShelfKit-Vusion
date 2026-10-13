@@ -247,6 +247,28 @@ void shelfhw_init(void)
     rnd_state = (uint16_t)wtimer0_curtime();
 }
 
+void shelfhw_poll_awake(void)
+{
+    wtimer_runcallbacks();
+}
+
+void host_rx_init(void)
+{
+    DIRB &= (uint8_t)~0x20;         /* PB5 input ... */
+    PORTB |= 0x20;                  /* ... with pull-up, UART0 RX is enabled by uart0_init() */
+}
+
+int16_t host_rx_getc(void)
+{
+    uint8_t c;
+
+    if (!(U0STATUS & 0x01))
+        return -1;
+    c = U0SHREG;
+    U0CTRL |= 0x04;                 /* re-arm the RX flag, like iocore */
+    return c;
+}
+
 void shelfhw_poll(void)
 {
     wtimer_runcallbacks();
