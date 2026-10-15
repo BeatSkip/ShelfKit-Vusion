@@ -42,10 +42,11 @@ BAUD = 38400
 OP_BEGIN, OP_CHUNK, OP_END = 1, 2, 3
 PLANE_BW, PLANE_RED = 0, 1
 CHUNK = 28                  # SM_IMG_CHUNK
-BEGIN_SETTLE_S = 1.5        # the tag resets the panel after acknowledging BEGIN
+BEGIN_SETTLE_S = 5.0        # the tag resets the panel after acknowledging BEGIN and answers nothing meanwhile
 END_SETTLE_S = 20.0         # ... and refreshes it after acknowledging END
 CMD_TIMEOUT_S = 3.0
-CMD_TRIES = 6
+CMD_RETRY_WINDOW_S = 20.0   # keep repeating a frame this long: a busy tag fails fast, so count time, not tries
+CMD_RETRY_PAUSE_S = 0.3
 RETRY_COOLDOWN_S = 30.0
 
 RE_POLL = re.compile(r"^POLL src=([0-9a-fA-F]{4})\b")
@@ -76,6 +77,7 @@ class Hub:
         self.ser.dtr = False
         self.ser.rts = False
         self.ser.open()
+        self.last_result = None  # outcome of the last send_data() attempt, for diagnostics
         self.polls = []         # announcements seen while busy with something else
         self.buf = b""
 
@@ -114,21 +116,24 @@ class Hub:
     def send_data(self, addr, payload):
         """Reliable DATA frame to addr. True once the tag acknowledged it."""
         line = (build_line("S", addr, payload) + "\n").encode("ascii")
-        for _ in range(CMD_TRIES):
+        end = time.monotonic() + CMD_RETRY_WINDOW_S
+        self.last_result = None
+        while time.monotonic() < end:
             self.ser.write(line)
 
             def result(l):
                 m = RE_SENT.match(l)
                 if m and int(m.group(1), 16) == addr:
                     return m.group(2)
-                return "err" if l.startswith("ERR") else None
+                return l if l.startswith("ERR") else None
 
             res = self.wait_for(result, CMD_TIMEOUT_S)
+            self.last_result = res or "no answer"
             if res == "ok":
                 return True
             # no answer / hub-side ERR (line damaged, busy) / radio gave up: try again.
             # A chunk the tag already has is acknowledged and ignored, so repeats are safe.
-            time.sleep(0.05)
+            time.sleep(CMD_RETRY_PAUSE_S)
         return False
 
     def send_image(self, addr, bw, red, progress=None):

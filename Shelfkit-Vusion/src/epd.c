@@ -26,12 +26,6 @@
 #include "spi.h"
 #include "board.h"
 
-/* BUSY polarity: all GDEW026Z39-on-imagotag references poll BUSY == LOW
- * while busy (the IL0373 datasheet says HIGH, and bare Good Display
- * modules are usually HIGH - the tag board inverts the line). Flip this
- * define if epd_wait_busy() returns too early and refreshes corrupt. */
-#define EPD_BUSY_ACTIVE_HIGH 0
-
 /* ── low level ────────────────────────────────────────────────────────── */
 
 static void epd_cmd(uint8_t cmd)
@@ -50,21 +44,27 @@ static void epd_data(uint8_t data)
     spi_deselect(SPI_DEV_EPD);
 }
 
-static void epd_wait_busy(void)
-{
-#if EPD_BUSY_ACTIVE_HIGH
-    while (EPD_BUSY)
-        ;
-#else
-    while (!EPD_BUSY)
-        ;
-#endif
-}
-
 /* libmf's delay() takes microseconds and tops out at ~65 ms per call. */
 static void epd_delay_ms(uint16_t ms)
 {
     while (ms--)
+        delay(1000);
+}
+
+/* Send a command that makes the panel busy and wait it out. Polarity-agnostic and
+ * bounded, like the boot demo that is proven on this hardware: the idle level is
+ * sampled before the command, then BUSY must leave it (up to start_ms) and come
+ * back (up to done_ms). An unbounded wait here hangs the whole tag, which then
+ * stops acknowledging the image frames that follow BEGIN. */
+static void epd_cmd_wait(uint8_t cmd, uint16_t start_ms, uint16_t done_ms)
+{
+    uint8_t idle = EPD_BUSY;
+    uint16_t t;
+
+    epd_cmd(cmd);
+    for (t = start_ms; EPD_BUSY == idle && t; t--)
+        delay(1000);
+    for (t = done_ms; EPD_BUSY != idle && t; t--)
         delay(1000);
 }
 
@@ -95,8 +95,7 @@ void epd_open(void)
     epd_data(0x17);
 
     /* Power on, then wait for the booster */
-    epd_cmd(0x04);
-    epd_wait_busy();
+    epd_cmd_wait(0x04, 300, 2500);
 
     /* Panel setting: LUT from OTP, BWR format */
     epd_cmd(0x00);
@@ -136,8 +135,7 @@ void epd_stream_write(const uint8_t __xdata *data, uint8_t len)
 
 void epd_sleep(void)
 {
-    epd_cmd(0x02);                      /* power off */
-    epd_wait_busy();
+    epd_cmd_wait(0x02, 500, 2500);      /* power off */
     epd_cmd(0x07);                      /* deep sleep */
     epd_data(0xA5);
 }
@@ -153,9 +151,7 @@ void epd_upload(uint8_t cmd, const uint8_t *plane, uint16_t len)
 
 void epd_refresh(void)
 {
-    epd_cmd(0x12);                      /* display refresh */
-    delay(100);
-    epd_wait_busy();
+    epd_cmd_wait(0x12, 3000, 30000);    /* display refresh */
 }
 
 void epd_clear(uint8_t bw_byte, uint8_t red_byte)

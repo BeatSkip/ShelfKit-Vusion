@@ -7,6 +7,8 @@ deliberately kept out of any target's `src/` so the SDCC build does not compile 
 |---|---|
 | `png2epd.py` | Converts a PNG into the two 1-bit C arrays the e-paper driver uploads (`epd_image.c` / `epd_image.h`) |
 | `hubhost.py` | Host side of the image push: watches the hub's POLL src=... announcements and sends new images to tags over the hub's serial port (`serve`, `send`, `ping`); see Documentation/wireless-link.md |
+| `monitor.py` | Merges the hub's and the tag's logs into one timestamped stream on stdout, with a link summary (loss, attempts, RSSI) |
+| `hub/monitor.py` | Textual TUI: the same two ports as two side-by-side panes (own log, baud rate, Open/Close, Clear and DTR/RTS buttons each), plus a top bar that browses for an image and pushes it to a tag picked from the ones that announced themselves |
 | `flashdump.py` | Resets the tag (BOOT pin via DTR, RESET via RTS) and captures the flash hexdump the parked firmware prints — to console and to a timestamped file |
 | `axsem-flasher.py` | Programs an Intel HEX file over the AX8052 serial bootloader: `?` banner → `K` erase → hex lines → `R` run |
 | `flashdump_main.c` | The **parked** flash-dump firmware — a drop-in replacement for a target's `src/main.c` |
@@ -18,9 +20,54 @@ input, and it writes into a target's `src/`.
 ## Requirements
 
 ```
-pip install pyserial      # flashdump.py, axsem-flasher.py
-pip install pillow        # png2epd.py
+pip install pyserial      # flashdump.py, axsem-flasher.py, monitor.py, hubhost.py, hub/monitor.py
+pip install pillow        # png2epd.py, and the image push in hub/monitor.py
+pip install textual       # hub/monitor.py   (or: pip install -r tooling/hub/requirements.txt)
 ```
+
+## Watching two ports side by side
+
+Two tools share this name. `monitor.py` merges both logs into one stream on stdout; `hub/monitor.py`
+opens the same two ports in a Textual TUI instead — one pane per port, each with its own log, baud
+rate, Open/Close, Clear and DTR/RTS buttons, plus a bar for pushing an image to a tag:
+
+```
+python tooling/hub/monitor.py hub=COM4 tag=COM3
+python tooling/hub/monitor.py hub=COM4                    # second pane stays free
+python tooling/hub/monitor.py --baud 115200 hub=COM4 tag=COM3
+```
+
+Ports named on the command line are opened straight away; ports that only come from the
+auto-detected list are pre-filled but left closed, so the tool never grabs a port you did not ask
+for. `--baud` sets the initial rate for both panes (default 38400, the firmware's UART0 rate), and
+each pane can then be changed on its own.
+
+Both handshake lines start **released** (DTR low, RTS low). On this board DTR is the BOOT pin and
+RTS the RESET line, so that is the state which neither resets the tag nor drops it into the
+bootloader; the per-pane buttons toggle them by hand. Any pyserial URL works as a port name too
+(`loop://`), which is handy for trying the layout without hardware.
+
+### Pushing an image to a tag
+
+The top bar does what `hubhost.py` does from the command line, without leaving the window:
+
+1. **[Browse...]** opens a picker listing folders and image files only. It starts in `Resources/`,
+   and you can type a path instead of clicking through to one.
+2. The **tag** list fills itself in with every node id that announced itself as `POLL src=<id>` on
+   the hub pane; the number in brackets is how many announcements were seen.
+3. **[Send]** picks the rotation that fits the panel, converts the image and drives the hub's
+   command channel. Progress and the result land in the hub pane's log.
+
+The hub pane's port is closed for the duration and reopened afterwards, because one serial port
+cannot serve two owners — which is also why that pane's log pauses during a transfer. **[Send]
+becomes [Cancel]** while a transfer runs, and quitting cancels it. The rotation is chosen for you:
+a 296×152 landscape source is rotated 90 (the long-standing default), a 152×296 portrait source is
+sent as it is, and the angle used is logged. Only an image that fits neither way is refused, since
+the panel would show garbage. `png2epd.load_planes()` on its own still refuses a portrait source at
+`--rotate 90`; pass `--rotate 0`, or call `png2epd.fit_rotation()`.
+
+Which pane is "the hub"? The one named `hub` on the command line; failing that, the first pane that
+has heard a `POLL`; failing that, the first pane.
 
 ## Regenerating a target's boot image
 

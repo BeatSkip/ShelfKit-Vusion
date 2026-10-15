@@ -26,6 +26,11 @@ except ImportError:
 
 PALETTE = {"white": (255, 255, 255), "black": (0, 0, 0), "red": (255, 0, 0)}
 
+# Panel geometry - EPD_W x EPD_H in Shelfkit-*/src/epd.h. The GDEW026Z39 is
+# driven rotated, so only two footprints are reachable: a 296x152 landscape
+# source needs --rotate 90, a 152x296 portrait one needs --rotate 0.
+PANEL_W, PANEL_H = 152, 296
+
 
 def classify(r, g, b):
     """Nearest palette color in RGB space (works for the dithered case too)."""
@@ -101,6 +106,26 @@ def to_planes(img, dither):
     return out_bw, out_red
 
 
+def fit_rotation(path, preferred=90):
+    """Pick a rotation of `path` that fits the panel.
+
+    Returns (angle, source size, size after that angle); angle is None when no
+    rotation fits, and then the third value is the source size again.
+
+    Only the footprint depends on the angle - 90 and 270 swap width and height,
+    0 and 180 keep it - so this turns "it rotated and says it does not fit" into
+    the right angle instead. `preferred` is tried first so a landscape source
+    keeps needing the same 90 degrees it always did.
+    """
+    with Image.open(path) as img:
+        width, height = img.size
+    for angle in (preferred, 0, 90, 180, 270):
+        w, h = (height, width) if angle % 180 == 90 else (width, height)
+        if (w, h) == (PANEL_W, PANEL_H):
+            return angle, (width, height), (w, h)
+    return None, (width, height), (width, height)
+
+
 def load_planes(path, rotate=90, dither=False):
     """Open a PNG, rotate it for the panel and return (bw, red) planes."""
     img = Image.open(path).convert("RGBA")
@@ -108,8 +133,8 @@ def load_planes(path, rotate=90, dither=False):
         # PIL rotates counterclockwise; ROTATE_270 = 90 deg clockwise,
         # which puts the source LEFT edge at the top of the result.
         img = img.rotate((360 - rotate) % 360, expand=True)
-    if img.size != (152, 296):
-        sys.exit(f"{path}: rotated size {img.size[0]}x{img.size[1]} != 152x296 "
+    if img.size != (PANEL_W, PANEL_H):
+        sys.exit(f"{path}: rotated size {img.size[0]}x{img.size[1]} != {PANEL_W}x{PANEL_H} "
                  f"(EPD_W x EPD_H in epd.h); resize the source accordingly")
     return to_planes(img, dither)
 
@@ -142,8 +167,8 @@ def main():
         ccw = (360 - args.rotate) % 360
         img = img.rotate(ccw, expand=True)
         print(f"rotated {args.rotate} deg -> {img.size[0]}x{img.size[1]}")
-    if img.size != (152, 296):
-        print(f"warning: rotated size {img.size[0]}x{img.size[1]} != 152x296 "
+    if img.size != (PANEL_W, PANEL_H):
+        print(f"warning: rotated size {img.size[0]}x{img.size[1]} != {PANEL_W}x{PANEL_H} "
               f"(EPD_W x EPD_H in src/epd.h); resize the source accordingly")
 
     bw, red = to_planes(img, args.dither)
@@ -158,7 +183,7 @@ def main():
 
     ink_bw = count_ink(bw)
     ink_red = count_ink(red)
-    print(f"black ink pixels: {ink_bw} ({100*ink_bw//(152*296)}%), red ink pixels: {ink_red} ({100*ink_red//(152*296)}%)")
+    print(f"black ink pixels: {ink_bw} ({100*ink_bw//(PANEL_W*PANEL_H)}%), red ink pixels: {ink_red} ({100*ink_red//(PANEL_W*PANEL_H)}%)")
 
     c_path = os.path.join(args.out_dir, "epd_image.c")
     h_path = os.path.join(args.out_dir, "epd_image.h")
