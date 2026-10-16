@@ -143,6 +143,11 @@ void main(void)
     poll_timer.time = SHELFHW_TICKS_PER_S;
     wtimer0_addrelative(&poll_timer);
 
-    for (;;)
-        shelfhw_poll();
+    /* While an image arrives the tag must hear every frame, so no standby */
+    for (;;) {
+        if (img_rx_active())
+            shelfhw_poll_awake();
+        else
+            shelfhw_poll();
+    }
 }

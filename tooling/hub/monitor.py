@@ -26,8 +26,9 @@ dithering stays off, as in hubhost.py.
 
 Both handshake lines start RELEASED (DTR low, RTS low). On this tag DTR is the
 BOOT pin and RTS is the RESET line, so that is the state which neither resets
-the board nor drops it into the bootloader. The per-pane buttons drive them by
-hand: "DTR (boot)" and "RTS (reset)".
+the board nor drops it into the bootloader. Per pane, "DTR (boot)" is a level
+toggle and "Reset" is a push button that pulses RTS for 100 ms. "Copy logs" puts
+both logs, merged by arrival time, on the clipboard.
 
 Lines are shown with a millisecond timestamp and decoded as latin-1, matching
 tooling/monitor.py; 8N1 is assumed. Any pyserial URL works as a port name too
@@ -41,9 +42,11 @@ from __future__ import annotations
 import argparse
 import queue
 import re
+import subprocess
 import sys
 import threading
 import time
+from collections import deque
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -89,6 +92,7 @@ UI_TICK_S = 0.05
 TAG_REFRESH_S = 1.0
 MAX_LOG_LINES = 5000
 MAX_LINES_PER_TICK = 200
+RESET_PULSE_S = 0.1  # how long the momentary Reset button holds RTS asserted
 
 # Image push defaults. SEND_ROTATE is only a preference: png2epd.fit_rotation()
 # falls back to the angle that actually fits the panel (a 152x296 portrait source
@@ -149,6 +153,42 @@ def _make_serial(spec: PortSpec):
 
 def _stamp() -> str:
     return datetime.now().strftime("%H:%M:%S.%f")[:-3]
+
+
+def _native_clipboard(text: str) -> bool:
+    """Write to the OS clipboard, in addition to Textual's terminal copy.
+
+    Textual copies with the OSC 52 escape sequence, which some terminals ignore
+    (and Windows Terminal gates behind a setting), so the platform tools are the
+    reliable path where they exist. Returns True if one of them accepted it.
+    """
+    if sys.platform == "win32":
+        # clip.exe with UTF-16LE: Unicode-safe whatever the console code page is,
+        # and unlike plain "utf-16" it adds no BOM, which would otherwise be
+        # pasted as a stray U+FEFF at the start of the text.
+        attempts = [(["clip"], "utf-16-le")]
+    elif sys.platform == "darwin":
+        attempts = [(["pbcopy"], "utf-8")]
+    else:
+        attempts = [
+            (["wl-copy"], "utf-8"),
+            (["xclip", "-selection", "clipboard"], "utf-8"),
+            (["xsel", "--clipboard", "--input"], "utf-8"),
+        ]
+    for command, encoding in attempts:
+        try:
+            done = subprocess.run(
+                command,
+                input=text.encode(encoding),
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+        except (OSError, ValueError):
+            continue
+        if done.returncode == 0:
+            return True
+    return False
 
 
 class SerialWorker:
@@ -234,14 +274,22 @@ class SerialWorker:
             if not _set_line(self.ser, line, getattr(self, line)):
                 self.error = f"{line.upper()} could not be set"
 
-    def toggle(self, line: str) -> None:
-        """Flip DTR or RTS. Ignored (with a message) while the port is closed."""
+    def set_line(self, line: str, value: bool) -> None:
+        """Drive DTR or RTS. Ignored (with a message) while the port is closed."""
         if not self.is_open:
             self.error = f"{line.upper()} needs an open port"
             return
         self.error = None
-        setattr(self, line, not getattr(self, line))
+        setattr(self, line, value)
         self._apply_lines()
+
+    def toggle(self, line: str) -> None:
+        """Flip a line and leave it there - used for DTR, the level-held BOOT pin.
+
+        RTS is not toggled: it is pulsed by DevicePane._pulse_reset(), because a
+        reset line left asserted holds the board in reset.
+        """
+        self.set_line(line, not getattr(self, line))
 
     # ── reading ────────────────────────────────────────────────────────────
     def _reader(self) -> None:
@@ -285,6 +333,10 @@ class DevicePane(Vertical):
         self.worker = worker
         self.key = key
         self._shown: dict[str, object] = {}
+        # (arrived at, timestamp shown, text) for the clipboard copy. Kept
+        # separately from RichLog because that stores *wrapped* display strips,
+        # so reading it back would split long log lines in two.
+        self.history: deque[tuple[float, str, str]] = deque(maxlen=MAX_LOG_LINES)
 
     def compose(self) -> ComposeResult:
         spec = self.worker.spec
@@ -302,7 +354,12 @@ class DevicePane(Vertical):
             yield Button("Clear", id=f"clear-{self.key}", compact=True)
         with Horizontal(classes="lines"):
             yield Button("DTR (boot): off", id=f"dtr-{self.key}", compact=True)
-            yield Button("RTS (reset): off", id=f"rts-{self.key}", compact=True)
+            yield Button(
+                "Reset",
+                id=f"reset-{self.key}",
+                compact=True,
+                tooltip=f"Momentary reset: assert RTS for {RESET_PULSE_S * 1000:.0f} ms",
+            )
             yield Static("closed", id=f"status-{self.key}", classes="status")
         yield RichLog(
             id=f"log-{self.key}",
@@ -319,6 +376,7 @@ class DevicePane(Vertical):
     def write_line(self, text: str) -> None:
         """Append a line to this pane's log (e.g. a startup note)."""
         self.query_one(f"#log-{self.key}", RichLog).write(text)
+        self._remember(_stamp(), text)
 
     def _tick(self) -> None:
         log = self.query_one(f"#log-{self.key}", RichLog)
@@ -327,7 +385,9 @@ class DevicePane(Vertical):
                 line = self.worker.lines.get_nowait()
             except queue.Empty:
                 break
-            log.write(f"[{_stamp()}] {line}")
+            stamp = _stamp()
+            log.write(f"[{stamp}] {line}")
+            self._remember(stamp, line)
         self._refresh()
 
     def _refresh(self) -> None:
@@ -336,14 +396,40 @@ class DevicePane(Vertical):
         self._set(open_btn, "label", "Close" if worker.is_open else "Open")
         self._set(open_btn, "variant", "error" if worker.is_open else "primary")
 
-        for line, role in (("dtr", "boot"), ("rts", "reset")):
-            btn = self.query_one(f"#{line}-{self.key}", Button)
-            on_off = "on" if getattr(worker, line) else "off"
-            self._set(btn, "label", f"{line.upper()} ({role}): {on_off}")
-            self._set(btn, "variant", "warning" if getattr(worker, line) else "default")
+        # Only DTR is a held level, so only it has a state to show; Reset is
+        # momentary and always ends released.
+        dtr_btn = self.query_one(f"#dtr-{self.key}", Button)
+        self._set(dtr_btn, "label", f"DTR (boot): {'on' if worker.dtr else 'off'}")
+        self._set(dtr_btn, "variant", "warning" if worker.dtr else "default")
 
         status = self.query_one(f"#status-{self.key}", Static)
         status.update(f"{worker.status}   rx {worker.rx_bytes} B / {worker.rx_lines} lines")
+
+    def _remember(self, stamp: str, text: str) -> None:
+        self.history.append((time.time(), stamp, text))
+
+    # ── reset ──────────────────────────────────────────────────────────────
+    def _pulse_reset(self) -> None:
+        """Assert RTS, then release it a moment later.
+
+        A push button, not a toggle: leaving RTS asserted would hold the board in
+        reset for as long as the button stayed "on", so the release is scheduled
+        rather than waiting for a second click.
+        """
+        if not self.worker.is_open:
+            self.worker.error = "reset needs an open port"
+            return
+        self.worker.set_line("rts", True)
+        # Schedule the release whatever happened above: RTS must never be left
+        # asserted, and the state flag has to come back down either way.
+        self.set_timer(RESET_PULSE_S, self._release_reset)
+        if self.worker.error:
+            self.write_line(f"# reset not sent: {self.worker.error}")
+        else:
+            self.write_line(f"# reset pulsed ({RESET_PULSE_S * 1000:.0f} ms)")
+
+    def _release_reset(self) -> None:
+        self.worker.set_line("rts", False)
 
     def _set(self, widget, attribute: str, value) -> None:
         """Assign only on change - these are refreshed 20 times a second."""
@@ -363,8 +449,10 @@ class DevicePane(Vertical):
             self._toggle_open()
         elif kind == "clear":
             self.query_one(f"#log-{self.key}", RichLog).clear()
-        elif kind in ("dtr", "rts"):
-            self.worker.toggle(kind)
+        elif kind == "dtr":
+            self.worker.toggle("dtr")
+        elif kind == "reset":
+            self._pulse_reset()
         self._refresh()
 
     def _toggle_open(self) -> None:
@@ -528,6 +616,7 @@ class TwoPortApp(App[None]):
             yield Label("Tag", classes="device")
             yield Select([], prompt="no tags heard yet", allow_blank=True, id="tag-select")
             yield Button("Send", id="send", variant="success", compact=True)
+            yield Button("Copy logs", id="copy-logs", compact=True)
             yield Static("", id="send-status")
         with Horizontal(id="split"):
             for worker, key in zip(self.devices, self.keys):
@@ -603,6 +692,43 @@ class TwoPortApp(App[None]):
         select.set_options([(f"{addr:04X}   ({tags[addr]} polls)", addr) for addr in values])
         if previous is not None and previous in values:
             select.value = previous  # keep the user's choice across a refresh
+
+    # ── clipboard ──────────────────────────────────────────────────────────
+    def _combined_log(self) -> str:
+        """Both panes' lines merged by arrival time, as one copyable block."""
+        rows: list[tuple[float, str]] = []
+        for key, worker in zip(self.keys, self.devices):
+            pane = self.query_one(f"#pane-{key}", DevicePane)
+            for arrived, stamp, text in pane.history:
+                rows.append((arrived, f"[{stamp} {worker.spec.name}] {text}"))
+        rows.sort(key=lambda row: row[0])  # stable, so equal times keep pane order
+        ports = ", ".join(f"{w.spec.name}={w.spec.port or '?'}" for w in self.devices)
+        header = (
+            f"=== ShelfKit two-port log: {ports} - {len(rows)} lines, "
+            f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ==="
+        )
+        return "\n".join([header, *(line for _, line in rows)])
+
+    @on(Button.Pressed, "#copy-logs")
+    def _on_copy_logs(self) -> None:
+        text = self._combined_log()
+        lines = text.count("\n")
+        if not lines:
+            self._status("nothing logged yet")
+            return
+        reached = []
+        try:
+            self.copy_to_clipboard(text)  # terminal clipboard (OSC 52)
+            reached.append("terminal")
+        except Exception:  # noqa: BLE001 - not every driver supports it
+            pass
+        if _native_clipboard(text):  # and the OS one, where a tool exists
+            reached.append("system")
+        self._status(
+            f"copied {lines} lines ({' + '.join(reached)})"
+            if reached
+            else f"no clipboard available - {lines} lines not copied"
+        )
 
     @on(Button.Pressed, "#browse")
     def _on_browse(self) -> None:

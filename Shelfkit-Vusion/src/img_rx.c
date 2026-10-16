@@ -22,6 +22,8 @@ static uint8_t __xdata plane;
 static uint16_t __xdata expect;        /* next offset in the current plane */
 static uint16_t __xdata last_rx;      /* low 16 bits of wtimer0: wraps after 102 s, the timeout is 10 s */
 
+static uint8_t __xdata dbg_chunks;
+
 static void abort_transfer(void)
 {
     active = 0;
@@ -32,12 +34,14 @@ static void on_begin(void)
 {
     log_puts("img begin\r\n");
     spi_init();
+    dbg_chunks = 0;
     epd_open();
     epd_stream_begin(0x10);
     plane = SM_PLANE_BW;
     expect = 0;
     active = 1;
     shelfhw_led(SHELFHW_LED_WHITE, 1);
+    log_puts("img panel open\r\n");
 }
 
 /* Internal RAM is nearly full on the tag: the message and the working values live in XRAM */
@@ -50,6 +54,18 @@ static void on_chunk(void)
 {
     n = (uint8_t)(msg_len - SM_IMG_HDR);
     off = (uint16_t)msg[2] | ((uint16_t)msg[3] << 8);
+    if (dbg_chunks < 3) {
+        dbg_chunks++;
+        log_puts("chunk plane=");
+        log_dec(msg[1]);
+        log_puts(" off=");
+        log_dec(off);
+        log_puts(" n=");
+        log_dec(n);
+        log_puts(" active=");
+        log_dec(active);
+        log_nl();
+    }
     if (!active || n == 0)
         return;
 

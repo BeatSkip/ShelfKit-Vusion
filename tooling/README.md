@@ -29,7 +29,7 @@ pip install textual       # hub/monitor.py   (or: pip install -r tooling/hub/req
 
 Two tools share this name. `monitor.py` merges both logs into one stream on stdout; `hub/monitor.py`
 opens the same two ports in a Textual TUI instead — one pane per port, each with its own log, baud
-rate, Open/Close, Clear and DTR/RTS buttons, plus a bar for pushing an image to a tag:
+rate, Open/Close, Clear, DTR and Reset buttons, plus a bar for pushing an image to a tag:
 
 ```
 python tooling/hub/monitor.py hub=COM4 tag=COM3
@@ -44,8 +44,28 @@ each pane can then be changed on its own.
 
 Both handshake lines start **released** (DTR low, RTS low). On this board DTR is the BOOT pin and
 RTS the RESET line, so that is the state which neither resets the tag nor drops it into the
-bootloader; the per-pane buttons toggle them by hand. Any pyserial URL works as a port name too
-(`loop://`), which is handy for trying the layout without hardware.
+bootloader. Per pane, **DTR (boot)** is a level toggle — it holds the boot pin where you put it —
+while **Reset** is a push button: it asserts RTS for 100 ms and releases it on a timer, because a
+toggle left "on" would hold the board in reset. Each press is logged. Any pyserial URL works as a
+port name too (`loop://`), which is handy for trying the layout without hardware.
+
+### Copying both logs
+
+**[Copy logs]** in the top bar merges the two panes by arrival time and puts the result on the
+clipboard, in the same `[HH:MM:SS.mmm <port name>] <text>` shape `monitor.py` prints, behind a
+header naming both ports and the line count:
+
+```
+=== ShelfKit two-port log: hub=COM4, tag=COM3 - 128 lines, 2026-10-16 01:58:28 ===
+[01:58:24.770 hub] POLL src=0100 seq=09 rssi=-36 up=6s att=1 hubrssi=-35
+[01:58:24.784 tag] poll ok att=1 rssi=-35 hubrssi=-36
+```
+
+It feeds both clipboards, because neither is reliable on its own: Textual's terminal clipboard
+(OSC 52, which some terminals and Windows Terminal builds ignore) *and* the OS one through
+`clip` (Windows), `pbcopy` (macOS) or `wl-copy`/`xclip`/`xsel` (Linux). The status line reports which
+of the two accepted it. The copy is built from the lines as they arrived rather than from the
+rendered panes, so a long line that wrapped on screen is copied as one line.
 
 ### Pushing an image to a tag
 
