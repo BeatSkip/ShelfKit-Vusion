@@ -10,6 +10,8 @@
 #include "shelflink.h"
 #include "sl_proto.h"
 
+#define SL_RX_TRAILER 2
+
 struct sl_stats __xdata sl_stats;
 
 enum {
@@ -175,8 +177,24 @@ uint8_t sl_reply(const struct sl_rx __xdata *to, uint8_t type, const uint8_t __x
 
 static void handle_rx(struct axradio_status __xdata *st)
 {
-    if (!sl_frame_parse(st->u.rx.pktdata, (uint8_t)st->u.rx.pktlen, &rx_info)) {
+    /* the radio delivers the 2-byte hardware CRC after the frame */
+    uint8_t flen = (uint8_t)st->u.rx.pktlen;
+
+    if (flen >= SL_RX_TRAILER)
+        flen -= SL_RX_TRAILER;
+    if (!sl_frame_parse(st->u.rx.pktdata, flen, &rx_info)) {
+        static uint8_t __xdata dbg_bad;
         sl_stats.rx_bad++;
+        if (st->u.rx.pktlen > 9 && dbg_bad < 6) {
+            dbg_bad++;
+            log_puts("badfrm len=");
+            log_dec(st->u.rx.pktlen);
+            log_puts(" b0=");
+            log_hex8(st->u.rx.pktdata[0]);
+            log_puts(" b4=");
+            log_hex8(st->u.rx.pktdata[4]);
+            log_nl();
+        }
         return;
     }
     rx_info.rssi = st->u.rx.phy.rssi;
