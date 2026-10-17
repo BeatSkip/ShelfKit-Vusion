@@ -4,10 +4,10 @@
 The hub prints a "POLL src=<addr> ..." line every time a tag announces itself. The
 host decides whether that tag should get a new image and, if so, has the hub send it:
 
-    python tooling/hubhost.py COM4 serve images/        # watch announcements, push new images
-    python tooling/hubhost.py COM4 send 0100 pic.png    # push one image to tag 0100 now
-    python tooling/hubhost.py COM4 ping                 # check the hub's command channel
-    python tooling/hubhost.py --list
+    python ShelfKit-Server/hubhost.py COM4 serve images/   # watch announcements, push new images
+    python ShelfKit-Server/hubhost.py COM4 send 0100 pic.png   # push one image to tag 0100 now
+    python ShelfKit-Server/hubhost.py COM4 ping                # check the hub's command channel
+    python ShelfKit-Server/hubhost.py --list
 
 serve: the folder holds one PNG per tag named after its node id in hex (0100.png). When a
 tag announces itself and its file is new or changed since the last successful push

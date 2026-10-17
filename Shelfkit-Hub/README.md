@@ -23,7 +23,7 @@ instead, using the **SDCC-MDF** extension for VS Code.
   lines, brings up UART0 (38400 8N1 — the AXSEM bootloader rate) and the SPI unit, then streams
   the whole SPI flash over UART as a hexdump (JEDEC ID first). It is deliberately kept outside
   `src/` so it is not compiled — copy it over `src/main.c` to bring it back.
-  `../tooling/flashdump.py` automates the reset (boot pin via DTR, reset via RTS) and saves the
+  `../tooling/dumps/flashdump.py` automates the reset (boot pin via DTR, reset via RTS) and saves the
   dump to a file.
 - **SPI and e-paper drivers are implemented but not yet verified on hardware.** The e-paper
   init sequence was transcribed from three independent drivers for this exact panel; the BUSY
@@ -57,7 +57,8 @@ Everything shared by the two targets lives outside this folder, referenced as `.
 | `../shared/components/` | Source components (ESP8266-IDF pattern); currently empty |
 | `../shared/boards/` | Board definition for the SDCC-MDF extension, wired up through `sdcc.boardsDir` |
 | `../shared/documentation/` | AX8052F100/F131/F143 + panel datasheets, and `signal-list.md` |
-| `../tooling/` | Host-side scripts (`png2epd.py`, `flashdump.py`, `axsem-flasher.py`) and the parked `flashdump_main.c` |
+| `../tooling/` | Firmware-side host scripts: `axsem-flasher.py`, `dumps/flashdump.py`, `monitor.py` (stdout log merge) and the link-layer simulator tests |
+| `../ShelfKit-Server/` | Host-side application: `shelfkit-server.py` (two-port TUI + image push), `hubhost.py` and `png2epd.py` |
 
 ## Pin map
 
@@ -146,7 +147,7 @@ configuration the vendor's own LCD code uses. Provides `spi_init()`, `spi_transf
 Thin 25-series SPI NOR driver: `extflash_release_powerdown()`, `extflash_read_jedec_id()`,
 `extflash_read()`. The dump size lives in `FLASH_SIZE` (default 128 KiB for the suspected
 1 Mbit chip; the JEDEC capacity byte tells the truth). The boot firmware prints the JEDEC ID
-and a full hexdump of the chip on UART0 at 38400 8N1 (TX = PB4); `../tooling/flashdump.py`
+and a full hexdump of the chip on UART0 at 38400 8N1 (TX = PB4); `../tooling/dumps/flashdump.py`
 resets the board (boot pin via DTR, reset via RTS, same wiring as `../tooling/axsem-flasher.py`)
 and saves the stream to a file. Use `--bootloader` to reset into the serial bootloader
 instead.
@@ -188,7 +189,7 @@ epd_sleep();                            /* panel deep sleep */
 planes in `src/epd_image.c` by, from this folder:
 
 ```
-python ../tooling/png2epd.py polyform-eink.png
+python ../ShelfKit-Server/png2epd.py polyform-eink.png
 ```
 
 `--rotate 90` is the default and is what the checked-in planes were generated with. Add

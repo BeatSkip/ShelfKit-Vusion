@@ -54,6 +54,12 @@ uint8_t axradio_transmit(const struct axradio_address __genericaddr *addr, const
 __reentrantb void wtimer0_addrelative(struct wtimer_desc __xdata *d) __reentrant { armed = d; armed_ticks = (uint16_t)d->time; }
 __reentrantb uint8_t wtimer_remove(struct wtimer_desc __xdata *d) __reentrant { if (armed == d) { armed = 0; return 1; } return 0; }
 uint16_t shelfhw_random(void) { rnd += 0x1357; return rnd; }
+/* shelflink.c logs a bad frame through the shared UART helpers; here they are
+ * no-ops, so the state machine can be linked and driven without a UART. */
+void log_puts(const char *s) { s; }
+void log_nl(void) {}
+void log_dec(uint16_t v) { v; }
+void log_hex8(uint8_t v) { v; }
 /* the headers declare these vector handlers; the real ones live in the engine and in libmf */
 void axradio_isr(void) __interrupt INT_RADIO {}
 void wtimer_irq(void) __interrupt(1) {}

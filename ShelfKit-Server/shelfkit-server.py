@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""monitor.py - two UARTs side by side, plus image push to a tag.
+"""shelfkit-server.py - two UARTs side by side, plus image push to a tag.
 
 Opens two serial ports and gives each one its own half of the screen, with its
 own baud rate, open/close and DTR/RTS controls, so two boards (hub and tag) can
 be watched in real time:
 
-    python tooling/hub/monitor.py hub=COM4 tag=COM3
-    python tooling/hub/monitor.py hub=COM4            # second pane stays free
-    python tooling/hub/monitor.py --baud 115200 hub=COM4 tag=COM3
-    python tooling/hub/monitor.py --list
+    python ShelfKit-Server/shelfkit-server.py hub=COM4 tag=COM3
+    python ShelfKit-Server/shelfkit-server.py hub=COM4     # second pane stays free
+    python ShelfKit-Server/shelfkit-server.py --baud 115200 hub=COM4 tag=COM3
+    python ShelfKit-Server/shelfkit-server.py --list
 
 Ports named on the command line are opened at startup. Ports only picked up
 from the auto-detected list are pre-filled but left closed, so the tool never
@@ -16,13 +16,13 @@ grabs a port you did not ask for.
 
 The top bar pushes an image to one tag. [Browse...] picks an image, the tag list
 is every node id that announced itself with a "POLL src=<id>" line on the hub
-pane, and [Send] drives the hub's command channel through tooling/hubhost.py. A
-serial port cannot be shared, so the hub pane's port is closed for the transfer
-and reopened afterwards, and [Send] turns into [Cancel] while one runs. The
-rotation is picked to fit the panel rather than assumed: a 296x152 landscape
-source is rotated 90, a 152x296 portrait one is used as it is, and the angle is
-logged. Only an image that fits neither way is refused (resize the source);
-dithering stays off, as in hubhost.py.
+pane, and [Send] drives the hub's command channel through hubhost.py (which sits
+next to this file). A serial port cannot be shared, so the hub pane's port is
+closed for the transfer and reopened afterwards, and [Send] turns into [Cancel]
+while one runs. The rotation is picked to fit the panel rather than assumed: a
+296x152 landscape source is rotated 90, a 152x296 portrait one is used as it is,
+and the angle is logged. Only an image that fits neither way is refused (resize
+the source); dithering stays off, as in hubhost.py.
 
 Both handshake lines start RELEASED (DTR low, RTS low). On this tag DTR is the
 BOOT pin and RTS is the RESET line, so that is the state which neither resets
@@ -34,7 +34,7 @@ Lines are shown with a millisecond timestamp and decoded as latin-1, matching
 tooling/monitor.py; 8N1 is assumed. Any pyserial URL works as a port name too
 ("loop://", "socket://host:port"), which is handy for testing without hardware.
 
-Requires: pyserial and textual  (pip install -r tooling/hub/requirements.txt)
+Requires: pyserial and textual  (pip install -r ShelfKit-Server/requirements.txt)
 """
 
 from __future__ import annotations
@@ -77,14 +77,14 @@ except ImportError:  # pragma: no cover - environment check
     sys.exit("textual is required:  pip install textual")
 
 # hubhost.py owns the hub command channel and the image framing; png2epd.py does
-# the actual conversion. Both live in tooling/, one level up from this file.
-TOOLING_DIR = Path(__file__).resolve().parent.parent
-if str(TOOLING_DIR) not in sys.path:
-    sys.path.insert(0, str(TOOLING_DIR))
+# the actual conversion. Both are imports from this file's own folder.
+SERVER_DIR = Path(__file__).resolve().parent
+if str(SERVER_DIR) not in sys.path:
+    sys.path.insert(0, str(SERVER_DIR))
 try:
     import hubhost
 except ImportError:  # pragma: no cover - environment check
-    sys.exit(f"hubhost.py not found (expected next to this tool, in {TOOLING_DIR})")
+    sys.exit(f"hubhost.py not found (expected next to this tool, in {SERVER_DIR})")
 
 DEFAULT_BAUD = 38400
 READ_TIMEOUT_S = 0.05
@@ -496,7 +496,7 @@ def _selected_tag(select: Select) -> int | None:
 
 def _default_image_dir() -> Path:
     """Where the picker opens: the repo's image folders, else the cwd."""
-    repo_resources = Path(__file__).resolve().parent.parent.parent / "Resources"
+    repo_resources = Path(__file__).resolve().parent.parent / "Resources"
     for candidate in (Path.cwd() / "Resources", Path.cwd() / "images", repo_resources):
         if candidate.is_dir():
             return candidate
@@ -791,7 +791,7 @@ class TwoPortApp(App[None]):
             self._ui_note(key, f"# {path.name} -> {addr:04X} via {port}")
 
             try:
-                import png2epd  # tooling/ is already on sys.path
+                import png2epd  # this folder is already on sys.path
             except SystemExit as exc:  # png2epd exits when Pillow is missing
                 self._ui_note(key, f"# {exc.code or 'png2epd is unavailable'}")
                 return

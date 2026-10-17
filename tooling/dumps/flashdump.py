@@ -12,12 +12,12 @@ hexdump once, ending with "*** end of dump ***". Everything runs at
 38400 baud, the bootloader's native rate.
 
 Usage:
-    python tooling/flashdump.py COM7
-    python tooling/flashdump.py COM7 -o dump1.txt
-    python tooling/flashdump.py COM7 --bootloader            # show bootloader banner
-    python tooling/flashdump.py COM7 --bootloader --run      # banner, then R + capture
-    python tooling/flashdump.py COM7 --reset none            # you reset by hand
-    python tooling/flashdump.py --list
+    python tooling/dumps/flashdump.py COM7
+    python tooling/dumps/flashdump.py COM7 -o dump1.txt
+    python tooling/dumps/flashdump.py COM7 --bootloader            # show bootloader banner
+    python tooling/dumps/flashdump.py COM7 --bootloader --run      # banner, then R + capture
+    python tooling/dumps/flashdump.py COM7 --reset none            # you reset by hand
+    python tooling/dumps/flashdump.py --list
 """
 
 import argparse
