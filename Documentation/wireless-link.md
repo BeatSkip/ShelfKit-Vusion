@@ -123,9 +123,15 @@ can be lost, which the checksum + retry covers.
 **Hub -> tag** (DATA payloads, `shelfmsg.h`): `BEGIN`, then 28-byte `CHUNK`s (plane, 16-bit offset in the plane), then
 `END`. The tag has no RAM for a frame buffer (5624 B per plane): each chunk is shifted straight into the IL0373's frame
 memory (`epd_stream_*`). Out-of-order/repeated chunks are ignored (offset must equal the next expected one), `END`
-refreshes only when both planes are complete. BEGIN resets the panel (~0.5 s) and END refreshes it (~15 s), both after
-the ACK, so the host pauses after them (1.5 s / 20 s). The tag does not poll while a transfer runs.
+refreshes only when both planes are complete. BEGIN switches the panel supply on (transistor
+U4 on PA5), resets the panel (~0.5 s) and END refreshes it (~15 s), both after the ACK, so the
+host pauses after them (5 s / 20 s). The tag does not poll while a transfer runs.
 A full image is ~404 messages, roughly 20-30 s.
+
+`END` logs what the panel actually did: `img done busy=1 14.6s` is a real refresh waveform,
+`busy=0` means the IL0373 never pulled BUSY at all (no supply or no reset pulse - check PA5 and
+PB5), and `busy=2` means the waveform was still running when the wait ran out, in which case the
+panel is left powered rather than being put to sleep mid-refresh.
 
 Host: `python tooling/hubhost.py COM4 serve images/` pushes `images/<addr>.png` to a tag when it announces itself and the
 file is new or changed (state in `images/.sent.json`); `send <addr> <png>` pushes once; `ping` checks the channel.

@@ -72,8 +72,18 @@ void epd_clear(uint8_t bw_byte, uint8_t red_byte);
  */
 void epd_upload(uint8_t cmd, const uint8_t *plane, uint16_t len);
 
-/* Start a screen refresh (IL0373 0x12) and wait for BUSY to clear. */
-void epd_refresh(void);
+/* ── BUSY result codes (see epd_cmd_wait in epd.c) ────────────────────── */
+/* Whatever a command that makes the panel busy reported. A refresh that does
+ * not reach EPD_BUSY_DONE did not happen, no matter what the panel was sent:
+ * EPD_BUSY_NONE in particular means the IL0373 never reacted at all (no supply,
+ * no reset, wrong pin) - that is a wiring/power fault, not a timing one. */
+#define EPD_BUSY_NONE       0   /* BUSY never left idle: nothing happened */
+#define EPD_BUSY_DONE       1   /* BUSY pulsed and came back: command ran  */
+#define EPD_BUSY_TIMEOUT    2   /* still busy when the wait ran out         */
+
+/* Start a screen refresh (IL0373 0x12) and wait for BUSY to clear. Returns an
+ * EPD_BUSY_* code; only EPD_BUSY_DONE means the image is on the glass. */
+uint8_t epd_refresh(void);
 
 /* Convenience: upload both planes and refresh. Both buffers must exist
  * at the same time - on this panel use epd_upload() twice instead. */

@@ -133,6 +133,16 @@ The boot demo calls `pwr_on()` before touching the panel, on the assumption one 
 transistors gates the display supply. If that misbehaves, flip the polarity defines or
 disable one pin and rebuild.
 
+**U4 (PA5) is the display supply** — that is the assumption the working boot demo runs on,
+and it is the one difference the radio firmware had dropped: it left PA5 floating, so the
+IL0373 took a whole init sequence and a whole frame over SPI with no supply behind it and
+ran no refresh waveform, which looks exactly like a dead panel. `pwr.h` drives one pin per
+`PWR_USE_*` and `PWR_U4_ACTIVE_HIGH 0` means "on" is a **low** level, so the panel is
+powered while PA5 is low. `src/img_rx.c` therefore calls `pwr_init()` + `pwr_on()` before
+every image (`panel_power_on()`), independently of `SHELF_POWER_LINES`, which only ever
+described the radio. The `img done busy=` log line settles whether the panel reacted. U5
+(PA2) is still unidentified and left alone.
+
 ### SPI — `src/spi.h`
 
 A thin wrapper over the AX8052's built-in SPI unit, mode 0, MSB first — the same

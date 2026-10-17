@@ -15,7 +15,9 @@
 #define SHELF_STATS_EVERY       10
 
 /* 1 = drive the unidentified transistor lines PA2/PA5 on (see src/pwr.h) before the radio
- * starts. Left off by default; try it if the range turns out poor. */
+ * starts. Left off by default; try it if the range turns out poor.
+ * This is about the radio only: the e-paper supply is transistor U4 on PA5, and
+ * src/img_rx.c drives it on itself around every image (independent of this switch). */
 #define SHELF_POWER_LINES   0
 
 #endif /* SHELF_CONFIG_H */
