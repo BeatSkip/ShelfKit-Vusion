@@ -19,8 +19,8 @@ The host-side *application* — the two-port TUI and everything it imports — l
 `src/main.c` — is currently only in git history (it was last present at `afd19cf`); the dumps it
 produced are kept in `dumps/`.
 
-None of this is compiled by the SDCC build. Only `png2epd.py` (over in `ShelfKit-Server/`) produces
-build input, and it writes into a target's `src/`.
+None of this is compiled by the SDCC build. Only `png2epd.py` (over in
+`ShelfKit-Server/shelfkit/`) produces build input, and it writes into a target's `src/`.
 
 ## Requirements
 

@@ -108,7 +108,7 @@ tag  --POLL-->  hub  --"POLL src=0100 ..."-->  host  (image for 0100 new?)
 tag  <--DATA(BEGIN, CHUNK..., END)--  hub  <--"S0100<payload><chk>"--  host
 ```
 
-**Host -> hub** (hex lines, `\n` terminated, `ShelfKit-Server/hubhost.py` implements the host side):
+**Host -> hub** (hex lines, `\n` terminated, `ShelfKit-Server/shelfkit/hubhost.py` implements the host side):
 
 | Line | Hub does |
 |---|---|
@@ -133,7 +133,7 @@ A full image is ~404 messages, roughly 20-30 s.
 PB5), and `busy=2` means the waveform was still running when the wait ran out, in which case the
 panel is left powered rather than being put to sleep mid-refresh.
 
-Host: `python ShelfKit-Server/hubhost.py COM4 serve images/` pushes `images/<addr>.png` to a tag when it announces itself and the
+Host: `python ShelfKit-Server/shelfkit/hubhost.py COM4 serve images/` pushes `images/<addr>.png` to a tag when it announces itself and the
 file is new or changed (state in `images/.sent.json`); `send <addr> <png>` pushes once; `ping` checks the channel.
 `ShelfKit-Server/shelfkit-server.py` does the same from a two-pane UI.
 
@@ -172,7 +172,7 @@ POLL src=0100 seq=09 rssi=-36 up=6s att=1 hubrssi=-35
 | Tool | Use |
 |---|---|
 | `ShelfKit-Server/shelfkit-server.py hub=COM4 tag=COM3 [--baud N]` | Textual TUI: one pane per port (own log, baud rate, Open/Close, Clear, DTR and Reset), the two logs merged onto the clipboard on demand, and a bar that pushes an image to a tag picked from the ones that announced themselves. |
-| `ShelfKit-Server/hubhost.py COM4 serve\|send\|ping ...` | The same image push without a UI, plus `ping` for the hub's command channel. |
+| `ShelfKit-Server/shelfkit/hubhost.py COM4 serve\|send\|ping ...` | The same image push without a UI, plus `ping` for the hub's command channel. |
 | `tooling/monitor.py hub=COM4 tag=COM3 [--reset] [--log f] [--summary 60]` | Timestamped merged log of both boards plus a loss/attempt/RSSI summary on stdout. Holds DTR/RTS low so opening a port doesn't reset the tag. |
 | `tooling/axsem-flasher.py <hex> -p COMx` | Flash over the AX8052 serial bootloader (works). |
 | `tooling/dumps/flashdump.py COMx` | Capture the parked dump firmware's hexdump of the SPI flash. |

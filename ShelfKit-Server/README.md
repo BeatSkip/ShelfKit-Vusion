@@ -5,11 +5,20 @@ image-push bar, the command-line image pusher underneath it, and the PNG→e-pap
 of them use. Nothing here is compiled by the SDCC build — see [`../tooling/`](../tooling) for the
 flasher, the flash-dump capture and the firmware-side protocol tests.
 
+```
+ShelfKit-Server/
+  shelfkit-server.py     the app - the only thing you run
+  shelfkit/              supporting modules, imported by it
+    hubhost.py             hub command channel, image framing, and its own CLI
+    png2epd.py             PNG -> the two 1-bit planes the panel streams
+  requirements.txt       pyserial, textual, pillow
+```
+
 | File | What it does |
 |---|---|
 | `shelfkit-server.py` | Textual TUI: two serial ports as two side-by-side panes (own log, baud rate, Open/Close, Clear, DTR and Reset controls each), plus a top bar that browses for an image and pushes it to a tag picked from the ones that announced themselves |
-| `hubhost.py` | Host side of the image push without a UI: watches the hub's `POLL src=...` announcements and sends new images to tags (`serve`, `send`, `ping`) |
-| `png2epd.py` | Converts a PNG into the two 1-bit C arrays the e-paper driver uploads (`epd_image.c` / `epd_image.h`) |
+| `shelfkit/hubhost.py` | Host side of the image push without a UI: watches the hub's `POLL src=...` announcements and sends new images to tags (`serve`, `send`, `ping`) |
+| `shelfkit/png2epd.py` | Converts a PNG into the two 1-bit C arrays the e-paper driver uploads (`epd_image.c` / `epd_image.h`) |
 | `requirements.txt` | `pyserial`, `textual`, `pillow` — the whole tree's Python dependencies |
 
 ## Install
@@ -87,10 +96,10 @@ protocol, the frame format and the meaning of the log lines are in
 ## The same thing from a shell
 
 ```
-python ShelfKit-Server/hubhost.py COM4 serve images/       # watch announcements, push new images
-python ShelfKit-Server/hubhost.py COM4 send 0100 pic.png   # push one image to tag 0100 now
-python ShelfKit-Server/hubhost.py COM4 ping                # check the hub's command channel
-python ShelfKit-Server/hubhost.py --list
+python ShelfKit-Server/shelfkit/hubhost.py COM4 serve images/      # watch announcements, push new images
+python ShelfKit-Server/shelfkit/hubhost.py COM4 send 0100 pic.png  # push one image to tag 0100 now
+python ShelfKit-Server/shelfkit/hubhost.py COM4 ping               # check the hub's command channel
+python ShelfKit-Server/shelfkit/hubhost.py --list
 ```
 
 `serve` keeps one PNG per tag named after its node id in hex (`0100.png`) and pushes it when the
@@ -99,12 +108,12 @@ tag announces itself and the file is new or changed since the last successful pu
 
 ## Regenerating a target's boot image
 
-`png2epd.py` lives here but writes into a firmware folder, so run it from the target so the default
+`shelfkit/png2epd.py` writes into a firmware folder, so run it from the target so the default
 `--out-dir src` lands in the right place:
 
 ```
 cd Shelfkit-Vusion
-python ../ShelfKit-Server/png2epd.py polyform-eink.png
+python ../ShelfKit-Server/shelfkit/png2epd.py polyform-eink.png
 ```
 
 `--rotate 90` is the default and is what the checked-in planes were generated with; add

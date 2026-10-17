@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """hubhost.py - push images to tags through the hub's serial port.
 
-The hub prints a "POLL src=<addr> ..." line every time a tag announces itself. The
-host decides whether that tag should get a new image and, if so, has the hub send it:
+This is a supporting module of shelfkit-server.py, and also a CLI on its own:
 
-    python ShelfKit-Server/hubhost.py COM4 serve images/   # watch announcements, push new images
-    python ShelfKit-Server/hubhost.py COM4 send 0100 pic.png   # push one image to tag 0100 now
-    python ShelfKit-Server/hubhost.py COM4 ping                # check the hub's command channel
-    python ShelfKit-Server/hubhost.py --list
+    python ShelfKit-Server/shelfkit/hubhost.py COM4 serve images/   # watch announcements, push new images
+    python ShelfKit-Server/shelfkit/hubhost.py COM4 send 0100 pic.png  # push one image to tag 0100 now
+    python ShelfKit-Server/shelfkit/hubhost.py COM4 ping               # check the hub's command channel
+    python ShelfKit-Server/shelfkit/hubhost.py --list
+
+(from the repo root; `python -m shelfkit.hubhost ...` works too if you are inside
+ShelfKit-Server/)
 
 serve: the folder holds one PNG per tag named after its node id in hex (0100.png). When a
 tag announces itself and its file is new or changed since the last successful push
@@ -29,8 +31,6 @@ import re
 import sys
 import time
 from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 try:
     import serial
@@ -151,7 +151,12 @@ class Hub:
 
 
 def planes_for(path, rotate, dither):
-    import png2epd
+    # png2epd is imported here, not at module load, so that `ping` and the hub
+    # command channel still work when Pillow is not installed.
+    try:
+        from . import png2epd          # imported as shelfkit.hubhost
+    except ImportError:                # run directly: python shelfkit/hubhost.py
+        import png2epd
     return png2epd.load_planes(path, rotate, dither)
 
 

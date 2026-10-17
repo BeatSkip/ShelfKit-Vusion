@@ -10,7 +10,7 @@ The panel is mounted rotated, so landscape images need --rotate 90 (default):
 the source image's LEFT edge becomes the top of the displayed frame.
 
 Usage (run it from a target folder so the default --out-dir src lands there):
-  python ../ShelfKit-Server/png2epd.py polyform-eink.png [--rotate 90] [--dither]
+  python ../ShelfKit-Server/shelfkit/png2epd.py polyform-eink.png [--rotate 90] [--dither]
 
 Output: <out-dir>/epd_image.c and <out-dir>/epd_image.h
 """
