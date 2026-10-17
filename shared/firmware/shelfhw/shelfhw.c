@@ -68,27 +68,37 @@ static void led_write(uint8_t led, uint8_t on)
     }
 }
 
-static uint8_t led_is_on(uint8_t led)
-{
-    uint8_t level;
-
-    switch (led) {
-    case SHELFHW_LED_WHITE: level = PORTB & 0x01; break;
-    case SHELFHW_LED_BLUE:  level = PORTB & 0x80; break;
-    case SHELFHW_LED_GREEN: level = PORTB & 0x40; break;
-    default:                level = PORTC & 0x10; break;
-    }
-    return SHELFHW_LED_ACTIVE_HIGH ? (level != 0) : (level == 0);
-}
-
 void shelfhw_led(uint8_t led, uint8_t on)
 {
     led_write(led, on);
 }
 
-void shelfhw_led_toggle(uint8_t led)
+/* Blocking, self-terminating indication. That is deliberate: the LEDs sit
+ * behind the e-paper glass and a lit one warms the panel into a visible blob,
+ * so the only safe way to drive them is on, wait, off - a level that some
+ * later code forgets to clear is exactly what this file must not allow. */
+void shelfhw_led_pulse(uint8_t led, uint16_t ms)
 {
-    led_write(led, (uint8_t)!led_is_on(led));
+    if (!ms)
+        ms = 1;                     /* a 0 here would wrap into a 65 s pulse */
+    shelfhw_led(led, 1);
+    while (ms--)
+        delay(1000);                /* libmf delay() is microseconds-ish */
+    shelfhw_led(led, 0);
+}
+
+void shelfhw_fatal(uint8_t led)
+{
+    uint16_t i;
+
+    for (;;) {
+        shelfhw_led_pulse(led, SHELFHW_LED_PULSE_MS);
+        /* Roughly a second of visible off-time. A busy wait on purpose: this
+         * is the "flash me again" state, and it must never end up as a lit
+         * LED sitting there cooking the panel. */
+        for (i = 0; i < 2000; i++)
+            delay(1000);
+    }
 }
 
 /* ── pseudo-random numbers ────────────────────────────────────────────── */

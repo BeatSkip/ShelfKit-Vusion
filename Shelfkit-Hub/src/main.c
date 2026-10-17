@@ -176,8 +176,12 @@ static void on_rx(const struct sl_rx __xdata *rx)
         rsp[SM_RSP_RSSI] = (uint8_t)(int8_t)rx->rssi;
         sl_reply(rx, SL_T_POLL_RSP, rsp, SM_RSP_LEN);
     }
-    shelfhw_led_toggle(SHELFHW_LED_GREEN);
     log_rx(rx);
+    /* A tag announced itself: one short green flash. Deliberately not a
+     * toggle - keeping the LED lit for the whole poll interval is what heated
+     * the panel on the tag and made the frame look like a toggle here. */
+    if (rx->type == SL_T_POLL)
+        shelfhw_led_pulse(SHELFHW_LED_GREEN, SHELFHW_LED_PULSE_MS);
 }
 
 void main(void)
@@ -200,15 +204,13 @@ void main(void)
         log_puts("radio init failed, err=");
         log_dec(r);
         log_nl();
-        shelfhw_led(SHELFHW_LED_RED, 1);
-        for (;;)
-            shelfhw_poll();
+        shelfhw_fatal(SHELFHW_LED_RED);
     }
     log_puts("radio ok, pll rng=");
     log_dec(axradio_get_pllrange());
     log_puts(", listening");
     log_nl();
-    shelfhw_led(SHELFHW_LED_BLUE, 1);
+    shelfhw_led_pulse(SHELFHW_LED_BLUE, SHELFHW_LED_BOOT_PULSE_MS);
 
     host_rx_init();
     for (;;) {

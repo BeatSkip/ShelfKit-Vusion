@@ -34,7 +34,6 @@ static uint8_t __xdata dbg_chunks;
 static void abort_transfer(void)
 {
     active = 0;
-    shelfhw_led(SHELFHW_LED_WHITE, 0);
 }
 
 /* The panel is not on the always-on rail: transistor U4 (PA5, see pwr.h) gates
@@ -55,6 +54,10 @@ static void panel_power_on(void)
 static void on_begin(void)
 {
     log_puts("img begin\r\n");
+    /* Green = "an image is starting". One short flash: the white LED used to be
+     * held on for the whole transfer (minutes), which warmed the panel and
+     * showed up on the frame. */
+    shelfhw_led_pulse(SHELFHW_LED_GREEN, SHELFHW_LED_PULSE_MS);
     panel_power_on();
     spi_init();
     dbg_chunks = 0;
@@ -63,7 +66,6 @@ static void on_begin(void)
     plane = SM_PLANE_BW;
     expect = 0;
     active = 1;
-    shelfhw_led(SHELFHW_LED_WHITE, 1);
     log_puts("img panel open\r\n");
 }
 

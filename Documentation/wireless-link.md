@@ -142,8 +142,24 @@ and the host-side framing is checked, but this has not been run on hardware.** T
 image to a tag and watch the tag's `img begin / img refresh / img done` log lines.
 ## Debug output and tools
 
-Both firmwares log on UART0 TX (PB4, 38400 8N1). LEDs: blue = radio up, green = poll ok / hub frame
-toggle, red = poll failed or radio init failed (polarity unverified, see below).
+Both firmwares log on UART0 TX (PB4, 38400 8N1).
+
+**LEDs are pulses, never levels.** They sit directly behind the e-paper glass and a lit LED warms
+the panel into a visible blob on the frame, so every indication is one bounded flash
+(`shelfhw_led_pulse`, 50 ms; 250 ms for the boot flash) and no LED is ever left on. The
+`SHELFHW_LED_PULSE_MS` / `SHELFHW_LED_BOOT_PULSE_MS` defines in `shelfhw.h` are the only durations:
+
+| LED | Where | Meaning |
+|---|---|---|
+| blue | hub + tag | one flash at boot, when the radio came up |
+| green | hub | a tag announced itself (one flash per `POLL` line) |
+| green | tag | an image transfer is starting (`BEGIN`) |
+| red | hub + tag | error: repeating flash if radio init failed; on the tag one flash per failed poll |
+
+Successful polls are silent on the tag by design - a per-poll flash kept an LED lit most of the
+time. The UART log carries that information instead. LED polarity is still unverified: the pin map
+says active low, the firmware assumes active high (`SHELFHW_LED_ACTIVE_HIGH`). If the wrong LED
+lights, or one appears to be on permanently, that define is the single switch.
 
 Example (tag / hub):
 
@@ -159,8 +175,8 @@ POLL src=0100 seq=09 rssi=-36 up=6s att=1 hubrssi=-35
 | `tooling/test_shelflink.py` | Simulator unit tests (`sl_proto_test.c`: 22 checks, `shelflink_test.c`: 40 checks with stubbed radio/timers). |
 | `tooling/patch_libmf_labels.py` | Re-apply the `libmf.lib` label fix if the library is ever rebuilt/restored. |
 
-Build memory (SDCC 3.6.0): hub ≈ 36.7 KB, tag ≈ 37.1 KB of 59 389 B code; XRAM ≈ 1 KB of 8 KB;
-**internal RAM is tight** — 139–140 B of stack left, "no spare internal RAM" on the tag. Watch this when
+Build memory (SDCC 3.6.0): hub ≈ 36.8 KB, tag ≈ 37.0 KB of 59 389 B code; XRAM ≈ 1.1 KB of 8 KB;
+**internal RAM is tight** — 137–154 B of stack left, "no spare internal RAM" on the tag. Watch this when
 adding features (put buffers in `__xdata`).
 
 Building: SDCC-MDF builds each target as before (open the target folder, Ctrl+Shift+B). The

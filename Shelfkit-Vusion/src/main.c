@@ -54,9 +54,10 @@ static void on_done(const struct sl_done __xdata *done)
 
     polls_done++;
     last_attempts = attempts;
-    shelfhw_led(SHELFHW_LED_GREEN, 0);
-    shelfhw_led(SHELFHW_LED_RED, 0);
 
+    /* The normal case is silent: green means "an image is starting" now, and a
+     * per-poll flash (or a latched level) kept an LED lit almost permanently,
+     * which is exactly the heat that shows up on the panel. */
     if (done->result == SL_OK) {
         log_puts("poll ok att=");
         log_dec(attempts);
@@ -68,13 +69,12 @@ static void on_done(const struct sl_done __xdata *done)
             log_sdec(last_hub_rssi);
         }
         log_nl();
-        shelfhw_led(SHELFHW_LED_GREEN, 1);
     } else {
         log_puts("poll FAILED after ");
         log_dec(attempts);
         log_puts(" attempts");
         log_nl();
-        shelfhw_led(SHELFHW_LED_RED, 1);
+        shelfhw_led_pulse(SHELFHW_LED_RED, SHELFHW_LED_PULSE_MS);
     }
 
     if (polls_done % SHELF_STATS_EVERY == 0)
@@ -127,9 +127,7 @@ void main(void)
         log_puts("radio init failed, err=");
         log_dec(r);
         log_nl();
-        shelfhw_led(SHELFHW_LED_RED, 1);
-        for (;;)
-            shelfhw_poll();
+        shelfhw_fatal(SHELFHW_LED_RED);
     }
     log_puts("radio ok, pll rng=");
     log_dec(axradio_get_pllrange());
@@ -137,7 +135,7 @@ void main(void)
     log_dec(SHELF_POLL_INTERVAL_S);
     log_puts(" s");
     log_nl();
-    shelfhw_led(SHELFHW_LED_BLUE, 1);
+    shelfhw_led_pulse(SHELFHW_LED_BLUE, SHELFHW_LED_BOOT_PULSE_MS);
 
     poll_timer.handler = poll_cb;
     poll_timer.time = SHELFHW_TICKS_PER_S;

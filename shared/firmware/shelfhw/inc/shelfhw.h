@@ -37,6 +37,13 @@
 #define SHELFHW_LED_GREEN   2
 #define SHELFHW_LED_RED     3
 
+/* Every LED indication is a short, self-terminating flash - never a level. The
+ * LEDs sit directly behind the e-paper glass, so a lit one warms the panel and
+ * that shows up as a blob on the image. Keep every pulse at half a second or
+ * less; these two are the only durations the firmwares use. */
+#define SHELFHW_LED_PULSE_MS        50u     /* routine event (announce, start) */
+#define SHELFHW_LED_BOOT_PULSE_MS  250u     /* one-off "I am up" flash        */
+
 /* Clocks, wake-up timers, pins, UART log, interrupts. Call once from main(). */
 void shelfhw_init(void);
 
@@ -54,8 +61,20 @@ void shelfhw_poll_awake(void);
 void host_rx_init(void);
 int16_t host_rx_getc(void);     /* byte 0..255, or -1 if none waiting */
 
+/* Drive an LED level directly. Only for exceptional use - every indication must
+ * go through shelfhw_led_pulse(), because a level that is not cleared within a
+ * fraction of a second is what heats the panel behind the LEDs. */
 void shelfhw_led(uint8_t led, uint8_t on);
-void shelfhw_led_toggle(uint8_t led);
+
+/* Light led for ms, then switch it off again. Blocking on purpose: it is the
+ * only way to guarantee an LED is never left on. ms = 0 is treated as 1.
+ * Use this for every indication - a plain shelfhw_led(led, 1) that is not
+ * followed by an immediate off bakes the panel behind it. */
+void shelfhw_led_pulse(uint8_t led, uint16_t ms);
+
+/* Unrecoverable error: repeat a short pulse on led and never return. Used
+ * instead of latching an LED on, for the same heat reason. */
+void shelfhw_fatal(uint8_t led);
 
 /* 16-bit pseudo-random value for retry jitter and initial sequence numbers. */
 uint16_t shelfhw_random(void);
