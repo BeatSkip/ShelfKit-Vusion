@@ -66,8 +66,9 @@ Console, so an empty fleet table never looks like a broken page.
 The button at the right of the top bar switches between them; it shows the theme you would switch
 *to*. The choice is remembered in `localStorage` under `shelfkit-theme` and applied by a small
 inline script in `<head>`, so a reload comes up in the right palette without a flash of the other
-one. On a first visit (nothing stored yet) the page follows the OS
-(`prefers-color-scheme`); after that your explicit choice wins.
+one. On a first visit (nothing stored yet) the page follows the OS (`prefers-color-scheme`); after
+that your explicit choice wins. `?theme=light` or `?theme=dark` in the URL forces one for a link or a
+screenshot without touching what is saved.
 
 Both palettes are the same layout with a different token set — `:root` holds the dark defaults and
 `[data-theme="light"]` overrides the colours, so no rule hard-codes a colour outside those two
@@ -77,7 +78,7 @@ blocks. `color-scheme` is set per theme too, which keeps scrollbars and native c
 
 | Screen | Working today | Interface only (marked in the page) |
 |---|---|---|
-| **Fleet** | Tag table from every `POLL src=<id>` the hub prints: 4-char hex id, status dot (online if heard in the last 30 s, pending while an image is in flight, else offline), last-push age, search, status chips, column sort, row selection with bulk actions, tag drilldown drawer | alias editing, battery, bitmap thumbnails, reflash/clear, map view (hidden until a grid is configured) |
+| **Fleet** | Tag table from every `POLL src=<id>` the hub prints: 4-char hex id, status dot (online if heard in the last 30 s, pending while an image is in flight, else offline), last-push age **with a thumbnail of the frame that was pushed**, search, status chips, column sort, row selection with bulk actions, tag drilldown drawer | alias editing, battery, reflash/clear, map view (hidden until a grid is configured) |
 | **Editor** | Browse this machine's folders, pick the image and the target tag, **fit mode** (cover/contain/stretch), **dither** (threshold/Floyd-Steinberg/Bayer 4×4), the **three previews** — colour original, 1:1 on-device frame, and a 4× zoom that follows a drag — a midtone warning, and Push / Cancel with live frame progress. Push is only enabled once a preview has been rendered | templates, plain text, QR, multi-target push, the content library, the render → confirm → queue split |
 | **Queue** | The transfer in flight as a single `sending` row, with its frame progress, and Cancel | job history, attempts, retry, per-tag replacement |
 | **Logs** | Event table derived from the hub's `POLL` lines, with consecutive duplicates collapsed into `×N`, filtered by tag or event | the firmware's own event stream (online / offline / low batt / err) and the per-tag log |

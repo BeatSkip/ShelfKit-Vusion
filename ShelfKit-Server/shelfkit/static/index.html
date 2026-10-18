@@ -7,10 +7,17 @@
   <title>ShelfKit — e-paper fleet</title>
   <link rel="stylesheet" href="/style.css">
   <script>
-    /* Pick the theme before the first paint: the saved choice, else whatever the
-     * OS prefers. app.js only owns the switch and writes the choice back. */
+    /* Pick the theme before the first paint: ?theme=dark|light wins (handy for a
+     * screenshot or a link), then the saved choice, then whatever the OS prefers.
+     * app.js only owns the switch and writes the choice back. */
     (function () {
       var theme = "dark";
+      var forced = null;
+      try {
+        forced = new URLSearchParams(location.search).get("theme");
+      } catch (err) {
+        /* very old browser: no URLSearchParams */
+      }
       try {
         var saved = localStorage.getItem("shelfkit-theme");
         if (saved === "light" || saved === "dark") {
@@ -21,6 +28,7 @@
       } catch (err) {
         /* private mode / storage disabled: fall back to dark */
       }
+      if (forced === "dark" || forced === "light") theme = forced;   // not persisted
       document.documentElement.dataset.theme = theme;
     })();
   </script>

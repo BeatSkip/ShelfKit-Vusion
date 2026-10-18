@@ -1,77 +1,198 @@
-# ShelfKit — AX8052F143 e-paper shelf label
+# ShelfKit
 
-Monorepo skeleton for two firmware targets for the **SES-imagotag Vusion 2.6" BWR shelf label**
-(UU340 variant): an **Axsem AX8052F143** (8051 core plus a 2.4 GHz radio, 26 MHz crystal) driving
-a **Good Display GDEW026Z39** e-paper panel (296×152, black/white/red, IL0373 controller), an NFC
-chip and a serial flash. Built with **SDCC** and the **SDCC-MDF** VS Code extension.
+**An e-paper shelf-label system you can build, flash and drive yourself.** ShelfKit is a hub plus a
+fleet of battery shelf tags: the tags poll a serial-attached hub over sub-GHz radio, the hub relays
+content to them, and a local web app is where you watch the fleet and push what each tag should show.
 
-Two targets over one shared vendor tree:
+It runs on real SES-imagotag / Vusion 2.6" labels (AX8052F143 + GDEW026Z39 black/white/red panel),
+built from source with SDCC — no vendor cloud, no gateway subscription, nothing phoning home.
 
-| Folder | What it is |
+![ShelfKit fleet view](Documentation/screenshots/fleet.png)
+
+*Fleet — every tag that announced itself, its state, and the last frame pushed to it (thumbnails are
+the real render, not a mockup).*
+
+![ShelfKit editor](Documentation/screenshots/editor.png)
+
+*Editor — pick an image, choose fit and dither, and see exactly what the glass will show, including a
+4× zoom.*
+
+![ShelfKit console](Documentation/screenshots/console.png)
+
+*Console — every serial line from both boards, with the handshake lines and a reset button per pane.*
+
+Every screen has a light and a dark palette: the button in the top bar switches between them and the
+choice is remembered, or `?theme=light` / `?theme=dark` forces one for a link or a capture.
+
+<img src="Documentation/screenshots/fleet-light.png" alt="Fleet, light theme" width="1000">
+
+## How it works
+
+```
+ tag (battery)                                    hub (USB serial)              host
+ ┌────────────────┐   POLL  ───────────────────►  ┌──────────────┐   hex lines  ┌──────────────┐
+ │ AX8052F143     │   ◄─────── POLL_RSP (ACK)      │ AX8052F143   │  ◄────────── │ ShelfKit-    │
+ │ + GDEW026Z39   │   ◄─────── DATA: CHUNKs ─────  │ + serial UART│  ──────────► │ Server       │
+ └────────────────┘   ───────► ACK                 └──────────────┘   SENT …     └──────────────┘
+```
+
+- **Tags** wake every few seconds, send a tiny `POLL`, and treat the hub's answer as the
+  acknowledgement. The hub can then push an image to any tag that has just spoken; the tag streams the
+  chunks straight into the panel controller (there is no RAM for a frame buffer) and refreshes.
+- **The link** is reliable: sequence numbers, retries with jittered back-off, per-source duplicate
+  filtering, and a 3-byte on-air address so several tags and networks can share the band. Details and
+  the frame format are in [Documentation/wireless-link.md](Documentation/wireless-link.md).
+- **The server** owns two serial ports (hub and, while developing, the tag itself), renders images for
+  the panel, and serves the web UI. Everything is local: the page is plain HTML/JS on the standard
+  library's HTTP server, so the only Python dependencies are `pyserial` and `pillow`.
+
+## What works today
+
+| Area | State |
 |---|---|
-| `Shelfkit-Hub/` | A self-contained SDCC-MDF project: own `src/`, `sdcc-project.json`, `.vscode/` |
-| `Shelfkit-Vusion/` | Same layout, currently building the same firmware |
-| `shared/` | Everything both targets use — Axsem SDK, prebuilt libraries, board definition, datasheets |
-| `tooling/` | Host-side Python scripts and the parked flash-dump firmware |
+| Firmware — hub | Polls answered, images relayed to tags, serial command channel, LED pulses, 868 MHz link |
+| Firmware — tag | Polls with retry/back-off, image reception straight to the panel, BWR refresh, deep sleep |
+| E-paper driver | IL0373 init, 152×296 rotated portrait, black/white/red planes, BUSY-bounded waits |
+| Build | SDCC 3.6.0 + the SDCC-MDF VS Code extension, two targets over one shared vendor tree |
+| Server UI | Fleet, Editor (with real previews), Queue, Logs, Stats, Hub, Console, Settings — light and dark |
+| Image pipeline | Fit (cover/contain/stretch), threshold / Floyd-Steinberg / Bayer 4×4 dither, server-rendered previews, midtone warning |
+| Image push | Reliable frame-by-frame transfer over the port the console already has open, with cancel and progress |
+| Honest gaps | No bitmap store, job history, battery reporting, templates, stats history, OTA, map view, or auth |
 
-> The two targets are currently **byte-for-byte identical**. They exist so they can diverge; the
-> first file you will change is each target's `src/main.c`.
+Nothing above is a mockup: the screenshots are the running app, taken against simulated serial data
+because a screenshot cannot include a physical tag.
 
-## Requirements
+## Repository layout
 
-- [SDCC](https://sdcc.sourceforge.net/) — the build below was verified against the 3.6.0 install
-  at `C:\Program Files\SDCC`, already on `PATH` as `sdcc`.
-- VS Code with the
-  [SDCC-MDF extension](https://marketplace.visualstudio.com/items?itemName=dzantemir.sdcc-mdf)
-  (`dzantemir.sdcc-mdf`, verified against 0.29.17).
-- For the host scripts: Python 3 with `pyserial` (`flashdump.py`, `axsem-flasher.py`) and
-  `Pillow` (`png2epd.py`).
+| Path | What it is |
+|---|---|
+| `Shelfkit-Hub/` | SDCC-MDF project for the hub firmware — own `src/`, `sdcc-project.json`, `.vscode/` |
+| `Shelfkit-Vusion/` | SDCC-MDF project for the tag firmware, same layout |
+| `ShelfKit-Server/` | The host-side app: web UI, image pipeline, image push (see its [README](ShelfKit-Server/README.md)) |
+| `shared/` | Everything both firmwares use: Axsem SDK, prebuilt libraries, board definition, datasheets. See [shared/README.md](shared/README.md) |
+| `tooling/` | Firmware-side host scripts: flasher, flash-dump capture, stdout log merge, link-layer tests |
+| `Documentation/` | Protocol notes, panel init research, pin map, datasheets, screenshots |
 
-## Building a target
+The two firmware targets are separate SDCC-MDF projects on purpose — each has its own `src/main.c`
+and can diverge — while the vendor SDK, board definition and shared drivers live once in `shared/`.
 
-**Open the target folder itself, not this root.** The SDCC-MDF extension activates on a
-`sdcc-project.json` in the workspace folder, and the `../shared/…` paths are resolved against
-that folder as the project root.
+## Getting started
+
+### 1. Firmware
+
+Requirements: [SDCC](https://sdcc.sourceforge.net/) (verified against 3.6.0) and VS Code with the
+[SDCC-MDF extension](https://marketplace.visualstudio.com/items?itemName=dzantemir.sdcc-mdf).
+
+**Open the target folder itself, not the repo root** — the extension activates on a
+`sdcc-project.json` in the workspace folder, and the `../shared/…` paths are resolved against it.
 
 1. `File ▸ Open Folder…` → `Shelfkit-Hub` (or `Shelfkit-Vusion`).
-2. **Ctrl+Shift+B** (*SDCC: Build*). Output lands in that target's `build/`: `firmware.ihx`,
-   `firmware.hex`, `firmware.map`, `firmware.mem`.
-3. *SDCC: Flash* still runs the original placeholder — see [tooling/README.md](tooling/README.md)
-   for the one-edit recipe that wires up the real flasher.
+2. **Ctrl+Shift+B** — `firmware.ihx`, `.hex`, `.map` and `.mem` land in that target's `build/`.
+3. Flash it: [tooling/README.md](tooling/README.md) has the one-edit recipe that wires
+   [tooling/axsem-flasher.py](tooling/axsem-flasher.py) into *SDCC: Flash*, and the same script works
+   from a shell.
 
-Verified build (SDCC 3.6.0, identical for both targets):
+Verified build: ~37 KB of code, ~1 KB XRAM, ~150 B of stack left (SDCC has no spare internal RAM —
+keep buffers in `__xdata`).
+
+### 2. Host app
 
 ```
-Other memory:
-   Name             Start    End      Size     Max
-   ---------------- -------- -------- -------- --------
-   PAGED EXT. RAM                         0      256
-   EXTERNAL RAM     0x0001   0x0192     402     8192
-   ROM/EPROM/FLASH  0x0000   0x4665   18022    59389
-Stack starts at: 0x57 (sp set to 0x56) with 169 bytes available.
+pip install -r ShelfKit-Server/requirements.txt        # pyserial, pillow
+python ShelfKit-Server/shelfkit-server.py hub=COM4 tag=COM3
 ```
 
-## How the targets reach the shared tree
+It prints a URL and opens it. Ports named on the command line open at startup; anything else can be
+opened from the **Console** tab. Then: **Console** to watch the boards, **Fleet** to see the tags that
+announced themselves, **Editor** to pick an image, preview it and push it.
 
-Plain relative paths, so a clone works from anywhere:
+### 3. Driving it from scripts or another service
 
-| File | Entry |
+The server is one HTTP API away from anything else (endpoints are documented at the top of
+[ShelfKit-Server/shelfkit/webapp.py](ShelfKit-Server/shelfkit/webapp.py)):
+
+```
+GET  /api/state                       the whole world: panes, tags, editor, transfer
+GET  /api/poll?c=hub=0:12,tag=0:3     new log lines per pane, plus the state
+POST /api/preview                     render the picked image for the panel
+POST /api/send    {"addr": 256}       push it to one tag
+GET  /api/preview.png?t=…&kind=device the rendered frame as a PNG
+```
+
+For a shell, [ShelfKit-Server/shelfkit/hubhost.py](ShelfKit-Server/shelfkit/hubhost.py) does the same
+without the page: `serve` watches announcements and pushes new images, `send` pushes one, `ping`
+checks the hub.
+
+## Where this is going
+
+ShelfKit is a **skeleton on purpose** — the point is to grow it. The direction:
+
+### More kinds of tags
+
+- **Panel abstraction.** Today the geometry, colour planes and init sequence for the GDEW026Z39 live in
+  one driver. The next step is a panel table — size, colour set (mono / BWR / BWRY / 4-grey), init
+  sequence, refresh times — so a new panel is a data file plus a driver, not a fork. Candidates:
+  GDEW029Z10, GDEW042T2, the 2.9" and 4.2" waveshare families.
+- **More board types.** The radio layer is already generic; other MCU tags (CC2510 imagotags, nRF52
+  BLE labels) should be able to join the same fleet with a different transport and the same protocol.
+- **Capability flags on the wire**, so the server learns per tag whether it has a battery gauge,
+  partial refresh, a button, or a temperature sensor — instead of assuming the Vusion's feature set.
+- **Partial refresh and rotation slots**, so a price can change without a 15-second full flash.
+
+### A real API
+
+- **A bitmap store** (SHA-256 deduped, with the render cached) so previews, thumbnails, history and
+  "last content" survive a restart instead of living in the render cache.
+- **A job queue**: content chosen → queued → sent → acknowledged → rendered, with retries, per-tag
+  attempts and a history you can look at. The Queue screen already has the shape for it.
+- **Live updates** over SSE/WebSocket instead of 200 ms polling, and an OpenAPI schema for the whole
+  surface so other tools can generate clients.
+- **Batch operations**: push to a selection, reflash a group, rotate content across slots.
+- **Auth**: the spec's single shared password, and a deliberate decision about what is safe to expose
+  beyond `127.0.0.1`.
+
+### Integrations
+
+- **Home Assistant**, first: MQTT discovery with one device per tag (state, RSSI, battery, last
+  content as an image entity), plus a `shelfkit.push` service so an automation can put a price or a
+  message on a specific shelf. The HTTP API above is already enough to prototype that.
+- Generic **MQTT/HTTP webhooks** for everything else, a **Prometheus** endpoint for link quality, and a
+  small CLI so a CI job or a cron can push content without the UI.
+- Anything that can GET and POST JSON should be able to join the fleet — that is the design goal.
+
+### Parametric templates
+
+The biggest missing feature: content that is generated, not uploaded.
+
+- **A tiny layout language** (or Jinja-ish templates) describing boxes, text, icons and QR codes on the
+  152×296 canvas, using the fixed-width bitmap fonts the panel actually renders well.
+- **Per-tag parameters**: `{{ price }}`, `{{ sku }}`, `{{ shelf }}` — values provided by the tag's
+  record, by an MQTT topic, or by Home Assistant.
+- **Deterministic rendering**, so the same parameters and template produce the same bitmap and the same
+  SHA-256. That makes "has this tag changed?" a hash comparison rather than a full transfer.
+- **Preview in the editor** using the same pipeline that renders for the panel — which is already the
+  case for uploaded images, so templates slot into an existing guarantee rather than a new one.
+
+Non-goals, so the scope stays sane: no React SPA, no drag-and-drop layer editor, no multi-user
+accounts, no per-tag latency graphs, no mobile app (the web UI is responsive, that is all).
+
+## Documentation
+
+| Document | Contents |
 |---|---|
-| `<target>/sdcc-project.json` | `includes: ["include", "../shared/sdk/libmf/include", "../shared/sdk/libaxdvk2/include"]`, `libraries: ["../shared/lib"]`, `components: ["../shared/components"]` |
-| `<target>/.vscode/settings.json` | `"sdcc.boardsDir": "../shared/boards"` — scanned as a `custom` board source; the board id `axsem-8052f143` is taken from the board JSON's `build.mcu` |
-| `<target>/.vscode/c_cpp_properties.json` | `"${workspaceFolder}/../shared/sdk/libmf/include"` for IntelliSense |
-
-The extension resolves every one of these with `path.resolve(projectRoot, …)`, and it deliberately
-keeps paths outside the project root absolute on the tool command line (while paths inside it
-become relative). So the shared tree needs no symlinks, junctions or copies.
+| [Documentation/wireless-link.md](Documentation/wireless-link.md) | The radio protocol, frame format, retries, hub command channel, image transfer |
+| [Documentation/GDEW026Z39-init-reference.md](Documentation/GDEW026Z39-init-reference.md) | Where every panel init byte came from |
+| [Documentation/signal-list.md](Documentation/signal-list.md) | Pin map of the Vusion board |
+| [ShelfKit-Server/README.md](ShelfKit-Server/README.md) | The web app: screens, image pipeline, HTTP API |
+| [tooling/README.md](tooling/README.md) | Flashing, flash dumps, log monitoring, protocol tests |
+| [ShelfKit-Server/docs/web-interface-implementation.md](ShelfKit-Server/docs/web-interface-implementation.md) | The interface spec the UI follows |
 
 ## Notes
 
-- Nothing here is under version control yet. Each target's `.gitignore` covers `build/` and the
-  SDCC intermediates; `shared/` and `tooling/` are content you would commit as well.
+- **License:** the code in each `src/` has no license declared yet. The Axsem SDK under `shared/sdk/`
+  and `shared/lib/` keeps its original terms — compiler headers are GPL with a linking exception, the
+  rest is vendor-licensed.
 - `shared/lib/*.lib` are SDCC archives built from `shared/sdk/` with the vendor's `buildsdcc`
-  makefiles. All four are passed to the linker; only `libmf` is referenced by the code so far.
-- Each target's `include/` is an empty placeholder that is already on the include path.
-- License: the code in each `src/` has no license declared. The Axsem SDK under `shared/sdk/` and
-  `shared/lib/` retains its original terms — compiler headers are GPL with a linking exception,
-  the rest is vendor-licensed.
+  makefiles; `libmf.lib` is committed in patched form (see [tooling/README.md](tooling/README.md)).
+- The screenshots in this README are the real UI (`?theme=dark` forces the palette for a capture)
+  driven by simulated serial data, since no photograph can include a physical tag.

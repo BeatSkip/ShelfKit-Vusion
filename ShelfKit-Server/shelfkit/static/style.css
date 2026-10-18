@@ -375,6 +375,17 @@ button.chip.on { color: var(--btn-on-text); background: var(--accent); border-co
   flex: none;
 }
 
+.thumb-img {
+  width: 22px;
+  height: 34px;
+  object-fit: cover;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--thumb-bg);
+  image-rendering: pixelated;
+  flex: none;
+}
+
 .bulkbar {
   display: flex;
   align-items: center;
@@ -633,7 +644,7 @@ button.chip.on { color: var(--btn-on-text); background: var(--accent); border-co
 
 .pane-controls { display: flex; align-items: center; gap: 6px; padding: 6px 12px; flex-wrap: wrap; }
 .pane-controls .port { flex: 1 1 10ch; min-width: 8ch; }
-.pane-controls .baud { width: 8ch; }
+.pane-controls .baud { width: 10ch; }
 
 .log {
   flex: 1 1 auto;

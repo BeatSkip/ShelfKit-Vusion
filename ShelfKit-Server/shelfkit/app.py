@@ -149,7 +149,8 @@ class App:
         # Bookkeeping the Fleet/Queue/Logs screens show: when a tag was last
         # heard, and what it was last sent. Monotonic seconds, ages on the wire.
         self.tag_seen: dict[int, float] = {}
-        self.tag_push: dict[int, tuple[str, float]] = {}
+        # name, when, render key (the key lets the Fleet show the frame as a thumb)
+        self.tag_push: dict[int, tuple[str, float, str | None]] = {}
         self.send_to: int | None = None
         self.last_answer: str | None = None   # the hub's last SENT/ERR answer
         self._ports = (0.0, [])               # (fetched_at, [(device, description)])
@@ -244,7 +245,13 @@ class App:
                     "count": count,
                     "seen": round(now - self.tag_seen.get(addr, now), 1),
                     "push": (
-                        {"name": push[0], "age": round(now - push[1], 1)}
+                        {
+                            "name": push[0],
+                            "age": round(now - push[1], 1),
+                            "thumb": (
+                                f"/api/preview.png?t={push[2]}&kind=device" if push[2] else None
+                            ),
+                        }
                         if push is not None
                         else None
                     ),
@@ -734,7 +741,7 @@ class App:
         finally:
             with self.lock:
                 if ok:
-                    self.tag_push[addr] = (path.name, time.monotonic())
+                    self.tag_push[addr] = (path.name, time.monotonic(), rendered.key)
                 self.sending = False
                 self.send_to = None
                 self.progress = ""

@@ -443,13 +443,21 @@ function renderFleet() {
 
     const contentCell = el("td");
     const thumb = el("span", "thumb");
-    thumb.append(el("span", "box"));
-    if (row.push) {
-      thumb.append(el("span", null, `${ageText(row.push.age)} ago`));
-      thumb.title = row.push.name;
+    if (row.push?.thumb) {
+      // the frame that was pushed, straight from the render cache
+      const img = el("img", "thumb-img");
+      img.src = row.push.thumb;
+      img.alt = row.push.name || "last pushed frame";
+      img.title = `${row.push.name} (${ageText(row.push.age)} ago)`;
+      thumb.append(img, el("span", null, `${ageText(row.push.age)} ago`));
     } else {
-      const none = el("span", "dim", "nothing pushed yet");
-      thumb.append(none);
+      thumb.append(el("span", "box"));
+      if (row.push) {
+        thumb.append(el("span", null, `${ageText(row.push.age)} ago`));
+        thumb.title = row.push.name;
+      } else {
+        thumb.append(el("span", "dim", "nothing pushed yet"));
+      }
     }
     contentCell.append(thumb);
     contentCell.title = row.push ? row.push.name : "no content pushed from this session";
@@ -540,7 +548,8 @@ function renderEditor() {
     }
   }
 
-  ui.editorImage.value = state?.image ? state.image.path : "";
+  ui.editorImage.value = state?.image ? state.image.name || state.image.path : "";
+  ui.editorImage.title = state?.image ? state.image.path : "";
   const target = editorTarget();
   ui.editorTargets.textContent = target ? `target ${hex4(target)}` : "no target";
 
