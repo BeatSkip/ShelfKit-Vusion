@@ -1,0 +1,38 @@
+{
+  "name": "Bootloader",
+  "board": "axsem-8052f143",
+  "sources": [
+    "src"
+  ],
+  "includes": [
+    "include",
+    "../Shared/sdk/libmf/include"
+  ],
+  "defines": [],
+  "libraries": [
+    "../Shared/lib"
+  ],
+  "components": [
+    "../Shared/components"
+  ],
+  "build": {
+    "output_dir": "build",
+    "output_name": "bootloader",
+    "flags": [
+      "--code-size",
+      "65536",
+      "-Wl-bVECTOR=0x0000",
+      "-Wl-bHOME=0xe400"
+    ],
+    "hooks": {}
+  },
+  "upload": {
+    "tool": "python",
+    "args": [
+      "../Tooling/axsem-flasher.py",
+      "${outputHex}",
+      "-p",
+      "${config:comPort}"
+    ]
+  }
+}
