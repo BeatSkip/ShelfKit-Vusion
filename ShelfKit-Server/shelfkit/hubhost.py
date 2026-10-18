@@ -21,7 +21,7 @@ Hub command channel (38400 8N1, one line per command, hex only):
     P                                 -> PONG
     S<addr:4><payload><chk:2>         -> SENT <addr> ok|fail att=N     (reliable DATA frame)
 chk = two's complement of the byte sum, so addr+payload+chk adds up to 0 mod 256.
-Image payloads are defined in shared/firmware/shelflink/inc/shelfmsg.h.
+Image payloads are defined in ShelfKit-Firmware/Shared/firmware/shelflink/inc/shelfmsg.h.
 """
 
 import argparse

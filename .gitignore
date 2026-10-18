@@ -21,3 +21,6 @@ bootloader/
 # Python bytecode (created by importing tooling/*.py helpers)
 __pycache__/
 *.pyc
+
+# ShelfKit-Server state: the SQLite database plus its WAL sidecars
+ShelfKit-Server/data/

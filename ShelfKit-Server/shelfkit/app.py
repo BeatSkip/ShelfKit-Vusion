@@ -132,7 +132,7 @@ class Pane:
 class App:
     """The two panes plus the image push, safe to call from request threads."""
 
-    def __init__(self, specs: list[PortSpec], auto_open: bool = False) -> None:
+    def __init__(self, specs: list[PortSpec], auto_open: bool = False, store=None) -> None:
         self.lock = threading.RLock()
         self._arrivals = itertools.count(1)
         self.status = "ready"
@@ -147,10 +147,13 @@ class App:
         self.dither = "threshold"
         self.preview: dict | None = None
         # Bookkeeping the Fleet/Queue/Logs screens show: when a tag was last
-        # heard, and what it was last sent. Monotonic seconds, ages on the wire.
+        # heard, and what it was last sent. Wall-clock seconds (persisted, so a
+        # restart keeps the ages meaningful); ages go over the wire.
         self.tag_seen: dict[int, float] = {}
         # name, when, render key (the key lets the Fleet show the frame as a thumb)
         self.tag_push: dict[int, tuple[str, float, str | None]] = {}
+        # Editable per tag: alias, notes, and fleet-map position
+        self.tag_meta: dict[int, dict] = {}
         self.send_to: int | None = None
         self.last_answer: str | None = None   # the hub's last SENT/ERR answer
         self._ports = (0.0, [])               # (fetched_at, [(device, description)])
@@ -160,15 +163,137 @@ class App:
         # and flips this if it guessed wrong.
         self.boot_state = False
         self._reset_at: tuple[str, float] | None = None   # (pane key, deadline)
+        self.store = store                      # shelfkit.store.Store, or None
         self.keys: list[str] = []
         self.panes: dict[str, Pane] = {}
         for i, spec in enumerate(specs):
             key = pane_key(spec.name, i)
             self.keys.append(key)
             self.panes[key] = Pane(key, spec, on_line=lambda text, k=key: self._on_line(k, text))
+        self._restore()
         if auto_open:
             for key in self.keys:
                 self.open_pane(key)
+
+    # ── persistence ────────────────────────────────────────────────────────
+    def _restore(self) -> None:
+        """Bring back what the last run knew: settings, tags and their content."""
+        if self.store is None:
+            return
+        saved = self.store.settings()
+        try:                                   # one source of truth for the options
+            from . import preview
+            fits, dithers = preview.FIT_MODES, preview.DITHERS
+        except Exception:  # noqa: BLE001 - no Pillow: nothing to validate against
+            fits, dithers = (), ()
+        fit = saved.get("editor.fit")
+        dither = saved.get("editor.dither")
+        if fit in fits:
+            self.fit = fit
+        if dither in dithers:
+            self.dither = dither
+        image = saved.get("editor.image")
+        if image and Path(image).is_file():
+            self.image = Path(image)
+        for key, pane in self.panes.items():
+            port = saved.get(f"pane.{key}.port")
+            baud = saved.get(f"pane.{key}.baud")
+            if port:
+                pane.spec.port = str(port)
+                pane.worker.spec.port = str(port)
+            if isinstance(baud, int) and baud > 0:
+                pane.spec.baud = baud
+                pane.worker.spec.baud = baud
+        for row in self.store.tags():
+            addr = int(row["hex_id"], 16)
+            self.tags[addr] = int(row["seen_count"] or 0)
+            if row["last_seen"]:
+                self.tag_seen[addr] = float(row["last_seen"])
+            if row["push_name"]:
+                self.tag_push[addr] = (
+                    row["push_name"],
+                    float(row["push_at"] or 0),
+                    row["push_key"],
+                )
+            self.tag_meta[addr] = {
+                "alias": row["alias"],
+                "notes": row["notes"],
+                "row": row["grid_row"],
+                "col": row["grid_col"],
+            }
+        if self.image is not None:
+            # Re-render so the preview and its thumbnails are live again.
+            threading.Thread(target=self.render_preview, name="restore-preview",
+                             daemon=True).start()
+
+    def _save_setting(self, key: str, value) -> None:
+        if self.store is not None:
+            self.store.set_setting(key, value)
+
+    def _event(self, event: str, hex_id: str | None = None, detail: str | None = None) -> None:
+        if self.store is not None:
+            self.store.add_event(event, hex_id, detail)
+
+    def events(self, since: int = 0, limit: int = 500) -> list[list]:
+        """Event log rows newer than `since` (durable; backs the Logs screen)."""
+        if self.store is None:
+            return []
+        return self.store.events_since(since, limit)
+
+    def event_cursor(self) -> int:
+        return self.store.latest_event_id() if self.store is not None else 0
+
+    def bitmap_png(self, key: str, kind: str) -> bytes | None:
+        """A rendered frame's PNG: from the render cache, else from the store."""
+        try:
+            from . import preview
+        except Exception:  # noqa: BLE001 - Pillow missing
+            preview = None
+        if preview is not None:
+            rendered = preview.cached(key)
+            if rendered is not None:
+                return rendered.original_png if kind == "original" else rendered.device_png
+        if self.store is not None:
+            return self.store.bitmap_png(key, kind)
+        return None
+
+    def set_tag(self, hex_id: str, **fields) -> dict | None:
+        """Edit a tag's alias/notes/map position, in memory and on disk."""
+        try:
+            addr = int(hex_id, 16)
+        except (TypeError, ValueError):
+            return None
+        clean: dict = {}
+        for name in ("alias", "notes", "grid_row", "grid_col"):
+            if name not in fields:
+                continue
+            value = fields[name]
+            if name in ("grid_row", "grid_col"):
+                try:
+                    clean[name] = int(value) if value not in (None, "") else None
+                except (TypeError, ValueError):
+                    continue
+            else:
+                text = ("" if value is None else str(value)).strip()
+                clean[name] = text or None
+        if "alias" in clean and clean["alias"] is not None:
+            clean["alias"] = clean["alias"][:24]
+        with self.lock:
+            meta = self.tag_meta.setdefault(addr, {"alias": None, "notes": None,
+                                                   "row": None, "col": None})
+            if "alias" in clean:
+                meta["alias"] = clean["alias"]
+            if "notes" in clean:
+                meta["notes"] = clean["notes"]
+            if "grid_row" in clean:
+                meta["row"] = clean["grid_row"]
+            if "grid_col" in clean:
+                meta["col"] = clean["grid_col"]
+            hex_code = f"{addr:04X}"
+        if self.store is not None:
+            self.store.update_tag(hex_code, **clean)
+        return dict(meta, hex_id=hex_code)
+
 
     # ── logging ────────────────────────────────────────────────────────────
     def _on_line(self, key: str, text: str) -> None:
@@ -177,6 +302,8 @@ class App:
     def note(self, key: str, text: str) -> None:
         """Append one line to a pane's log (board output or a "what I am doing" note)."""
         learn = None
+        event: tuple[str, str | None, str | None] | None = None
+        counted: int | None = None
         with self.lock:
             pane = self.panes.get(key)
             if pane is None:
@@ -186,11 +313,20 @@ class App:
             if match:
                 addr = int(match.group(1), 16)
                 self.tags[addr] = self.tags.get(addr, 0) + 1
-                self.tag_seen[addr] = time.monotonic()
+                self.tag_seen[addr] = time.time()
+                counted = addr
+                event = ("sync", f"{addr:04X}", None)
             if RE_BOOTLOADER.match(text):
                 learn = "bootloader"
+                event = ("bootloader", None, text.strip()[:48])
             elif RE_FIRMWARE.match(text):
                 self._reset_at = None      # the firmware came up: nothing to learn
+                event = ("boot", None, text.strip()[:48])
+        if counted is not None and self.store is not None:
+            # The store owns the counter, so a restart continues the same number.
+            self.tags[counted] = self.store.touch_tag(f"{counted:04X}")
+        if event is not None:
+            self._event(*event)
         if learn:
             self._learn_boot_state(key)
 
@@ -237,13 +373,18 @@ class App:
 
     def state(self) -> dict:
         with self.lock:
-            now = time.monotonic()
+            now = time.time()          # wall clock: these ages survive a restart
             detail = {}
             for addr, count in self.tags.items():
                 push = self.tag_push.get(addr)
+                meta = self.tag_meta.get(addr) or {}
                 detail[str(addr)] = {
                     "count": count,
                     "seen": round(now - self.tag_seen.get(addr, now), 1),
+                    "alias": meta.get("alias"),
+                    "notes": meta.get("notes"),
+                    "row": meta.get("row"),
+                    "col": meta.get("col"),
                     "push": (
                         {
                             "name": push[0],
@@ -290,8 +431,8 @@ class App:
             return {"fits": [], "dithers": [], "midtone_warn": 0.4, "panel": [152, 296]}
         return preview.options()
 
-    def poll(self, cursors: dict[str, str]) -> dict:
-        """New log lines per pane. Cursors are "epoch:seq" as handed out before."""
+    def poll(self, cursors: dict[str, str], event_cursor: int = 0) -> dict:
+        """New log lines per pane plus new events. Cursors are "epoch:seq"."""
         out: dict[str, dict] = {}
         with self.lock:
             for key in self.keys:
@@ -305,7 +446,12 @@ class App:
                     "cursor": pane.seq,
                     "reset": epoch != pane.epoch,
                 }
-        return {"panes": out, "state": self.state()}
+        return {
+            "panes": out,
+            "state": self.state(),
+            "events": self.events(event_cursor),
+            "event_cursor": self.event_cursor(),
+        }
 
     # ── port control ───────────────────────────────────────────────────────
     def open_pane(self, key: str, port: str | None = None, baud=None) -> None:
@@ -348,6 +494,11 @@ class App:
             # Say what the lines were left at: opening a port re-applies them, and
             # on this board an asserted RTS is a held reset.
             self.note(pane.key, f"# {pane.spec.port} open @ {pane.spec.baud} 8N1, {lines}")
+            # Remember the port for next time - as a pre-filled choice, not as an
+            # automatic open: opening re-applies the modem lines.
+            self._save_setting(f"pane.{key}.port", pane.spec.port)
+            self._save_setting(f"pane.{key}.baud", pane.spec.baud)
+            self._event("open", None, f"{pane.spec.name}={pane.spec.port}")
 
     def close_pane(self, key: str) -> None:
         pane = self.panes.get(key)
@@ -491,6 +642,7 @@ class App:
             with self.lock:
                 self.status = f"cannot read {base}: {exc}"
         parent = str(base.parent) if base.parent != base else None
+        self._save_setting("browse.dir", str(base))
         return {"dir": str(base), "parent": parent, "dirs": dirs, "files": files}
 
     def set_image(self, path: str) -> bool:
@@ -503,6 +655,7 @@ class App:
             self.image = candidate
             self.preview = None        # a new image needs a new preview
             self.status = str(candidate)
+        self._save_setting("editor.image", str(candidate))
         return True
 
     # ── editor: fit/dither + the preview ───────────────────────────────────
@@ -517,6 +670,9 @@ class App:
             if changed:
                 self.preview = None    # the old preview no longer matches
                 self.status = f"render: {self.fit}, {self.dither}"
+        if changed:
+            self._save_setting("editor.fit", self.fit)
+            self._save_setting("editor.dither", self.dither)
 
     def render_preview(self) -> dict:
         """Render the picked image for the panel and remember it for the page."""
@@ -536,6 +692,13 @@ class App:
                 self.preview = None
                 self.status = f"cannot render {image.name}: {exc}"
             return {"ok": False, "error": str(exc)}
+
+        if self.store is not None:
+            # Keep the frame: thumbnails and previews must survive a restart.
+            try:
+                self.store.put_bitmap(rendered, name=image.name)
+            except Exception as exc:  # noqa: BLE001 - storage is not worth a 500
+                self.status = f"could not store the render: {exc}"
 
         summary = {
             "key": rendered.key,
@@ -657,6 +820,7 @@ class App:
             self._cancel = threading.Event()
             self.status = f"sending {image.name} to {addr:04X} via {port} ..."
             cancel = self._cancel
+        self._event("push", f"{addr:04X}", f"{image.name} ({fit}, {dither})")
         threading.Thread(
             target=self._send_worker,
             args=(key, port, addr, image, fit, dither, cancel),
@@ -683,6 +847,7 @@ class App:
         the same render the editor showed, so the preview cannot lie.
         """
         ok = False
+        rendered = None
         try:
             self.note(key, f"# {path.name} -> {addr:04X} via {port}")
 
@@ -738,14 +903,27 @@ class App:
             self.note(key, f"# {addr:04X} updated")
         except Exception as exc:  # noqa: BLE001 - never leave the bar stuck on Cancel
             self.note(key, f"# send error: {exc}")
+            self._event("error", f"{addr:04X}", str(exc)[:120])
         finally:
             with self.lock:
                 if ok:
-                    self.tag_push[addr] = (path.name, time.monotonic(), rendered.key)
+                    self.tag_push[addr] = (path.name, time.time(), rendered.key)
                 self.sending = False
                 self.send_to = None
                 self.progress = ""
                 self.status = "image sent" if ok else "not sent - see the log"
+            if self.store is not None:
+                # Durable: the Fleet row and its thumbnail survive a restart.
+                try:
+                    if rendered is not None:
+                        self.store.put_bitmap(rendered, name=path.name)
+                    if ok:
+                        self.store.record_push(
+                            f"{addr:04X}", path.name, rendered.key if rendered else None
+                        )
+                except Exception as exc:  # noqa: BLE001 - storage must not break a push
+                    self.note(key, f"# storage: {exc}")
+                self._event("ok" if ok else "fail", f"{addr:04X}", path.name)
 
 
 def _split_cursor(value: str | None) -> tuple[int, int]:

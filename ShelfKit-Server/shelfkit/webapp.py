@@ -6,18 +6,25 @@ long-lived poll connection per browser tab. The API is small and boring:
     GET  /                     the page
     GET  /app.js /style.css    its assets
     GET  /api/state            everything the UI needs to draw itself
-    GET  /api/poll?c=a:1:12    new log lines per pane (+ the state)
+    GET  /api/poll?c=a:1:12&e=0  new log lines per pane, new events, and the state
     GET  /api/files?dir=...    one folder's sub-directories and image files
     GET  /api/log              both logs merged, as plain text (copy/download)
+    GET  /api/preview.png?t=<key>&kind=original|device   a rendered frame
     POST /api/pane/<key>/open      {"port": "...", "baud": 38400}
     POST /api/pane/<key>/close
     POST /api/pane/<key>/clear
     POST /api/pane/<key>/line      {"line": "dtr"|"rts", "value": true|false}
     POST /api/pane/<key>/toggle    {"line": "dtr"}
     POST /api/pane/<key>/reset     one 100 ms RTS pulse
+    POST /api/editor               {"fit": "cover", "dither": "threshold"}
     POST /api/image                {"path": "/abs/or/relative.png"}
+    POST /api/preview              render the picked image (does not send)
     POST /api/send                 {"addr": 256}
     POST /api/cancel
+    POST /api/tags/<hex>           {"alias": "...", "notes": "...", "grid_row": 1, "grid_col": 3}
+
+State that has to outlive the process lives in shelfkit/store.py (one SQLite
+file): settings, tag metadata, rendered bitmaps and the event log.
 
 The server binds to 127.0.0.1 by default: it can drive a serial port and read
 image files on this machine, so it is not meant to be reachable from anywhere
@@ -100,7 +107,11 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(self.app.state())
         if path == "/api/poll":
             cursors = parse_cursors((query.get("c") or [""])[0])
-            return self._json(self.app.poll(cursors))
+            try:
+                event_cursor = int((query.get("e") or ["0"])[0])
+            except ValueError:
+                event_cursor = 0
+            return self._json(self.app.poll(cursors, event_cursor))
         if path == "/api/files":
             return self._json(self.app.browse((query.get("dir") or [None])[0]))
         if path == "/api/preview.png":
@@ -147,6 +158,13 @@ class Handler(BaseHTTPRequestHandler):
             if parts == ["api", "cancel"]:
                 self.app.cancel()
                 return self._json(self.app.state())
+            if len(parts) == 3 and parts[1] == "tags":
+                # Tag metadata: alias, notes and the fleet-map position. The only
+                # things on a tag the user types rather than the board reporting.
+                updated = self.app.set_tag(parts[2], **body)
+                if updated is None:
+                    return self._error(f"bad tag id {parts[2]}")
+                return self._json({"tag": updated, "state": self.app.state()})
             if len(parts) == 4 and parts[1] == "pane":
                 return self._pane_command(parts[2], parts[3], body)
         except Exception as exc:  # noqa: BLE001 - a bad request must not kill the server
@@ -179,19 +197,17 @@ class Handler(BaseHTTPRequestHandler):
         return self._json(self.app.state())
 
     def _serve_preview(self, token: str, kind: str) -> None:
-        """A cached preview PNG: kind=original (colour) or kind=device (1:1 BWR)."""
-        try:
-            from . import preview
-        except Exception:  # noqa: BLE001 - Pillow missing
-            return self._error("previews need Pillow", HTTPStatus.SERVICE_UNAVAILABLE)
-        rendered = preview.cached(token)
-        if rendered is None:
+        """A preview PNG: kind=original (colour) or kind=device (1:1 BWR).
+
+        Served from the render cache first, then from the store - a stored frame
+        keeps working across a restart, which is what makes Fleet thumbnails
+        permanent.
+        """
+        body = self.app.bitmap_png(token, "original" if kind == "original" else "device")
+        if body is None:
             return self._error("that preview has expired - render it again", HTTPStatus.NOT_FOUND)
-        body = rendered.original_png if kind == "original" else rendered.device_png
         # The token is a hash of the render inputs, so this document never changes.
-        self._send(
-            HTTPStatus.OK, body, "image/png", cache="max-age=3600, immutable"
-        )
+        self._send(HTTPStatus.OK, body, "image/png", cache="max-age=3600, immutable")
 
     def _serve_asset(self, name: str) -> None:
         path = STATIC_DIR / name

@@ -4,10 +4,10 @@
             "name": "SDCC",
             "includePath": [
                 "${workspaceFolder}/include",
-                "${workspaceFolder}/../shared/sdk/libmf/include",
-                "${workspaceFolder}/../shared/firmware/axradio/inc",
-                "${workspaceFolder}/../shared/firmware/shelfhw/inc",
-                "${workspaceFolder}/../shared/firmware/shelflink/inc",
+                "${workspaceFolder}/../Shared/sdk/libmf/include",
+                "${workspaceFolder}/../Shared/firmware/axradio/inc",
+                "${workspaceFolder}/../Shared/firmware/shelfhw/inc",
+                "${workspaceFolder}/../Shared/firmware/shelflink/inc",
                 "C:/Program Files/SDCC/include",
                 "C:/Program Files/SDCC/include/mcs51",
                 "C:/Program Files/SDCC/non-free/include"

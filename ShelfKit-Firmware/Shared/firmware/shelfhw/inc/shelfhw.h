@@ -7,7 +7,7 @@
  * tag: the SPI chip selects are parked high, the LEDs are driven off and the
  * UART0 TX debug log is started.
  *
- * Pin ownership (see shared/documentation/signal-list.md):
+ * Pin ownership (see Documentation/signal-list.md):
  *   PB4            UART0 TX debug log (38400 8N1)
  *   PB0/6/7, PC4   LEDs
  *   PA1/PB1/PC0    chip selects of EPD / NFC / flash, parked high

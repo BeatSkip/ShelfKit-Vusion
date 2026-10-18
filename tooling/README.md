@@ -59,12 +59,11 @@ image push is [`../ShelfKit-Server/shelfkit-server.py`](../ShelfKit-Server/shelf
 ## Flashing a build
 
 ```
-python tooling/axsem-flasher.py Shelfkit-Hub/build/firmware.hex -p COM7
+python tooling/axsem-flasher.py ShelfKit-Firmware/Vusion-Hub/build/firmware.hex -p COM7
 ```
 
-**SDCC: Flash does not call this yet.** `upload` in each target's `sdcc-project.json` is still the
-original `echo` placeholder, so the extension only warns that the flash tool is not configured —
-exactly as before the cleanup. To wire it up, replace that section with:
+**SDCC: Flash calls this now.** `upload` in each target's `sdcc-project.json` already runs this
+script with the built hex and the `comPort` workspace setting. The section it uses looks like this:
 
 ```json
   "upload": {

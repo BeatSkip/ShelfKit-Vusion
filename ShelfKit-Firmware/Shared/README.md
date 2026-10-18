@@ -1,9 +1,10 @@
-# shared/ — vendor code, libraries, board definition and assets
+# Shared/ — vendor code, libraries, board definition and assets
 
 Everything both firmware targets use. Each target references these folders by relative path
-(`../shared/…`) from its own `sdcc-project.json` and `.vscode/settings.json`, so the repository
-holds exactly one copy. Before this layout existed, `Shelfkit-Hub` and `Shelfkit-Vusion` each
-carried an identical 142 MB copy of it (810 files each, verified byte-for-byte identical).
+(`../Shared/…`, see `ShelfKit-Firmware/<target>/`) from its own `sdcc-project.json` and
+`.vscode/settings.json`, so the repository holds exactly one copy. Before this layout existed, the
+two firmware targets each carried an identical 142 MB copy of it (810 files each, verified
+byte-for-byte identical).
 
 | Folder | Reached through | Contents |
 |---|---|---|
@@ -25,7 +26,7 @@ The rest of the SDK is kept as the vendor reference the drivers were written fro
 - The extension accepts a relative `sdcc.boardsDir` and resolves it against the active project
   root. If a target's `.vscode/settings.json` is missing (or the target is opened as part of a
   multi-root workspace), the board will not be found and the build will fail with an unknown
-  board — keep `"sdcc.boardsDir": "../shared/boards"` in place.
+  board — keep `"sdcc.boardsDir": "../Shared/boards"` in place.
 
 ## Changing the SDK
 

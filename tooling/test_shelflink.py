@@ -20,11 +20,11 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-FW = ROOT / "shared" / "firmware"
+FW = ROOT / "ShelfKit-Firmware" / "Shared" / "firmware"
 LINK = FW / "shelflink"
 TESTS_DIR = Path(__file__).resolve().parent / "tests"
 FLAGS = ["-mmcs51", "--model-small", "--iram-size", "256", "--xram-size", "8192",
-         f"-I{ROOT / 'shared' / 'sdk' / 'libmf' / 'include'}",
+         f"-I{ROOT / "ShelfKit-Firmware" / "Shared" / 'sdk' / 'libmf' / 'include'}",
          f"-I{LINK / 'inc'}", f"-I{LINK}", f"-I{FW / 'shelfhw' / 'inc'}", f"-I{FW / 'axradio' / 'inc'}"]
 TESTS = {
     "proto": [TESTS_DIR / "sl_proto_test.c", LINK / "sl_proto.c"],

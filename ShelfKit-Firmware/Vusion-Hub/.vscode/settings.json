@@ -1,5 +1,5 @@
 {
     "sdcc.monitorBaud": 115200,
     "sdcc.shellPath": "cmd.exe",
-    "sdcc.boardsDir": "../shared/boards"
+    "sdcc.boardsDir": "../Shared/boards"
 }

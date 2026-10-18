@@ -2,7 +2,7 @@
  * @file main.c
  * @brief ShelfKit tag (Vusion): polls the hub every SHELF_POLL_INTERVAL_S seconds
  *
- * Every poll is a reliable request (see shared/firmware/shelflink): the tag
+ * Every poll is a reliable request (see Shared/firmware/shelflink): the tag
  * sends POLL, the radio drops back into receive mode by itself, and the hub's
  * POLL_RSP is the acknowledgement. Without one the poll is retried with a
  * jittered back-off, up to SL_MAX_ATTEMPTS transmissions. Results and link

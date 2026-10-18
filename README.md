@@ -57,7 +57,8 @@ choice is remembered, or `?theme=light` / `?theme=dark` forces one for a link or
 | Server UI | Fleet, Editor (with real previews), Queue, Logs, Stats, Hub, Console, Settings — light and dark |
 | Image pipeline | Fit (cover/contain/stretch), threshold / Floyd-Steinberg / Bayer 4×4 dither, server-rendered previews, midtone warning |
 | Image push | Reliable frame-by-frame transfer over the port the console already has open, with cancel and progress |
-| Honest gaps | No bitmap store, job history, battery reporting, templates, stats history, OTA, map view, or auth |
+| **Storage** | Everything the server must remember across a restart, in one SQLite file: tag aliases/notes/positions, announcement counts and ages, the last frame per tag, the rendered bitmaps, the editor's image and options, the port each pane used, and the event history behind Logs |
+| Honest gaps | No job history, battery reporting, templates, stats history, OTA, map view, or auth |
 
 Nothing above is a mockup: the screenshots are the running app, taken against simulated serial data
 because a screenshot cannot include a physical tag.
@@ -66,15 +67,14 @@ because a screenshot cannot include a physical tag.
 
 | Path | What it is |
 |---|---|
-| `Shelfkit-Hub/` | SDCC-MDF project for the hub firmware — own `src/`, `sdcc-project.json`, `.vscode/` |
-| `Shelfkit-Vusion/` | SDCC-MDF project for the tag firmware, same layout |
+| `ShelfKit-Firmware/` | One SDCC-MDF project per board: `Vusion/` (tag), `Vusion-Hub/` (hub), `Bootloader/` (serial bootloader), and room for the next tag type — see its [README](ShelfKit-Firmware/README.md) |
 | `ShelfKit-Server/` | The host-side app: web UI, image pipeline, image push (see its [README](ShelfKit-Server/README.md)) |
-| `shared/` | Everything both firmwares use: Axsem SDK, prebuilt libraries, board definition, datasheets. See [shared/README.md](shared/README.md) |
+| `ShelfKit-Firmware/Shared/` | Everything the firmwares use: Axsem SDK, prebuilt libraries, board definition, shared drivers. See [Shared/README.md](ShelfKit-Firmware/Shared/README.md) |
 | `tooling/` | Firmware-side host scripts: flasher, flash-dump capture, stdout log merge, link-layer tests |
 | `Documentation/` | Protocol notes, panel init research, pin map, datasheets, screenshots |
 
 The two firmware targets are separate SDCC-MDF projects on purpose — each has its own `src/main.c`
-and can diverge — while the vendor SDK, board definition and shared drivers live once in `shared/`.
+and can diverge — while the vendor SDK, board definition and shared drivers live once in `ShelfKit-Firmware/Shared/`.
 
 ## Getting started
 
@@ -84,9 +84,10 @@ Requirements: [SDCC](https://sdcc.sourceforge.net/) (verified against 3.6.0) and
 [SDCC-MDF extension](https://marketplace.visualstudio.com/items?itemName=dzantemir.sdcc-mdf).
 
 **Open the target folder itself, not the repo root** — the extension activates on a
-`sdcc-project.json` in the workspace folder, and the `../shared/…` paths are resolved against it.
+`sdcc-project.json` in the workspace folder, and the `../Shared/…` paths are resolved against it.
 
-1. `File ▸ Open Folder…` → `Shelfkit-Hub` (or `Shelfkit-Vusion`).
+1. `File ▸ Open Folder…` → `ShelfKit-Firmware/Vusion-Hub` (or `ShelfKit-Firmware/Vusion`).
+   Each target is its own SDCC-MDF project; the repo root is not one.
 2. **Ctrl+Shift+B** — `firmware.ihx`, `.hex`, `.map` and `.mem` land in that target's `build/`.
 3. Flash it: [tooling/README.md](tooling/README.md) has the one-edit recipe that wires
    [tooling/axsem-flasher.py](tooling/axsem-flasher.py) into *SDCC: Flash*, and the same script works
@@ -105,6 +106,11 @@ python ShelfKit-Server/shelfkit-server.py hub=COM4 tag=COM3
 It prints a URL and opens it. Ports named on the command line open at startup; anything else can be
 opened from the **Console** tab. Then: **Console** to watch the boards, **Fleet** to see the tags that
 announced themselves, **Editor** to pick an image, preview it and push it.
+
+State lives in `ShelfKit-Server/data/shelfkit.db` — one SQLite file, created on first run. Restarting
+brings back your image and its preview, the tags with their ages and aliases, the last frame pushed to
+each one, and the event log. `--db PATH` keeps it elsewhere, `--no-store` forgets everything on exit,
+and deleting the file resets it. See [ShelfKit-Server/README.md](ShelfKit-Server/README.md#state-on-disk).
 
 ### 3. Driving it from scripts or another service
 
@@ -189,10 +195,11 @@ accounts, no per-tag latency graphs, no mobile app (the web UI is responsive, th
 
 ## Notes
 
-- **License:** the code in each `src/` has no license declared yet. The Axsem SDK under `shared/sdk/`
-  and `shared/lib/` keeps its original terms — compiler headers are GPL with a linking exception, the
-  rest is vendor-licensed.
-- `shared/lib/*.lib` are SDCC archives built from `shared/sdk/` with the vendor's `buildsdcc`
+- **License:** the code in each `src/` has no license declared yet. The Axsem SDK under
+  `ShelfKit-Firmware/Shared/sdk/` and `ShelfKit-Firmware/Shared/lib/` keeps its original terms —
+  compiler headers are GPL with a linking exception, the rest is vendor-licensed.
+- `ShelfKit-Firmware/Shared/lib/*.lib` are SDCC archives built from
+  `ShelfKit-Firmware/Shared/sdk/` with the vendor's `buildsdcc`
   makefiles; `libmf.lib` is committed in patched form (see [tooling/README.md](tooling/README.md)).
 - The screenshots in this README are the real UI (`?theme=dark` forces the palette for a capture)
   driven by simulated serial data, since no photograph can include a physical tag.

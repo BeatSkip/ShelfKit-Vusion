@@ -12,6 +12,7 @@ ShelfKit-Server/
   shelfkit/              supporting modules, imported by it
     app.py                 panes, logs, tags, the image push (no UI)
     serial_link.py         ports, handshake lines, the reader thread
+    store.py               the SQLite state file: settings, tags, bitmaps, events
     webapp.py              the HTTP/JSON layer over app.py
     static/                the page itself: index.html, app.js, style.css
     hubhost.py             hub command channel, image framing, and its own CLI
@@ -32,6 +33,8 @@ python ShelfKit-Server/shelfkit-server.py hub=COM4 tag=COM3
 python ShelfKit-Server/shelfkit-server.py hub=COM4                 # second pane stays free
 python ShelfKit-Server/shelfkit-server.py --baud 115200 hub=COM4 tag=COM3
 python ShelfKit-Server/shelfkit-server.py --port 9000 --no-browser
+python ShelfKit-Server/shelfkit-server.py --db ../lab-state.db     # keep state elsewhere
+python ShelfKit-Server/shelfkit-server.py --no-store               # forget everything on exit
 python ShelfKit-Server/shelfkit-server.py --list
 ```
 
@@ -78,13 +81,13 @@ blocks. `color-scheme` is set per theme too, which keeps scrollbars and native c
 
 | Screen | Working today | Interface only (marked in the page) |
 |---|---|---|
-| **Fleet** | Tag table from every `POLL src=<id>` the hub prints: 4-char hex id, status dot (online if heard in the last 30 s, pending while an image is in flight, else offline), last-push age **with a thumbnail of the frame that was pushed**, search, status chips, column sort, row selection with bulk actions, tag drilldown drawer | alias editing, battery, reflash/clear, map view (hidden until a grid is configured) |
+| **Fleet** | Tag table from every `POLL src=<id>` the hub prints: 4-char hex id, **alias**, status dot (online if heard in the last 30 s, pending while an image is in flight, else offline), last-push age **with a thumbnail of the frame that was pushed**, search, status chips, column sort, row selection with bulk actions, tag drilldown drawer that edits the alias and notes | battery, reflash/clear, map view (hidden until a grid is configured) |
 | **Editor** | Browse this machine's folders, pick the image and the target tag, **fit mode** (cover/contain/stretch), **dither** (threshold/Floyd-Steinberg/Bayer 4×4), the **three previews** — colour original, 1:1 on-device frame, and a 4× zoom that follows a drag — a midtone warning, and Push / Cancel with live frame progress. Push is only enabled once a preview has been rendered | templates, plain text, QR, multi-target push, the content library, the render → confirm → queue split |
 | **Queue** | The transfer in flight as a single `sending` row, with its frame progress, and Cancel | job history, attempts, retry, per-tag replacement |
-| **Logs** | Event table derived from the hub's `POLL` lines, with consecutive duplicates collapsed into `×N`, filtered by tag or event | the firmware's own event stream (online / offline / low batt / err) and the per-tag log |
+| **Logs** | Event table recorded by the server (`sync`, `push`, `ok`, `fail`, `error`, `boot`, `bootloader`, `open`), consecutive duplicates collapsed into `×N`, filtered by tag or event, **kept across restarts** | the firmware's own event stream (low batt / err) and the per-tag log |
 | **Stats** | — | all three charts (needs the stats rollup and battery reporting) |
 | **Hub** | Serial link facts (port, state, baud, line count, DTR/RTS) and a read-only tail of the hub's console | firmware version, uptime, EPD mirror, OTA upload, restart |
-| **Console** | The two-pane serial view: per-pane port, baud, Open/Close, DTR, Reset, Clear, both logs, Copy logs, Save log | — |
+| **Console** | The two-pane serial view: per-pane port, baud, Open/Close, DTR, Reset, Clear, both logs, Copy logs, Save log. The port and baud you used come back next run | — |
 | **Settings** | — | alias CSV import/export, default fit/dither, `LOG_IDS` mode, rotation slots, fleet grid |
 
 Everything in the right-hand column is rendered with the real controls, disabled, and a `soon` chip
@@ -197,10 +200,55 @@ protocol, the frame format and the meaning of the log lines are in
 
 ### Logs, and where they come from
 
-The Logs screen is not a database view. It reads the hub pane's UART stream, picks out
-`POLL src=<id>` lines and shows them as `sync` events, collapsing consecutive identical
-`(hex_id, event)` rows into one with `×N` — the same rule the firmware's own log uses. Reloading the
-page replays what the server still holds (5000 lines per pane).
+The server records an event whenever something notable happens, and the Logs screen reads those
+events back:
+
+| event | when |
+|---|---|
+| `sync` | a tag announced itself (`POLL src=…` on the hub pane) |
+| `push` | a transfer started (with the image and the fit/dither used) |
+| `ok` / `fail` | a transfer finished, or gave up / was cancelled |
+| `error` | the send raised (with the message) |
+| `boot` | a board printed its `*** ShelfKit …` banner — it just started |
+| `bootloader` | a board came up in the AX8052 serial bootloader instead of the app |
+| `open` | a port was opened (so you can see when the handshake lines changed) |
+
+Consecutive identical rows with no detail collapse into one with `×N`, the same rule the firmware's
+own log uses. Events live in the database, so the history is still there after a restart; the page
+asks only for ids it has not seen yet (`&e=<id>` on the poll) and drops any it already has.
+
+`boot` and `bootloader` are worth a look when a tag keeps resetting: they say exactly when a board
+restarted, which is the question the serial log alone makes you guess at.
+
+## State on disk
+
+Everything the server would otherwise forget lives in one SQLite file —
+`ShelfKit-Server/data/shelfkit.db` by default, `--db PATH` to move it, `--no-store` to run without
+one. It is created on first run (folder included) and is the only file the server writes:
+
+| table | what it holds |
+|---|---|
+| `settings` | the editor's image, fit and dither; the port and baud each pane last used |
+| `tags` | alias, notes, map position, last seen, announcement count, last content and its bitmap |
+| `bitmaps` | the rendered frames themselves (transport planes + both PNGs), newest 64 |
+| `events` | the log above, newest 5000 |
+
+The consequences, all of which are what "persistent" has to mean:
+
+- **Restart and the app looks the same**: the image is back, re-rendered with the same fit and dither,
+  the tags are back with their counters and ages, aliases survive, and the Fleet thumbnail of the last
+  push still loads — the PNG is served from the store when it is no longer in the render cache.
+- **Ages stay honest**: `last_seen` is a wall-clock timestamp, not a monotonic counter, so "36 s ago"
+  means 36 s ago and not "since this process started".
+- **Nothing is opened behind your back.** The saved port is a *default* for the pane's input; the
+  server never reopens it on start, because opening re-applies DTR/RTS and a glitch on RTS is a reset
+  pulse on this board.
+- **Reset by deleting the file** (with the server stopped). `--no-store` does the same thing for one
+  run without touching it.
+
+Storage is best-effort by design: if the database cannot be opened the server prints why and runs
+without it, and a failed write is reported in the log rather than failing the request. A console that
+refuses to start because its history file is locked would be a worse tool.
 
 ## The same thing from a shell
 
@@ -221,8 +269,8 @@ tag announces itself and the file is new or changed since the last successful pu
 `--out-dir src` lands in the right place:
 
 ```
-cd Shelfkit-Vusion
-python ../ShelfKit-Server/shelfkit/png2epd.py polyform-eink.png
+cd ShelfKit-Firmware/Vusion
+python ../../ShelfKit-Server/shelfkit/png2epd.py polyform-eink.png
 ```
 
 `--rotate 90` is the default and is what the checked-in planes were generated with; add

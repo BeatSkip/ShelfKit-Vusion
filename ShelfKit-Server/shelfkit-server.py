@@ -55,6 +55,9 @@ except ImportError:  # pragma: no cover - environment check
 from shelfkit import webapp  # noqa: E402 - after the sys.path fix above
 from shelfkit.app import App, build_specs  # noqa: E402
 from shelfkit.serial_link import DEFAULT_BAUD, available_ports  # noqa: E402
+from shelfkit.store import Store  # noqa: E402
+
+DEFAULT_DB = SERVER_DIR / "data" / "shelfkit.db"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -72,6 +75,15 @@ def main(argv: list[str] | None = None) -> int:
         "--port", type=int, default=8765, help="HTTP port, 0 picks a free one (default 8765)"
     )
     ap.add_argument("--no-browser", action="store_true", help="do not open a browser window")
+    ap.add_argument(
+        "--db",
+        default=str(DEFAULT_DB),
+        metavar="PATH",
+        help=f"state database (default {DEFAULT_DB.relative_to(SERVER_DIR.parent)})",
+    )
+    ap.add_argument(
+        "--no-store", action="store_true", help="run without persistence (nothing is written)"
+    )
     ap.add_argument("--list", action="store_true", help="list serial ports and exit")
     args = ap.parse_args(argv)
 
@@ -82,8 +94,17 @@ def main(argv: list[str] | None = None) -> int:
     if len(args.ports) > 2:
         ap.error("this tool opens exactly two ports")
 
+    store = None
+    if not args.no_store:
+        try:
+            store = Store(args.db)
+        except Exception as exc:  # noqa: BLE001 - a broken db must not stop the console
+            print(f"cannot open the state database {args.db}: {exc}", file=sys.stderr)
+            print("starting without persistence (--no-store does this on purpose)",
+                  file=sys.stderr)
+
     specs, auto_open = build_specs(args.ports, args.baud)
-    app = App(specs, auto_open)
+    app = App(specs, auto_open, store=store)
 
     try:
         server = webapp.make_server(app, args.host, args.port)
@@ -102,6 +123,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"ShelfKit server on {url}{bind}", flush=True)
     for spec, pane in zip(specs, app.panes.values()):
         print(f"  {spec.name:<6} {spec.port or '(no port)':<12} {pane.worker.status}", flush=True)
+    print(f"state: {args.db if store is not None else 'not persisted'}", flush=True)
     print("Ctrl+C to stop", flush=True)
 
     if not args.no_browser:
@@ -115,6 +137,9 @@ def main(argv: list[str] | None = None) -> int:
         for pane in app.panes.values():
             pane.worker.close()
         server.server_close()
+        if store is not None:
+            app._event("stop", None, "server stopped")
+            store.close()
         print("stopped")
     return 0
 

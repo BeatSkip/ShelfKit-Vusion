@@ -237,9 +237,16 @@
         <select id="logs-event">
           <option value="">all events</option>
           <option value="sync">sync</option>
+          <option value="push">push</option>
+          <option value="ok">ok</option>
+          <option value="fail">fail</option>
+          <option value="error">error</option>
+          <option value="boot">boot</option>
+          <option value="bootloader">bootloader</option>
+          <option value="open">open</option>
         </select>
         <span class="grow"></span>
-        <span class="pill">derived from <code>POLL</code> lines on the hub pane</span>
+        <span class="pill">recorded by the server, kept in the database</span>
       </div>
       <table class="grid">
         <thead>
@@ -390,10 +397,26 @@
     </div>
     <div class="drawer-body">
       <dl class="kv" id="drawer-info"></dl>
+
+      <h3>Tag details</h3>
+      <label class="group">
+        <span class="legend">Alias</span>
+        <input id="drawer-alias" maxlength="24" placeholder="e.g. S03-P4" spellcheck="false">
+      </label>
+      <label class="group">
+        <span class="legend">Notes</span>
+        <input id="drawer-notes" maxlength="120" placeholder="free text" spellcheck="false">
+      </label>
+      <div class="row">
+        <button id="drawer-save" class="primary">Save tag</button>
+        <span class="hint">stored on the server, so it survives a restart</span>
+      </div>
+
       <h3>History <span class="chip">soon</span></h3>
-      <p class="hint">Per-tag bitmap history needs the content store.</p>
-      <h3>Log <span class="chip">soon</span></h3>
-      <p class="hint">Per-tag firmware events need the event parser.</p>
+      <p class="hint">Per-tag bitmap history needs a content store per tag; the last frame is kept
+        and shown above.</p>
+      <h3>Log</h3>
+      <p class="hint">This tag's events are in the <b>Logs</b> screen, filterable by hex id.</p>
     </div>
     <div class="drawer-foot">
       <button id="drawer-push" class="primary">Push content</button>

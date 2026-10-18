@@ -2,7 +2,7 @@
  * @file main.c
  * @brief ShelfKit hub: always listening, answers tag polls, forwards host data to tags
  *
- * The radio runs in always-on receive mode (see shared/firmware/shelflink).
+ * The radio runs in always-on receive mode (see Shared/firmware/shelflink).
  * Every POLL a tag sends is answered with a POLL_RSP carrying the RSSI the hub
  * measured, which doubles as the tag's acknowledgement. Each frame is logged
  * on UART0 TX (PB4, 38400 8N1); the green LED toggles per valid frame. The

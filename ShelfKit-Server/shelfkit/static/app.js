@@ -82,6 +82,9 @@ const ui = {
   drawerInfo: $("drawer-info"),
   drawerPush: $("drawer-push"),
   drawerClose: $("drawer-close"),
+  drawerAlias: $("drawer-alias"),
+  drawerNotes: $("drawer-notes"),
+  drawerSave: $("drawer-save"),
 
   picker: $("picker"),
   pickerUp: $("picker-up"),
@@ -102,10 +105,12 @@ let timer = null;
 const panes = new Map();          // console panes: key -> view
 const logs = new Map();           // key -> [{stamp, text}] retained lines
 const lastSeq = new Map();        // key -> highest sequence number already shown
-const events = [];                // {ts, hex, event, count} from POLL lines
+const events = [];                // {id, ts, hex, event, detail, count} from the server
 const picked = new Set();         // fleet selection, hex strings
 const cursorState = new Map();    // key -> "epoch:seq" for /api/poll
 const replayed = new Set();       // panes whose retained history we have announced
+let eventCursor = 0;              // newest event id the page has asked for
+let newestEventId = 0;            // newest event id the page has shown
 let fleetFilter = "all";
 let fleetSearch = "";
 let fleetSort = { key: "hex", dir: 1 };
@@ -311,6 +316,9 @@ function clearLog(key) {
  *  console looked like it was re-printing itself. A server restart (sequence
  *  numbers starting over) is handled in tick() by the server's own cursor going
  *  backwards, which clears the pane first.
+ *
+ *  Events are not derived here any more: the server records them durably and
+ *  hands them over with each poll, so the Logs screen survives a restart.
  */
 function ingest(key, lines) {
   const view = panes.get(key);
@@ -320,19 +328,30 @@ function ingest(key, lines) {
     last = seq;
     rememberLine(key, stamp, text);
     if (view) appendRow(view, stamp, text);
-    const match = /^POLL src=([0-9a-fA-F]{4,8})\b/.exec(text);
-    if (!match) continue;
-    const hex = hex4(parseInt(match[1], 16));
-    const previous = events[events.length - 1];
-    if (previous && previous.hex === hex && previous.event === "sync") {
-      previous.count += 1;
-      previous.ts = stamp;
-    } else {
-      events.push({ ts: stamp, hex, event: "sync", count: 1 });
-      if (events.length > 2000) events.shift();
-    }
   }
   lastSeq.set(key, last);
+}
+
+/** One durable event row: [id, unix time, hex id, kind, detail].
+ *
+ *  Ids come from the database and only ever grow, so an id we have already shown
+ *  is a duplicate (a retried poll, say) and is dropped. Consecutive identical
+ *  rows still collapse into xN, which is how the firmware collapses its own log.
+ */
+function addEvent(id, at, hexId, kind, detail) {
+  if (id <= newestEventId) return;   // already have it
+  newestEventId = id;
+  const hex = hexId || "";
+  const ts = new Date(at * 1000).toTimeString().slice(0, 8);
+  const previous = events[events.length - 1];
+  if (previous && !detail && !previous.detail && previous.hex === hex && previous.event === kind) {
+    previous.count += 1;
+    previous.ts = ts;
+    previous.id = id;
+    return;
+  }
+  events.push({ id, ts, hex, event: kind, detail: detail || "", count: 1 });
+  if (events.length > 2000) events.shift();
 }
 
 // ── deriving the fleet ─────────────────────────────────────────────────────
@@ -347,7 +366,10 @@ function tagRows() {
     return {
       addr: Number(addr),
       hex,
-      alias: null,
+      alias: detail.alias || null,
+      notes: detail.notes || null,
+      row: detail.row ?? null,
+      col: detail.col ?? null,
       status,
       battery: null,
       seen: detail.seen,
@@ -430,8 +452,10 @@ function renderFleet() {
     });
     hexCell.append(link);
 
-    const aliasCell = el("td", "dim", "—");
-    aliasCell.title = "alias editing is not implemented yet";
+    const aliasCell = row.alias ? el("td", null, row.alias) : el("td", "dim", "—");
+    aliasCell.title = row.alias
+      ? `${row.alias} — click the row to edit`
+      : "no alias yet — click the row to add one";
 
     const statusCell = el("td");
     const wrap = el("span", "status-cell");
@@ -496,17 +520,38 @@ function renderDrawer() {
   ui.drawerHex.textContent = drawerHex;
   ui.drawerInfo.innerHTML = "";
   const facts = [
-    ["Alias", "—"],
+    ["Alias", row?.alias || "—"],
     ["Status", row ? row.status : "unknown"],
     ["Last seen", row ? `${ageText(row.seen)} ago` : "—"],
     ["Announcements", row ? String(row.count) : "0"],
     ["Last content", row?.push ? `${row.push.name} · ${ageText(row.push.age)} ago` : "—"],
+    ["Position", row?.row !== null && row?.row !== undefined ? `row ${row.row}, col ${row.col}` : "—"],
     ["Battery", "—"],
   ];
   for (const [key, value] of facts) {
     ui.drawerInfo.append(el("dt", null, key), el("dd", null, value));
   }
+  // Never overwrite what the user is typing into.
+  const active = document.activeElement;
+  if (row) {
+    if (active !== ui.drawerAlias) ui.drawerAlias.value = row.alias || "";
+    if (active !== ui.drawerNotes) ui.drawerNotes.value = row.notes || "";
+  }
   ui.drawerPush.onclick = () => openEditorFor(drawerHex);
+}
+
+async function saveDrawer() {
+  if (!drawerHex) return;
+  try {
+    const result = await postJSON(`/api/tags/${drawerHex}`, {
+      alias: ui.drawerAlias.value,
+      notes: ui.drawerNotes.value,
+    });
+    render(result.state);
+    toast(`${drawerHex} saved`, "ok");
+  } catch (err) {
+    toast(`cannot save ${drawerHex}: ${err.message}`, "bad");
+  }
 }
 
 // ── editor ─────────────────────────────────────────────────────────────────
@@ -659,7 +704,19 @@ function renderLogs() {
   ui.logsEmpty.hidden = rows.length > 0;
   for (const row of [...rows].reverse().slice(0, 500)) {
     const tr = el("tr");
-    tr.append(el("td", null, row.ts), el("td", "hex", row.hex), el("td", "dim", "—"), el("td", null, row.event));
+    tr.append(
+      el("td", null, row.ts),
+      el("td", "hex", row.hex || "—"),
+      el("td", "dim", "—"),
+    );
+    const eventCell = el("td");
+    eventCell.append(el("span", null, row.event));
+    if (row.detail) {
+      const detail = el("span", "dim", ` ${row.detail}`);
+      detail.title = row.detail;
+      eventCell.append(detail);
+    }
+    tr.append(eventCell);
     tr.append(el("td", row.count > 1 ? "" : "dim", row.count > 1 ? `×${row.count}` : ""));
     ui.logsRows.append(tr);
   }
@@ -780,7 +837,7 @@ async function tick() {
     // NB: do not name this local "cursors" - that is the function below, and a
     // `const cursors = [...cursors()]` here hits the temporal dead zone.
     const query = cursorQuery();
-    const data = await getJSON(`/api/poll?c=${encodeURIComponent(query)}`);
+    const data = await getJSON(`/api/poll?c=${encodeURIComponent(query)}&e=${eventCursor}`);
     for (const [key, part] of Object.entries(data.panes || {})) {
       const previousSeq = Number((cursorState.get(key) || "0:0").split(":")[1]) || 0;
       // Cleared in the page, or the server restarted and its sequence numbers
@@ -796,6 +853,8 @@ async function tick() {
       ingest(key, part.lines);
       cursorState.set(key, `${part.epoch}:${part.cursor}`);
     }
+    for (const row of data.events || []) addEvent(row[0], row[1], row[2], row[3], row[4]);
+    if (typeof data.event_cursor === "number") eventCursor = data.event_cursor;
     render(data.state);
   } catch (err) {
     say(`server not reachable — retrying (${err.message})`, "bad");
@@ -1154,6 +1213,7 @@ ui.fleetOpenSerial.addEventListener("click", () => show("console"));
 ui.copyLogs.addEventListener("click", copyLogs);
 
 ui.drawerClose.addEventListener("click", closeDrawer);
+ui.drawerSave.addEventListener("click", saveDrawer);
 ui.pickerUp.addEventListener("click", () => pickerParent && loadDir(pickerParent));
 ui.pickerCancel.addEventListener("click", () => (ui.picker.hidden = true));
 ui.picker.addEventListener("click", (event) => {

@@ -1,0 +1,39 @@
+{
+  "name": "Vusion-Hub",
+  "board": "axsem-8052f143",
+  "sources": [
+    "src",
+    "../Shared/firmware/axradio",
+    "../Shared/firmware/shelfhw",
+    "../Shared/firmware/shelflink"
+  ],
+  "includes": [
+    "include",
+    "../Shared/sdk/libmf/include",
+    "../Shared/sdk/libaxdvk2/include",
+    "../Shared/firmware/axradio/inc",
+    "../Shared/firmware/shelfhw/inc",
+    "../Shared/firmware/shelflink/inc"
+  ],
+  "defines": [],
+  "libraries": [
+    "../Shared/lib"
+  ],
+  "components": [
+    "../Shared/components"
+  ],
+  "build": {
+    "output_dir": "build",
+    "output_name": "firmware",
+    "hooks": {}
+  },
+  "upload": {
+    "tool": "python",
+    "args": [
+      "../../tooling/axsem-flasher.py",
+      "${outputHex}",
+      "-p",
+      "${config:comPort}"
+    ]
+  }
+}
