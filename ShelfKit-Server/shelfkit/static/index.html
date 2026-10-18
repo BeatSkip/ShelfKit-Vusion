@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>ShelfKit — e-paper fleet</title>
+  <link rel="stylesheet" href="/style.css">
+  <script>
+    /* Pick the theme before the first paint: the saved choice, else whatever the
+     * OS prefers. app.js only owns the switch and writes the choice back. */
+    (function () {
+      var theme = "dark";
+      try {
+        var saved = localStorage.getItem("shelfkit-theme");
+        if (saved === "light" || saved === "dark") {
+          theme = saved;
+        } else if (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches) {
+          theme = "light";
+        }
+      } catch (err) {
+        /* private mode / storage disabled: fall back to dark */
+      }
+      document.documentElement.dataset.theme = theme;
+    })();
+  </script>
+</head>
+<body>
+  <header class="topbar">
+    <span class="brand">ShelfKit<span class="dim">-server</span></span>
+
+    <nav class="nav" id="nav">
+      <button class="tab on" data-screen="fleet">Fleet</button>
+      <button class="tab" data-screen="editor">Editor</button>
+      <button class="tab" data-screen="queue">Queue</button>
+      <button class="tab" data-screen="logs">Logs</button>
+      <button class="tab" data-screen="stats">Stats</button>
+      <button class="tab" data-screen="hub">Hub</button>
+      <button class="tab" data-screen="console">Console<span class="dot" id="console-dot" hidden></span></button>
+      <button class="tab" data-screen="settings">Settings</button>
+    </nav>
+
+    <span class="grow"></span>
+    <span id="status" class="status">connecting&hellip;</span>
+    <button id="theme-toggle" class="theme" title="Switch theme" aria-label="Switch theme">&#9790;</button>
+  </header>
+
+  <main id="screens">
+
+    <!-- ── Fleet (home) ─────────────────────────────────────────────────── -->
+    <section class="screen" data-screen="fleet">
+      <div class="screen-head">
+        <h1>Fleet</h1>
+        <input id="fleet-search" class="search" type="search" placeholder="search hex id or alias" spellcheck="false">
+        <div class="chips" id="fleet-filters">
+          <button class="chip on" data-status="all">All</button>
+          <button class="chip" data-status="online">Online</button>
+          <button class="chip" data-status="pending">Pending</button>
+          <button class="chip" data-status="offline">Offline</button>
+          <button class="chip" data-status="alert">Alert</button>
+          <button class="chip" data-status="unreachable">Unreachable</button>
+        </div>
+        <span class="grow"></span>
+        <div class="segmented">
+          <button class="on">Table</button>
+          <button disabled title="Configure a grid in Settings first">Map</button>
+        </div>
+      </div>
+
+      <div class="bulkbar" id="fleet-bulk" hidden>
+        <span id="fleet-selected">0 selected</span>
+        <button id="bulk-push">Push</button>
+        <button disabled title="Not implemented yet">Reflash</button>
+        <button disabled title="Not implemented yet">Clear</button>
+      </div>
+
+      <table class="grid" id="fleet-table">
+        <thead>
+          <tr>
+            <th class="pick"><input type="checkbox" id="fleet-all" title="select all"></th>
+            <th data-sort="hex">Hex ID</th>
+            <th data-sort="alias">Alias</th>
+            <th data-sort="status">Status</th>
+            <th data-sort="battery">Battery</th>
+            <th data-sort="seen">Last content</th>
+          </tr>
+        </thead>
+        <tbody id="fleet-rows"></tbody>
+      </table>
+      <div class="empty" id="fleet-empty" hidden>
+        <p>No tags yet. They appear here as soon as the hub prints a
+          <code>POLL src=&lt;id&gt;</code> line for one.</p>
+        <p class="row">
+          <span id="fleet-serial" class="dim"></span>
+          <button id="fleet-open-serial" class="primary">Open the serial ports</button>
+        </p>
+      </div>
+    </section>
+
+    <!-- ── Editor ──────────────────────────────────────────────────────── -->
+    <section class="screen" data-screen="editor" hidden>
+      <div class="screen-head">
+        <h1>Editor</h1>
+        <span id="editor-targets" class="dim"></span>
+        <span class="grow"></span>
+        <span class="pill soon">preview, templates and dithers are not implemented yet</span>
+      </div>
+
+      <div class="editor-body">
+        <div class="editor-controls">
+          <fieldset class="group">
+            <legend>Source</legend>
+            <label><input type="radio" name="source" checked> Upload image</label>
+            <label class="soon"><input type="radio" name="source" disabled> Template <span class="chip">soon</span></label>
+            <label class="soon"><input type="radio" name="source" disabled> Plain text <span class="chip">soon</span></label>
+            <label class="soon"><input type="radio" name="source" disabled> QR <span class="chip">soon</span></label>
+          </fieldset>
+
+          <div class="group">
+            <span class="legend">Image</span>
+            <div class="row">
+              <button id="editor-browse">Browse&hellip;</button>
+              <input id="editor-image" type="text" readonly placeholder="no image picked">
+            </div>
+            <p class="hint">Drag &amp; drop will come with the upload endpoint; today the server
+              browses this machine's folders.</p>
+          </div>
+
+          <label class="group soon">
+            <span class="legend">Fit mode <span class="chip">soon</span></span>
+            <select disabled>
+              <option>Cover (default)</option>
+              <option>Contain</option>
+              <option>Stretch</option>
+            </select>
+          </label>
+
+          <label class="group soon">
+            <span class="legend">Dither <span class="chip">soon</span></span>
+            <select disabled>
+              <option>Floyd-Steinberg (default)</option>
+              <option>Threshold</option>
+              <option>Bayer 4&times;4</option>
+            </select>
+          </label>
+
+          <label class="group">
+            <span class="legend">Target tag</span>
+            <select id="editor-tag"></select>
+            <p class="hint">Multi-select and the render → confirm → queue flow land with the
+              bitmap store. Today: one tag, sent immediately.</p>
+          </label>
+
+          <p class="hint">The server picks the rotation that fits the panel (152&times;296 after
+            rotating); only an image that fits neither way is refused.</p>
+        </div>
+
+        <div class="editor-preview">
+          <div class="preview-stack">
+            <figure>
+              <figcaption>Original</figcaption>
+              <div class="ph">resized colour preview<br><span class="dim">not implemented yet</span></div>
+            </figure>
+            <figure>
+              <figcaption>On device &middot; 152&times;296 1:1</figcaption>
+              <div class="ph epd-ph">dithered 1-bit render<br><span class="dim">not implemented yet</span></div>
+            </figure>
+            <figure>
+              <figcaption>Zoom 4&times;</figcaption>
+              <div class="ph">drag on the device pane<br><span class="dim">not implemented yet</span></div>
+            </figure>
+          </div>
+
+          <div class="actions">
+            <button id="editor-cancel">Cancel</button>
+            <button id="editor-push" class="primary" disabled>Push to 1 tag</button>
+            <span id="editor-progress" class="dim"></span>
+          </div>
+
+          <details class="library">
+            <summary>Content library <span class="chip">soon</span></summary>
+            <p class="hint">Last 20 bitmaps, click to reload into the editor. Empty until the
+              server stores bitmaps (SHA256-deduped) instead of streaming them straight out.</p>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Queue ───────────────────────────────────────────────────────── -->
+    <section class="screen" data-screen="queue" hidden>
+      <div class="screen-head">
+        <h1>Queue</h1>
+        <span class="grow"></span>
+        <button disabled title="Not implemented yet">Retry failed</button>
+        <button id="queue-cancel" disabled>Cancel pending</button>
+      </div>
+      <table class="grid">
+        <thead>
+          <tr><th>Job</th><th>Hex ID</th><th>Content</th><th>State</th><th>Attempts</th><th>Age</th></tr>
+        </thead>
+        <tbody id="queue-rows"></tbody>
+      </table>
+      <p class="empty" id="queue-empty">
+        Job history is not implemented yet — the server streams an image to the hub and forgets it.
+        A transfer that is running right now shows up here as a single <code>sending</code> row.
+      </p>
+    </section>
+
+    <!-- ── Logs ────────────────────────────────────────────────────────── -->
+    <section class="screen" data-screen="logs" hidden>
+      <div class="screen-head">
+        <h1>Logs</h1>
+        <select id="logs-tag"><option value="">all tags</option></select>
+        <select id="logs-event">
+          <option value="">all events</option>
+          <option value="sync">sync</option>
+        </select>
+        <span class="grow"></span>
+        <span class="pill">derived from <code>POLL</code> lines on the hub pane</span>
+      </div>
+      <table class="grid">
+        <thead>
+          <tr><th>Time</th><th>Hex ID</th><th>Alias</th><th>Event</th><th>&times;N</th></tr>
+        </thead>
+        <tbody id="logs-rows"></tbody>
+      </table>
+      <p class="empty" id="logs-empty">
+        Nothing yet. Consecutive identical rows collapse into one with &times;N, like the
+        firmware's own log. The full firmware event log (online / offline / low batt / err) is
+        not implemented yet.
+      </p>
+    </section>
+
+    <!-- ── Stats ───────────────────────────────────────────────────────── -->
+    <section class="screen" data-screen="stats" hidden>
+      <div class="screen-head">
+        <h1>Stats</h1>
+        <span class="grow"></span>
+        <div class="segmented"><button class="on">24h</button><button>7d</button></div>
+      </div>
+      <div class="cards">
+        <article class="card">
+          <h2>Online count</h2>
+          <div class="ph chart-ph">history not recorded yet</div>
+        </article>
+        <article class="card">
+          <h2>Alerts opened vs closed</h2>
+          <div class="ph chart-ph">history not recorded yet</div>
+        </article>
+        <article class="card">
+          <h2>Battery distribution</h2>
+          <div class="ph chart-ph">the firmware does not report battery yet</div>
+        </article>
+      </div>
+      <p class="hint">Nothing here is wired to a database: there is no <code>fleet_stats</code>
+        rollup and no event history to chart. These panels are placeholders for it.</p>
+    </section>
+
+    <!-- ── Hub ─────────────────────────────────────────────────────────── -->
+    <section class="screen" data-screen="hub" hidden>
+      <div class="screen-head">
+        <h1>Hub</h1>
+        <span class="grow"></span>
+        <button disabled title="Not implemented yet">Upload firmware (.bin)</button>
+        <button disabled title="Not implemented yet">Restart</button>
+      </div>
+
+      <div class="cards">
+        <article class="card">
+          <h2>Serial link</h2>
+          <dl class="kv" id="hub-serial"></dl>
+          <button id="hub-open-serial" class="link">Open the serial ports in Console</button>
+        </article>
+        <article class="card">
+          <h2>Firmware</h2>
+          <dl class="kv">
+            <dt>Version</dt><dd class="dim">&mdash; <span class="chip">soon</span></dd>
+            <dt>Uptime</dt><dd class="dim">&mdash; <span class="chip">soon</span></dd>
+          </dl>
+        </article>
+        <article class="card">
+          <h2>Panel mirror</h2>
+          <div class="ph epd-ph small">no EPD mirror over serial yet</div>
+        </article>
+      </div>
+
+      <section class="console-tail">
+        <div class="console-head">
+          <h2>Serial console</h2>
+          <span class="pill warn">read only &mdash; do not paste commands here</span>
+          <span class="grow"></span>
+          <button id="hub-console-link" class="link">open the two-pane console</button>
+        </div>
+        <div class="log" id="hub-tail"></div>
+      </section>
+    </section>
+
+    <!-- ── Console (the original two-pane view) ────────────────────────── -->
+    <section class="screen console" data-screen="console" hidden>
+      <div class="screen-head">
+        <h1>Console</h1>
+        <span class="dim">both boards over their serial ports</span>
+        <span class="grow"></span>
+        <button id="copy-logs" class="ghost">Copy logs</button>
+        <a id="save-log" class="ghost" href="/api/log" download="shelfkit-log.txt">Save log</a>
+      </div>
+      <div id="panes" class="panes"></div>
+    </section>
+
+    <!-- ── Settings ────────────────────────────────────────────────────── -->
+    <section class="screen" data-screen="settings" hidden>
+      <div class="screen-head">
+        <h1>Settings</h1>
+        <span class="grow"></span>
+        <span class="pill soon">none of this is stored yet</span>
+      </div>
+
+      <div class="cards">
+        <article class="card">
+          <h2>Alias map</h2>
+          <p class="hint">CSV of <code>hex_id,alias,notes</code>.</p>
+          <div class="row">
+            <button disabled>Import CSV</button>
+            <button disabled>Export CSV</button>
+          </div>
+        </article>
+        <article class="card">
+          <h2>Defaults</h2>
+          <label class="group soon"><span class="legend">Fit mode <span class="chip">soon</span></span>
+            <select disabled><option>Cover</option><option>Contain</option><option>Stretch</option></select>
+          </label>
+          <label class="group soon"><span class="legend">Dither <span class="chip">soon</span></span>
+            <select disabled><option>Floyd-Steinberg</option><option>Threshold</option><option>Bayer 4&times;4</option></select>
+          </label>
+        </article>
+        <article class="card">
+          <h2>ID display on the EPD</h2>
+          <p class="hint">All-or-nothing: alias mode needs every tag to have an alias.</p>
+          <label><input type="radio" name="logids" checked disabled> Hex</label>
+          <label><input type="radio" name="logids" disabled> Alias</label>
+        </article>
+        <article class="card">
+          <h2>Rotation</h2>
+          <label class="group soon"><span class="legend">Slot duration (min) <span class="chip">soon</span></span>
+            <input type="number" value="20" disabled>
+          </label>
+          <p class="hint">The firmware does not rotate content between tags yet.</p>
+        </article>
+        <article class="card">
+          <h2>Fleet map grid</h2>
+          <div class="row">
+            <label class="soon">Rows <input type="number" value="0" disabled></label>
+            <label class="soon">Cols <input type="number" value="0" disabled></label>
+          </div>
+          <p class="hint">Until this is configured, the Map view stays hidden.</p>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <!-- tag drilldown -->
+  <aside id="drawer" class="drawer" hidden>
+    <div class="drawer-head">
+      <span id="drawer-hex" class="mono big"></span>
+      <span class="grow"></span>
+      <button id="drawer-close" class="ghost">&times;</button>
+    </div>
+    <div class="drawer-body">
+      <dl class="kv" id="drawer-info"></dl>
+      <h3>History <span class="chip">soon</span></h3>
+      <p class="hint">Per-tag bitmap history needs the content store.</p>
+      <h3>Log <span class="chip">soon</span></h3>
+      <p class="hint">Per-tag firmware events need the event parser.</p>
+    </div>
+    <div class="drawer-foot">
+      <button id="drawer-push" class="primary">Push content</button>
+      <button disabled title="Not implemented yet">Reflash</button>
+    </div>
+  </aside>
+
+  <!-- image picker -->
+  <div id="picker" class="modal" hidden>
+    <div class="dialog">
+      <div class="dialog-head">
+        <button id="picker-up" class="ghost" title="Parent folder">&uarr;</button>
+        <span id="picker-dir" class="path"></span>
+      </div>
+      <div id="picker-list" class="picker-list"></div>
+      <div class="dialog-foot">
+        <span class="dim">folders open, images are picked</span>
+        <span class="grow"></span>
+        <button id="picker-cancel" class="ghost">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <datalist id="port-options"></datalist>
+  <div id="toasts" class="toasts"></div>
+  <script src="/app.js"></script>
+</body>
+</html>

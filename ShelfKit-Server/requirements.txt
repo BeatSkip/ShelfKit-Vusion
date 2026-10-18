@@ -1,3 +1,5 @@
-pyserial>=3.5
-textual>=6.0        # tested with 8.2.8
-pillow>=10          # image conversion for the send bar (png2epd.py rules)
+pyserial>=3.5        # both serial ports
+pillow>=10           # image conversion for the send bar (png2epd.py rules)
+
+# The web UI needs nothing else: the page is plain HTML/JS and the server is the
+# standard library's http.server, so textual is no longer required.

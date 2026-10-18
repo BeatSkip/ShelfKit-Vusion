@@ -4,7 +4,7 @@ Python 3 helpers that flash, dump and exercise the boards over their serial link
 flash-dump firmware that is deliberately kept out of any target's `src/` so the SDCC build does
 not compile it.
 
-The host-side *application* — the two-port TUI and everything it imports — lives in
+The host-side *application* — the browser UI and everything it imports — lives in
 [`../ShelfKit-Server/`](../ShelfKit-Server/README.md).
 
 | File | What it does |
@@ -28,7 +28,7 @@ None of this is compiled by the SDCC build. Only `png2epd.py` (over in
 pip install pyserial      # flashdump.py, axsem-flasher.py, monitor.py
 ```
 
-The image push needs `pillow` and `textual` as well; those live in
+The browser UI and its image push need `pillow` as well; that lives in
 [`../ShelfKit-Server/requirements.txt`](../ShelfKit-Server/requirements.txt).
 
 ## Watching both logs on stdout
@@ -44,8 +44,8 @@ Every line is printed with a timestamp and the port name, and the link summary i
 the firmware prints (`poll ok att=N rssi=R hubrssi=H`, `poll FAILED after N attempts`,
 `POLL src=.. seq=.. rssi=R [retry] [dup]`), shown every `--summary` seconds and on Ctrl+C. DTR
 (boot pin) and RTS (reset) are held low while the ports are open, so opening a port does not reset
-the tag or send it into the bootloader. This is the plain-text fallback; the pane UI with the image
-push is [`../ShelfKit-Server/shelfkit-server.py`](../ShelfKit-Server/shelfkit-server.py).
+the tag or send it into the bootloader. This is the plain-text fallback; the browser UI with the
+image push is [`../ShelfKit-Server/shelfkit-server.py`](../ShelfKit-Server/shelfkit-server.py).
 
 ## Capturing a flash dump
 

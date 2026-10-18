@@ -58,7 +58,7 @@ Everything shared by the two targets lives outside this folder, referenced as `.
 | `../shared/boards/` | Board definition for the SDCC-MDF extension, wired up through `sdcc.boardsDir` |
 | `../shared/documentation/` | AX8052F100/F131/F143 + panel datasheets, and `signal-list.md` |
 | `../tooling/` | Firmware-side host scripts: `axsem-flasher.py`, `dumps/flashdump.py`, `monitor.py` (stdout log merge) and the link-layer simulator tests |
-| `../ShelfKit-Server/` | Host-side application: `shelfkit-server.py` (two-port TUI + image push) with `shelfkit/` holding `hubhost.py` and `png2epd.py` |
+| `../ShelfKit-Server/` | Host-side application: `shelfkit-server.py` (browser UI + image push) with `shelfkit/` holding the app, the HTTP layer, `hubhost.py` and `png2epd.py` |
 
 ## Pin map
 

@@ -135,7 +135,7 @@ panel is left powered rather than being put to sleep mid-refresh.
 
 Host: `python ShelfKit-Server/shelfkit/hubhost.py COM4 serve images/` pushes `images/<addr>.png` to a tag when it announces itself and the
 file is new or changed (state in `images/.sent.json`); `send <addr> <png>` pushes once; `ping` checks the channel.
-`ShelfKit-Server/shelfkit-server.py` does the same from a two-pane UI.
+`ShelfKit-Server/shelfkit-server.py` does the same from a two-pane web UI.
 
 **Status: builds and links for both targets (SDCC 3.6.0, hub 37.5 KB, tag 37.2 KB, tag internal RAM no worse than before)
 and the host-side framing is checked, but this has not been run on hardware.** To verify on the boards: (1) `hubhost.py COM4 ping`
@@ -171,7 +171,7 @@ POLL src=0100 seq=09 rssi=-36 up=6s att=1 hubrssi=-35
 
 | Tool | Use |
 |---|---|
-| `ShelfKit-Server/shelfkit-server.py hub=COM4 tag=COM3 [--baud N]` | Textual TUI: one pane per port (own log, baud rate, Open/Close, Clear, DTR and Reset), the two logs merged onto the clipboard on demand, and a bar that pushes an image to a tag picked from the ones that announced themselves. |
+| `ShelfKit-Server/shelfkit-server.py hub=COM4 tag=COM3 [--baud N]` | Local web UI: one pane per port (own log, baud rate, Open/Close, Clear, DTR and Reset), the two logs merged onto the clipboard on demand, and a bar that pushes an image to a tag picked from the ones that announced themselves. |
 | `ShelfKit-Server/shelfkit/hubhost.py COM4 serve\|send\|ping ...` | The same image push without a UI, plus `ping` for the hub's command channel. |
 | `tooling/monitor.py hub=COM4 tag=COM3 [--reset] [--log f] [--summary 60]` | Timestamped merged log of both boards plus a loss/attempt/RSSI summary on stdout. Holds DTR/RTS low so opening a port doesn't reset the tag. |
 | `tooling/axsem-flasher.py <hex> -p COMx` | Flash over the AX8052 serial bootloader (works). |
