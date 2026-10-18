@@ -44,9 +44,21 @@ const ui = {
   editorImage: $("editor-image"),
   editorTag: $("editor-tag"),
   editorBrowse: $("editor-browse"),
+  editorRender: $("editor-render"),
   editorPush: $("editor-push"),
   editorCancel: $("editor-cancel"),
   editorProgress: $("editor-progress"),
+  editorFit: $("editor-fit"),
+  editorDither: $("editor-dither"),
+  editorWarn: $("editor-warn"),
+  editorInfo: $("editor-preview-info"),
+  previewOriginal: $("preview-original"),
+  previewDevice: $("preview-device"),
+  previewSel: $("preview-sel"),
+  previewZoom: $("preview-zoom"),
+  previewOriginalHint: $("preview-original-hint"),
+  previewDeviceHint: $("preview-device-hint"),
+  previewZoomHint: $("preview-zoom-hint"),
 
   queueRows: $("queue-rows"),
   queueEmpty: $("queue-empty"),
@@ -532,8 +544,23 @@ function renderEditor() {
   const target = editorTarget();
   ui.editorTargets.textContent = target ? `target ${hex4(target)}` : "no target";
 
+  const editor = state?.editor;
+  if (editor) {
+    if (document.activeElement !== ui.editorFit && editor.fit) ui.editorFit.value = editor.fit;
+    if (document.activeElement !== ui.editorDither && editor.dither) {
+      ui.editorDither.value = editor.dither;
+    }
+    const preview = editor.preview || null;
+    const key = preview ? preview.key : "";
+    if (key !== lastPreviewKey) {          // only redraw when the frame changed
+      lastPreviewKey = key;
+      showPreview(preview);
+    }
+  }
+
   const sending = !!state?.sending;
-  const ready = !!state?.image && !!target && !sending;
+  // Spec rule: no push without a rendered preview on screen.
+  const ready = !!state?.image && !!target && !!currentPreview && !sending;
   ui.editorPush.textContent = sending ? "Cancel" : `Push to 1 tag`;
   ui.editorPush.classList.toggle("cancel", sending);
   ui.editorPush.classList.toggle("primary", !sending);
@@ -542,9 +569,11 @@ function renderEditor() {
     ? "Stop after the frame in flight"
     : !state?.image
       ? "Pick an image first"
-      : !target
-        ? "Wait for a tag to announce itself"
-        : `Send to ${hex4(target)} now`;
+      : !currentPreview
+        ? "Render the preview first"
+        : !target
+          ? "Wait for a tag to announce itself"
+          : `Send to ${hex4(target)} now`;
   ui.editorProgress.textContent = sending
     ? state.progress
       ? `frame ${state.progress}`
@@ -823,9 +852,122 @@ async function copyLogs() {
   toast(ok ? `copied ${lines} lines` : `clipboard refused ${lines} lines`, ok ? "ok" : "bad");
 }
 
-// ── image picker ───────────────────────────────────────────────────────────
+// ── editor previews ────────────────────────────────────────────────────────
+// The server renders; the page only displays PNGs. The device pane is the frame
+// exactly as the panel will show it (black/white/red), and the zoom pane is a
+// 4x viewport into the same PNG - same pixels, no re-dithering in the browser.
+const ZOOM = 4;
+let previewZoomCentre = null;   // {x, y} in panel pixels
+let currentPreview = null;      // the preview the page is showing
+let lastPreviewKey = null;      // its cache key, to avoid redrawing every poll
 let pickerDir = "";
 let pickerParent = null;
+
+function showPreview(preview) {
+  const has = !!preview;
+  currentPreview = preview || null;
+  for (const [img, hint, url] of [
+    [ui.previewOriginal, ui.previewOriginalHint, has ? preview.original : ""],
+    [ui.previewDevice, ui.previewDeviceHint, has ? preview.device : ""],
+  ]) {
+    if (has) {
+      img.src = url;
+      img.setAttribute("src", url);
+    } else {
+      img.removeAttribute("src");
+      img.src = "";
+    }
+    img.hidden = !has;
+    hint.hidden = has;
+  }
+  ui.previewZoomHint.hidden = has;
+  if (!has) {
+    ui.previewZoom.style.backgroundImage = "";
+    ui.previewSel.hidden = true;
+    previewZoomCentre = null;
+  } else {
+    // re-apply the last zoom, or the middle of the frame
+    drawZoom(previewZoomCentre || { x: 152 / 2, y: 296 / 2 }, true);
+  }
+
+  const warn = Number(state?.editor?.midtone_warn || 0.4);
+  if (has && preview.midtone > warn) {
+    ui.editorWarn.hidden = false;
+    ui.editorWarn.textContent =
+      `${Math.round(preview.midtone * 100)}% of this image is midtone - dithering will look ` +
+      "muddy on this panel. A flatter, higher-contrast source reads better.";
+  } else {
+    ui.editorWarn.hidden = true;
+  }
+
+  ui.editorInfo.textContent = has
+    ? `${preview.source[0]}x${preview.source[1]}` +
+      `${preview.angle ? ` - rotate ${preview.angle} deg -` : " -"}` +
+      ` ${preview.fitted[0]}x${preview.fitted[1]}, ${preview.fit}, ${preview.dither}`
+    : "";
+}
+
+async function renderPreview() {
+  if (!state?.image) {
+    showPreview(null);
+    return;
+  }
+  ui.editorInfo.textContent = "rendering…";
+  try {
+    const result = await postJSON("/api/preview");
+    if (!result.ok) {
+      ui.editorInfo.textContent = result.error || "render failed";
+      showPreview(null);
+      return;
+    }
+    showPreview(result);
+    if (state) state.editor.preview = result;
+  } catch (err) {
+    ui.editorInfo.textContent = `render failed: ${err.message}`;
+    showPreview(null);
+  }
+}
+
+/** client point -> panel pixel, for the drag on the device pane */
+function panelPoint(event) {
+  const rect = ui.previewDevice.getBoundingClientRect();
+  if (!rect.width || !rect.height) return null;
+  const x = ((event.clientX - rect.left) / rect.width) * 152;
+  const y = ((event.clientY - rect.top) / rect.height) * 296;
+  return { x: Math.min(151, Math.max(0, x)), y: Math.min(295, Math.max(0, y)) };
+}
+
+function drawZoom(centre, force) {
+  const src = ui.previewDevice.src || ui.previewDevice.getAttribute("src");
+  if (!src) return;
+  const box = ui.previewZoom.getBoundingClientRect();
+  const width = box.width || 150;
+  const height = box.height || 292;
+  const scaledW = 152 * ZOOM;
+  const scaledH = 296 * ZOOM;
+  let left = centre.x * ZOOM - width / 2;
+  let top = centre.y * ZOOM - height / 2;
+  left = Math.min(Math.max(0, left), Math.max(0, scaledW - width));
+  top = Math.min(Math.max(0, top), Math.max(0, scaledH - height));
+  ui.previewZoom.style.backgroundImage = `url("${src}")`;
+  ui.previewZoom.style.backgroundSize = `${scaledW}px ${scaledH}px`;
+  ui.previewZoom.style.backgroundPosition = `${-left}px ${-top}px`;
+  previewZoomCentre = centre;
+  if (force) ui.previewZoom.dataset.zoom = String(ZOOM);
+}
+
+/** an overlay rectangle over the device pane, in its own client coordinates */
+function drawSelection(from, to) {
+  const host = (ui.previewDevice.parentElement || ui.previewDevice).getBoundingClientRect();
+  if (!host.width || !host.height) return;
+  const px = (p) => p.x / 152 * host.width;
+  const py = (p) => p.y / 296 * host.height;
+  ui.previewSel.hidden = false;
+  ui.previewSel.style.left = `${Math.min(px(from), px(to))}px`;
+  ui.previewSel.style.top = `${Math.min(py(from), py(to))}px`;
+  ui.previewSel.style.width = `${Math.abs(px(to) - px(from))}px`;
+  ui.previewSel.style.height = `${Math.abs(py(to) - py(from))}px`;
+}
 
 function joinPath(dir, name) {
   const separator = dir.includes("\\") && !dir.includes("/") ? "\\" : "/";
@@ -878,6 +1020,7 @@ async function chooseImage(path) {
     render(await postJSON("/api/image", { path }));
     ui.picker.hidden = true;
     toast(`image: ${path.split(/[\\/]/).pop()}`);
+    await renderPreview();          // spec: never a push without a preview shown
   } catch (err) {
     toast(`cannot use that image: ${err.message}`, "bad");
   }
@@ -890,7 +1033,61 @@ ui.editorBrowse.addEventListener("click", () => {
   ui.picker.hidden = false;
   loadDir("");
 });
+ui.editorRender.addEventListener("click", renderPreview);
 ui.editorTag.addEventListener("change", () => renderEditor());
+
+async function setEditorOptions() {
+  try {
+    render(await postJSON("/api/editor", {
+      fit: ui.editorFit.value,
+      dither: ui.editorDither.value,
+    }));
+  } catch (err) {
+    toast(`cannot set the render options: ${err.message}`, "bad");
+    return;
+  }
+  await renderPreview();
+}
+
+ui.editorFit.addEventListener("change", setEditorOptions);
+ui.editorDither.addEventListener("change", setEditorOptions);
+
+// drag on the device pane -> the 4x viewport follows the drag
+let dragFrom = null;
+
+ui.previewDevice.addEventListener("pointerdown", (event) => {
+  const point = panelPoint(event);
+  if (!point) return;
+  dragFrom = point;
+  if (ui.previewDevice.setPointerCapture) ui.previewDevice.setPointerCapture(event.pointerId);
+  drawSelection(point, point);
+  if (event.preventDefault) event.preventDefault();
+});
+
+ui.previewDevice.addEventListener("pointermove", (event) => {
+  if (!dragFrom) return;
+  const point = panelPoint(event);
+  if (!point) return;
+  drawSelection(dragFrom, point);
+  drawZoom({ x: (dragFrom.x + point.x) / 2, y: (dragFrom.y + point.y) / 2 }, false);
+});
+
+ui.previewDevice.addEventListener("pointerup", (event) => {
+  if (!dragFrom) return;
+  const point = panelPoint(event) || dragFrom;
+  drawZoom({ x: (dragFrom.x + point.x) / 2, y: (dragFrom.y + point.y) / 2 }, true);
+  ui.previewSel.hidden = true;
+  dragFrom = null;
+});
+
+ui.previewDevice.addEventListener("pointercancel", () => {
+  dragFrom = null;
+  ui.previewSel.hidden = true;
+});
+
+window.addEventListener("resize", () => {
+  if (previewZoomCentre) drawZoom(previewZoomCentre, true);
+});
 
 ui.fleetSearch.addEventListener("input", () => {
   fleetSearch = ui.fleetSearch.value;

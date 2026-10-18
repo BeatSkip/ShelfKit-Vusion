@@ -469,6 +469,70 @@ button.chip.on { color: var(--btn-on-text); background: var(--accent); border-co
 .epd-ph.small { min-height: 90px; max-height: 140px; aspect-ratio: 152 / 296; }
 .chart-ph { min-height: 130px; }
 
+/* ── the three previews ───────────────────────────────────────────────── */
+.pv {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--log-bg);
+  aspect-ratio: 152 / 296;
+  max-height: 340px;
+  overflow: hidden;
+}
+
+.pv img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  /* 1:1 fidelity: never smooth a dithered pixel (spec rule) */
+  image-rendering: pixelated;
+}
+
+.pv-device img { cursor: crosshair; }
+
+.pv-original { background: var(--ph-1); }
+
+.pv-zoom {
+  background-repeat: no-repeat;
+  background-position: 50% 50%;
+  image-rendering: pixelated;
+  cursor: crosshair;
+}
+
+.pv-hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  text-align: center;
+  color: var(--dim);
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.sel {
+  position: absolute;
+  border: 1px dashed var(--accent);
+  background: #5aa9e622;
+  pointer-events: none;
+}
+
+.warn {
+  margin: 0;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--pending);
+  background: #e2b3411a;
+  border: 1px solid var(--soon-border);
+  border-radius: var(--radius);
+}
+
 .actions { display: flex; align-items: center; gap: 8px; }
 
 .library {

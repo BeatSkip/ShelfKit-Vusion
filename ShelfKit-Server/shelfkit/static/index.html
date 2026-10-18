@@ -103,7 +103,7 @@
         <h1>Editor</h1>
         <span id="editor-targets" class="dim"></span>
         <span class="grow"></span>
-        <span class="pill soon">preview, templates and dithers are not implemented yet</span>
+        <span class="pill soon">templates, plain text, QR and the job queue are not implemented yet</span>
       </div>
 
       <div class="editor-body">
@@ -120,28 +120,31 @@
             <span class="legend">Image</span>
             <div class="row">
               <button id="editor-browse">Browse&hellip;</button>
-              <input id="editor-image" type="text" readonly placeholder="no image picked">
+              <button id="editor-render" title="Re-render the preview (e.g. after editing the file)">Render</button>
             </div>
+            <input id="editor-image" type="text" readonly placeholder="no image picked">
             <p class="hint">Drag &amp; drop will come with the upload endpoint; today the server
               browses this machine's folders.</p>
           </div>
 
-          <label class="group soon">
-            <span class="legend">Fit mode <span class="chip">soon</span></span>
-            <select disabled>
-              <option>Cover (default)</option>
-              <option>Contain</option>
-              <option>Stretch</option>
+          <label class="group">
+            <span class="legend">Fit mode</span>
+            <select id="editor-fit">
+              <option value="cover">Cover (fills, crops the overflow)</option>
+              <option value="contain">Contain (letterboxed)</option>
+              <option value="stretch">Stretch (distorts)</option>
             </select>
           </label>
 
-          <label class="group soon">
-            <span class="legend">Dither <span class="chip">soon</span></span>
-            <select disabled>
-              <option>Floyd-Steinberg (default)</option>
-              <option>Threshold</option>
-              <option>Bayer 4&times;4</option>
+          <label class="group">
+            <span class="legend">Dither</span>
+            <select id="editor-dither">
+              <option value="threshold">Threshold (no dither)</option>
+              <option value="floyd-steinberg">Floyd-Steinberg</option>
+              <option value="bayer4">Bayer 4&times;4</option>
             </select>
+            <p class="hint">Rendered by the server, never in the browser. The same render is what
+              gets sent, so the preview cannot lie.</p>
           </label>
 
           <label class="group">
@@ -151,29 +154,41 @@
               bitmap store. Today: one tag, sent immediately.</p>
           </label>
 
-          <p class="hint">The server picks the rotation that fits the panel (152&times;296 after
-            rotating); only an image that fits neither way is refused.</p>
+          <p class="hint">A landscape source is turned upright automatically; fit and dither then
+            place it in the panel's 152&times;296 footprint.</p>
         </div>
 
         <div class="editor-preview">
           <div class="preview-stack">
             <figure>
               <figcaption>Original</figcaption>
-              <div class="ph">resized colour preview<br><span class="dim">not implemented yet</span></div>
+              <div class="pv pv-original">
+                <img id="preview-original" alt="the source after fit, in colour" hidden>
+                <span id="preview-original-hint" class="pv-hint">nothing rendered yet</span>
+              </div>
             </figure>
             <figure>
-              <figcaption>On device &middot; 152&times;296 1:1</figcaption>
-              <div class="ph epd-ph">dithered 1-bit render<br><span class="dim">not implemented yet</span></div>
+              <figcaption>On device &middot; 152&times;296</figcaption>
+              <div class="pv pv-device">
+                <img id="preview-device" alt="the frame as the panel shows it: black, white, red" hidden>
+                <div id="preview-sel" class="sel" hidden></div>
+                <span id="preview-device-hint" class="pv-hint">nothing rendered yet</span>
+              </div>
             </figure>
             <figure>
               <figcaption>Zoom 4&times;</figcaption>
-              <div class="ph">drag on the device pane<br><span class="dim">not implemented yet</span></div>
+              <div class="pv pv-zoom" id="preview-zoom">
+                <span id="preview-zoom-hint" class="pv-hint">drag on the device pane to inspect</span>
+              </div>
             </figure>
           </div>
+
+          <p id="editor-warn" class="warn" hidden></p>
 
           <div class="actions">
             <button id="editor-cancel">Cancel</button>
             <button id="editor-push" class="primary" disabled>Push to 1 tag</button>
+            <span id="editor-preview-info" class="dim"></span>
             <span id="editor-progress" class="dim"></span>
           </div>
 

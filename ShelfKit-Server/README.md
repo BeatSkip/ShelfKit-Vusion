@@ -78,7 +78,7 @@ blocks. `color-scheme` is set per theme too, which keeps scrollbars and native c
 | Screen | Working today | Interface only (marked in the page) |
 |---|---|---|
 | **Fleet** | Tag table from every `POLL src=<id>` the hub prints: 4-char hex id, status dot (online if heard in the last 30 s, pending while an image is in flight, else offline), last-push age, search, status chips, column sort, row selection with bulk actions, tag drilldown drawer | alias editing, battery, bitmap thumbnails, reflash/clear, map view (hidden until a grid is configured) |
-| **Editor** | Browse this machine's folders, pick the image and the target tag, Push / Cancel, live frame progress | the three preview panes (original / on-device 1:1 / zoom), fit mode, dither choice, templates, plain text, QR, multi-target push, content library |
+| **Editor** | Browse this machine's folders, pick the image and the target tag, **fit mode** (cover/contain/stretch), **dither** (threshold/Floyd-Steinberg/Bayer 4×4), the **three previews** — colour original, 1:1 on-device frame, and a 4× zoom that follows a drag — a midtone warning, and Push / Cancel with live frame progress. Push is only enabled once a preview has been rendered | templates, plain text, QR, multi-target push, the content library, the render → confirm → queue split |
 | **Queue** | The transfer in flight as a single `sending` row, with its frame progress, and Cancel | job history, attempts, retry, per-tag replacement |
 | **Logs** | Event table derived from the hub's `POLL` lines, with consecutive duplicates collapsed into `×N`, filtered by tag or event | the firmware's own event stream (online / offline / low batt / err) and the per-tag log |
 | **Stats** | — | all three charts (needs the stats rollup and battery reporting) |
@@ -140,6 +140,35 @@ naming both ports and the line count; **Save log** downloads the same text.
 [01:58:24.770 hub] POLL src=0100 seq=09 rssi=-36 up=6s att=1 hubrssi=-35
 [01:58:24.784 tag] poll ok att=1 rssi=-35 hubrssi=-36
 ```
+
+### Feeds, fit and dither, and the three previews
+
+The pipeline lives in [shelfkit/preview.py](shelfkit/preview.py) and is used for **both** the preview
+and the bytes that go to the tag, so what you see cannot disagree with what is sent:
+
+```
+load -> composite over white -> turn upright -> fit 152x296 -> quantise to black/white/red
+```
+
+- **Upright**: a landscape source is turned 90° (the long-standing default) so it reads correctly on
+  the portrait-mounted panel; a portrait one is used as it is.
+- **Fit**: `cover` fills the frame and crops the overflow, `contain` letterboxes on white, `stretch`
+  distorts to fit. Any source size now renders — the old "resize the source" refusal is gone.
+- **Dither**: `threshold` (nearest palette, best for line art), `floyd-steinberg`, or `bayer4`
+  (ordered 4×4). Threshold is the default rather than the spec's Floyd-Steinberg: this is a
+  three-colour panel, and error diffusion scatters red speckle into white around a logo.
+- **On-device** is black/white/**red**, not 1-bit mono, because that is what the panel does — a mono
+  preview would hide exactly the mistake it exists to catch.
+
+The three panes are server-rendered PNGs displayed with `image-rendering: pixelated`; the browser
+never dithers or resamples anything (spec rule 14). **Original** is the colour frame after fit,
+**On device** is the frame the tag will show, and **Zoom 4×** is a 4× viewport into that same PNG
+that follows a drag on the device pane. Over 40 % midtone pixels raises a warning — dithering a
+muddy photo onto three colours does not come out well.
+
+The preview is addressed by a hash of its inputs (`/api/preview.png?t=…`), so it survives a reload
+and the browser may cache it; picking a new image or changing fit/dither invalidates it and Push
+turns back off until it has been rendered again.
 
 ### Pushing an image
 

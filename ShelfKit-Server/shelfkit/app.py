@@ -26,11 +26,8 @@ from .serial_link import DEFAULT_BAUD, PortSpec, SerialWorker, available_ports
 MAX_LOG_LINES = 5000
 RESET_PULSE_S = 0.1  # how long the momentary Reset button holds RTS asserted
 
-# Image push defaults. SEND_ROTATE is only a preference: png2epd.fit_rotation()
-# falls back to the angle that actually fits the panel (a 152x296 portrait source
-# needs 0, not 90), and the angle used is logged.
-SEND_ROTATE = 90
-SEND_DITHER = False
+# Image push defaults. The editor's fit mode and dither come from
+# shelfkit.preview (one pipeline for the preview and the bytes that are sent).
 IMAGE_SUFFIXES = frozenset(
     {".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp", ".tif", ".tiff"}
 )
@@ -143,6 +140,12 @@ class App:
         self.sending = False
         self.progress = ""
         self.tags: dict[int, int] = {}
+        # Editor: how the image is fitted and dithered, plus the last preview.
+        # The push renders through the same function, so what is shown is what is
+        # sent (spec: never allow a push without a preview).
+        self.fit = "cover"
+        self.dither = "threshold"
+        self.preview: dict | None = None
         # Bookkeeping the Fleet/Queue/Logs screens show: when a tag was last
         # heard, and what it was last sent. Monotonic seconds, ages on the wire.
         self.tag_seen: dict[int, float] = {}
@@ -261,10 +264,24 @@ class App:
                 "send_to": self.send_to,
                 "progress": self.progress,
                 "status": self.status,
-                "rotate": SEND_ROTATE,
                 "reset_ms": int(RESET_PULSE_S * 1000),
                 "max_lines": MAX_LOG_LINES,
+                "editor": {
+                    "fit": self.fit,
+                    "dither": self.dither,
+                    "preview": self.preview,
+                    **self._editor_options(),
+                },
             }
+
+    @staticmethod
+    def _editor_options() -> dict:
+        """The fit modes and dithers the renderer supports (empty without Pillow)."""
+        try:
+            from . import preview
+        except Exception:  # noqa: BLE001 - Pillow missing: no previews, no options
+            return {"fits": [], "dithers": [], "midtone_warn": 0.4, "panel": [152, 296]}
+        return preview.options()
 
     def poll(self, cursors: dict[str, str]) -> dict:
         """New log lines per pane. Cursors are "epoch:seq" as handed out before."""
@@ -477,8 +494,60 @@ class App:
             return False
         with self.lock:
             self.image = candidate
+            self.preview = None        # a new image needs a new preview
             self.status = str(candidate)
         return True
+
+    # ── editor: fit/dither + the preview ───────────────────────────────────
+    def set_options(self, fit: str | None = None, dither: str | None = None) -> None:
+        """Choose how the image is fitted and dithered (preview and push alike)."""
+        with self.lock:
+            changed = False
+            if fit and fit != self.fit:
+                self.fit, changed = fit, True
+            if dither and dither != self.dither:
+                self.dither, changed = dither, True
+            if changed:
+                self.preview = None    # the old preview no longer matches
+                self.status = f"render: {self.fit}, {self.dither}"
+
+    def render_preview(self) -> dict:
+        """Render the picked image for the panel and remember it for the page."""
+        with self.lock:
+            image = self.image
+            fit, dither = self.fit, self.dither
+        if image is None:
+            return {"ok": False, "error": "pick an image first"}
+        try:
+            from . import preview
+        except Exception as exc:  # noqa: BLE001
+            return {"ok": False, "error": f"previews need Pillow ({exc})"}
+        try:
+            rendered = preview.render(image, fit, dither)
+        except Exception as exc:  # noqa: BLE001 - a bad file must not 500 the page
+            with self.lock:
+                self.preview = None
+                self.status = f"cannot render {image.name}: {exc}"
+            return {"ok": False, "error": str(exc)}
+
+        summary = {
+            "key": rendered.key,
+            "angle": rendered.angle,
+            "source": list(rendered.source),
+            "fitted": list(rendered.fitted),
+            "midtone": rendered.midtone,
+            "fit": fit,
+            "dither": dither,
+            "original": f"/api/preview.png?t={rendered.key}&kind=original",
+            "device": f"/api/preview.png?t={rendered.key}&kind=device",
+        }
+        with self.lock:
+            self.preview = summary
+            self.status = (
+                f"preview ready: {rendered.fitted[0]}x{rendered.fitted[1]}"
+                f"{f', rotation {rendered.angle} deg' if rendered.angle else ''}, {fit}, {dither}"
+            )
+        return {"ok": True, **summary}
 
     # ── the image push ─────────────────────────────────────────────────────
     def _wait_line(self, key: str, pattern, start: int, timeout: float):
@@ -563,6 +632,7 @@ class App:
                 self.status = "the hub pane has no port set"
                 return False
             image = self.image
+            fit, dither = self.fit, self.dither
 
         if not pane.worker.is_open:
             # The user asked for this, so open it rather than refusing - but say so,
@@ -582,7 +652,7 @@ class App:
             cancel = self._cancel
         threading.Thread(
             target=self._send_worker,
-            args=(key, port, addr, image, cancel),
+            args=(key, port, addr, image, fit, dither, cancel),
             name="send-image",
             daemon=True,
         ).start()
@@ -596,57 +666,37 @@ class App:
             event.set()
             self.status = "cancelling after the current frame ..."
 
-    def _send_worker(self, key: str, port: str, addr: int, path: Path, cancel) -> None:
+    def _send_worker(
+        self, key: str, port: str, addr: int, path: Path, fit: str, dither: str, cancel
+    ) -> None:
         """Mirrors hubhost.send_image(), with a cancellation check per frame.
 
         Runs over the port the pane already has open - see _wait_line() for why
-        it must not close and reopen it.
+        it must not close and reopen it. The frames come from shelfkit.preview,
+        the same render the editor showed, so the preview cannot lie.
         """
         ok = False
         try:
             self.note(key, f"# {path.name} -> {addr:04X} via {port}")
 
             try:
-                from . import png2epd
-            except SystemExit as exc:  # png2epd exits when Pillow is missing
-                self.note(key, f"# {exc.code or 'png2epd is unavailable'}")
-                return
+                from . import preview
             except Exception as exc:  # noqa: BLE001
-                self.note(key, f"# cannot load png2epd: {exc}")
+                self.note(key, f"# previews need Pillow: {exc}")
                 return
 
-            # png2epd.load_planes() rotates first and only then checks the size,
-            # so a portrait source fails at the usual 90 degrees. Ask which angle
-            # actually fits instead of assuming one.
             try:
-                angle, source, fitted = png2epd.fit_rotation(path, SEND_ROTATE)
+                rendered = preview.render(path, fit, dither)
             except Exception as exc:  # noqa: BLE001
-                self.note(key, f"# cannot read {path.name}: {exc}")
+                self.note(key, f"# cannot render {path.name}: {exc}")
                 return
-            if angle is None:
-                self.note(
-                    key,
-                    f"# rejected: {path.name} is {source[0]}x{source[1]} and no rotation "
-                    f"gives {png2epd.PANEL_W}x{png2epd.PANEL_H} - resize the source",
-                )
-                return
-            if angle != SEND_ROTATE:
-                self.note(
-                    key,
-                    f"# {path.name} is {source[0]}x{source[1]}; using rotation {angle} deg "
-                    f"({fitted[0]}x{fitted[1]}), not {SEND_ROTATE}",
-                )
-            else:
-                self.note(key, f"# {path.name} -> {fitted[0]}x{fitted[1]}, rotation {angle} deg")
-
-            try:
-                bw, red = hubhost.planes_for(path, angle, SEND_DITHER)
-            except SystemExit as exc:  # load_planes still exits on a bad size
-                self.note(key, f"# rejected: {exc.code or 'bad image'}")
-                return
-            except Exception as exc:  # noqa: BLE001
-                self.note(key, f"# cannot convert {path.name}: {exc}")
-                return
+            self.note(
+                key,
+                f"# {path.name}: {rendered.source[0]}x{rendered.source[1]}"
+                f"{f', rotation {rendered.angle} deg' if rendered.angle else ''}"
+                f" -> {rendered.fitted[0]}x{rendered.fitted[1]}, {fit}, {dither}",
+            )
+            bw, red = rendered.bw, rendered.red
 
             if not self._ping_hub(key, cancel):
                 self.note(key, "# hub did not answer P - right port, hub flashed?")

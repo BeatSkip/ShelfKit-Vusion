@@ -55,13 +55,14 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt: str, *args) -> None:  # noqa: A003 - base class name
         """Silence the access log: the UI polls several times a second."""
 
-    def _send(self, status: int, body: bytes, content_type: str) -> None:
+    def _send(self, status: int, body: bytes, content_type: str, cache: str = "no-store") -> None:
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
         # The UI is local and always freshly loaded; no-store keeps a stale page
-        # from talking to a newer API after a restart.
-        self.send_header("Cache-Control", "no-store")
+        # from talking to a newer API after a restart. Preview PNGs opt out: they
+        # are addressed by a hash of their inputs.
+        self.send_header("Cache-Control", cache)
         self.end_headers()
         self.wfile.write(body)
 
@@ -102,6 +103,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(self.app.poll(cursors))
         if path == "/api/files":
             return self._json(self.app.browse((query.get("dir") or [None])[0]))
+        if path == "/api/preview.png":
+            return self._serve_preview(
+                (query.get("t") or [""])[0], (query.get("kind") or ["device"])[0]
+            )
         if path == "/api/log":
             text = self.app.combined_log()
             return self._send(
@@ -120,6 +125,13 @@ class Handler(BaseHTTPRequestHandler):
             return self._error(f"no such path {path}", HTTPStatus.NOT_FOUND)
 
         try:
+            if parts == ["api", "editor"]:
+                self.app.set_options(body.get("fit"), body.get("dither"))
+                return self._json(self.app.state())
+            if parts == ["api", "preview"]:
+                # Rendered server-side and cached under a content key; the page
+                # only ever displays the PNGs (spec: the browser does no dithering).
+                return self._json(self.app.render_preview())
             if parts == ["api", "image"]:
                 if not self.app.set_image(str(body.get("path") or "")):
                     return self._json(self.app.state(), HTTPStatus.CONFLICT)
@@ -165,6 +177,21 @@ class Handler(BaseHTTPRequestHandler):
         else:
             return self._error(f"no action {action}", HTTPStatus.NOT_FOUND)
         return self._json(self.app.state())
+
+    def _serve_preview(self, token: str, kind: str) -> None:
+        """A cached preview PNG: kind=original (colour) or kind=device (1:1 BWR)."""
+        try:
+            from . import preview
+        except Exception:  # noqa: BLE001 - Pillow missing
+            return self._error("previews need Pillow", HTTPStatus.SERVICE_UNAVAILABLE)
+        rendered = preview.cached(token)
+        if rendered is None:
+            return self._error("that preview has expired - render it again", HTTPStatus.NOT_FOUND)
+        body = rendered.original_png if kind == "original" else rendered.device_png
+        # The token is a hash of the render inputs, so this document never changes.
+        self._send(
+            HTTPStatus.OK, body, "image/png", cache="max-age=3600, immutable"
+        )
 
     def _serve_asset(self, name: str) -> None:
         path = STATIC_DIR / name
