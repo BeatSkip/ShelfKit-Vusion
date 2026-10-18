@@ -11,6 +11,7 @@ new target adds a project without copying 140 MB of vendor code.
 |---|---|---|
 | `Vusion/` | Tag | Polls the hub every few seconds, receives an image straight into the panel controller, refreshes, sleeps |
 | `Vusion-Hub/` | Hub | Always listening, answers every poll, relays host images to the tag that just spoke, speaks a line protocol on UART |
+| `Tooling/` | Host scripts | The two-board flasher and `build-all.py`, which builds every target into `Release/` (see [Tooling/README.md](Tooling/README.md)) |
 | `Bootloader/` | AX8052 serial bootloader | Flash-resident UART bootloader (Axsem V1.1, converted 1-to-1 from the Code::Blocks reference) that erases and programs the application area and jumps to it |
 
 Vusion is the SES-imagotag 2.6" BWR label (UU340 variant): AX8052F143 — an 8051 core plus a
@@ -28,15 +29,15 @@ that folder as the project root.
 1. `File ▸ Open Folder…` → `ShelfKit-Firmware/Vusion-Hub` (or `Vusion`).
 2. **Ctrl+Shift+B** — `firmware.ihx`, `.hex`, `.map` and `.mem` land in that target's `build/`.
 3. *SDCC: Flash* runs the `upload` command from `sdcc-project.json`, which is
-   [`../tooling/axsem-flasher.py`](../tooling/axsem-flasher.py) — it wants the serial port in the
-   workspace setting `comPort` (see [tooling/README.md](../tooling/README.md)).
+   [`Tooling/axsem-flasher.py`](Tooling/axsem-flasher.py) — it wants the serial port in the
+   workspace setting `comPort` (see [Tooling/README.md](Tooling/README.md)).
 
 The three files that wire a target to the shared tree, and what they must say from inside
 `ShelfKit-Firmware/<target>/`:
 
 | File | Entries |
 |---|---|
-| `sdcc-project.json` | `sources`/`includes` with `../Shared/firmware/…` and `../Shared/sdk/…`, `libraries: ["../Shared/lib"]`, `components: ["../Shared/components"]`, `upload` args `../../tooling/axsem-flasher.py` |
+| `sdcc-project.json` | `sources`/`includes` with `../Shared/firmware/…` and `../Shared/sdk/…`, `libraries: ["../Shared/lib"]`, `components: ["../Shared/components"]`, `upload` args `../Tooling/axsem-flasher.py` |
 | `.vscode/settings.json` | `"sdcc.boardsDir": "../Shared/boards"` — scanned as a `custom` board source; the board id `axsem-8052f143` comes from that board JSON's `build.mcu` |
 | `.vscode/c_cpp_properties.json` | `${workspaceFolder}/../Shared/sdk/libmf/include` for IntelliSense |
 

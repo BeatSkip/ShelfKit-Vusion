@@ -70,8 +70,10 @@ because a screenshot cannot include a physical tag.
 | `ShelfKit-Firmware/` | One SDCC-MDF project per board: `Vusion/` (tag), `Vusion-Hub/` (hub), `Bootloader/` (serial bootloader), and room for the next tag type — see its [README](ShelfKit-Firmware/README.md) |
 | `ShelfKit-Server/` | The host-side app: web UI, image pipeline, image push (see its [README](ShelfKit-Server/README.md)) |
 | `ShelfKit-Firmware/Shared/` | Everything the firmwares use: Axsem SDK, prebuilt libraries, board definition, shared drivers. See [Shared/README.md](ShelfKit-Firmware/Shared/README.md) |
-| `tooling/` | Firmware-side host scripts: flasher, flash-dump capture, stdout log merge, link-layer tests |
+| `ShelfKit-Firmware/Tooling/` | Firmware-side host scripts: the two-board flasher, the multi-target build script, the flash-dump capture |
 | `Documentation/` | Protocol notes, panel init research, pin map, datasheets, screenshots |
+
+`Release/` (generated, git-ignored) holds the ready-to-flash HEX files.
 
 The two firmware targets are separate SDCC-MDF projects on purpose — each has its own `src/main.c`
 and can diverge — while the vendor SDK, board definition and shared drivers live once in `ShelfKit-Firmware/Shared/`.
@@ -89,9 +91,19 @@ Requirements: [SDCC](https://sdcc.sourceforge.net/) (verified against 3.6.0) and
 1. `File ▸ Open Folder…` → `ShelfKit-Firmware/Vusion-Hub` (or `ShelfKit-Firmware/Vusion`).
    Each target is its own SDCC-MDF project; the repo root is not one.
 2. **Ctrl+Shift+B** — `firmware.ihx`, `.hex`, `.map` and `.mem` land in that target's `build/`.
-3. Flash it: [tooling/README.md](tooling/README.md) has the one-edit recipe that wires
-   [tooling/axsem-flasher.py](tooling/axsem-flasher.py) into *SDCC: Flash*, and the same script works
-   from a shell.
+3. Flash it: *SDCC: Flash* already runs
+   [ShelfKit-Firmware/Tooling/axsem-flasher.py](ShelfKit-Firmware/Tooling/axsem-flasher.py), and the
+   same script works from a shell.
+
+To build **all** targets at once instead of one window per project (Vusion, Vusion-Hub and the
+bootloader), with the HEX files collected and named for you:
+
+```
+python ShelfKit-Firmware/Tooling/build-all.py
+```
+
+It writes `Release/vusion-<version>-<date>.hex`, `vusion-hub-…hex` and `bootloader-…hex` — see
+[ShelfKit-Firmware/Tooling/README.md](ShelfKit-Firmware/Tooling/README.md).
 
 Verified build: ~37 KB of code, ~1 KB XRAM, ~150 B of stack left (SDCC has no spare internal RAM —
 keep buffers in `__xdata`).
@@ -190,7 +202,7 @@ accounts, no per-tag latency graphs, no mobile app (the web UI is responsive, th
 | [Documentation/GDEW026Z39-init-reference.md](Documentation/GDEW026Z39-init-reference.md) | Where every panel init byte came from |
 | [Documentation/signal-list.md](Documentation/signal-list.md) | Pin map of the Vusion board |
 | [ShelfKit-Server/README.md](ShelfKit-Server/README.md) | The web app: screens, image pipeline, HTTP API |
-| [tooling/README.md](tooling/README.md) | Flashing, flash dumps, log monitoring, protocol tests |
+| [ShelfKit-Firmware/Tooling/README.md](ShelfKit-Firmware/Tooling/README.md) | Flashing, flash dumps, log monitoring, protocol tests |
 | [ShelfKit-Server/docs/web-interface-implementation.md](ShelfKit-Server/docs/web-interface-implementation.md) | The interface spec the UI follows |
 
 ## Notes
@@ -200,6 +212,6 @@ accounts, no per-tag latency graphs, no mobile app (the web UI is responsive, th
   compiler headers are GPL with a linking exception, the rest is vendor-licensed.
 - `ShelfKit-Firmware/Shared/lib/*.lib` are SDCC archives built from
   `ShelfKit-Firmware/Shared/sdk/` with the vendor's `buildsdcc`
-  makefiles; `libmf.lib` is committed in patched form (see [tooling/README.md](tooling/README.md)).
+  makefiles; `libmf.lib` is committed in patched form (see [ShelfKit-Firmware/Tooling/README.md](ShelfKit-Firmware/Tooling/README.md)).
 - The screenshots in this README are the real UI (`?theme=dark` forces the palette for a capture)
   driven by simulated serial data, since no photograph can include a physical tag.

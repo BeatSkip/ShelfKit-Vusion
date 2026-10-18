@@ -24,3 +24,6 @@ __pycache__/
 
 # ShelfKit-Server state: the SQLite database plus its WAL sidecars
 ShelfKit-Server/data/
+
+# Ready-to-flash HEX files from ShelfKit-Firmware/Tooling/build-all.py
+Release/

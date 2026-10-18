@@ -41,11 +41,11 @@ The protocol, the frame format, the retry rules and the exact log lines are in
 ## Building and flashing
 
 Open **this folder** in VS Code (not the repo root) so the extension finds `sdcc-project.json`, then
-**Ctrl+Shift+B**; output lands in `build/`. *SDCC: Flash* invokes `../../tooling/axsem-flasher.py`
+**Ctrl+Shift+B**; output lands in `build/`. *SDCC: Flash* invokes `../Tooling/axsem-flasher.py`
 with the hex and your `comPort` setting.
 
 ```
-python ../../tooling/axsem-flasher.py build/firmware.hex -p COM7
+python ../Tooling/axsem-flasher.py build/firmware.hex -p COM7
 ```
 
 By hand, from this folder:

@@ -133,7 +133,7 @@ driver does that, not this program), so opening it logs exactly what they were l
 ```
 
 If a board resets *while the console is sitting there*, something else has hold of the port and is
-toggling the lines — a second copy of this server, the old `tooling/monitor.py`, or the SDCC
+toggling the lines — a second copy of this server, or the SDCC
 extension's serial monitor.
 
 **Copy logs** merges both panes by arrival time and puts the result on the clipboard, behind a header

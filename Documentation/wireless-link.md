@@ -11,7 +11,6 @@ Verified on two real boards (hub on COM4, tag on COM3, a few cm apart):
 - Both boards detect the on-chip AX5043 radio (`pll rng=10`).
 - The tag polls every ~5.6 s with the main loop in standby (see [Timing](#timing)); the hub answers each poll.
   14 consecutive polls: all acknowledged on the **first attempt**, RSSI −33…−38 dBm on both sides.
-- 62 host-side unit checks pass on the SDCC simulator: `python tooling/test_shelflink.py`.
 
 Not yet measured: packet loss over a long run, range, behaviour with retries (never needed so far),
 the effect of the PA2/PA5 transistor lines on range, LED polarity.
@@ -173,10 +172,8 @@ POLL src=0100 seq=09 rssi=-36 up=6s att=1 hubrssi=-35
 |---|---|
 | `ShelfKit-Server/shelfkit-server.py hub=COM4 tag=COM3 [--baud N]` | Local web UI: one pane per port (own log, baud rate, Open/Close, Clear, DTR and Reset), the two logs merged onto the clipboard on demand, and a bar that pushes an image to a tag picked from the ones that announced themselves. |
 | `ShelfKit-Server/shelfkit/hubhost.py COM4 serve\|send\|ping ...` | The same image push without a UI, plus `ping` for the hub's command channel. |
-| `tooling/monitor.py hub=COM4 tag=COM3 [--reset] [--log f] [--summary 60]` | Timestamped merged log of both boards plus a loss/attempt/RSSI summary on stdout. Holds DTR/RTS low so opening a port doesn't reset the tag. |
-| `tooling/axsem-flasher.py <hex> -p COMx` | Flash over the AX8052 serial bootloader (works). |
-| `tooling/dumps/flashdump.py COMx` | Capture the parked dump firmware's hexdump of the SPI flash. |
-| `tooling/test_shelflink.py` | Simulator unit tests (`sl_proto_test.c`: 22 checks, `shelflink_test.c`: 40 checks with stubbed radio/timers). |
+| `ShelfKit-Firmware/Tooling/axsem-flasher.py <hex> -p COMx` | Flash over the AX8052 serial bootloader (works). |
+| `Data/flashdump.py COMx` | Capture the parked dump firmware's hexdump of the SPI flash. |
 
 Build memory (SDCC 3.6.0): hub ≈ 36.8 KB, tag ≈ 37.0 KB of 59 389 B code; XRAM ≈ 1.1 KB of 8 KB;
 **internal RAM is tight** — 137–154 B of stack left, "no spare internal RAM" on the tag. Watch this when
@@ -190,7 +187,7 @@ source entries and no longer reports a failed link.
 
 ## Open questions / next steps
 
-1. **Long-run loss test**: `python tooling/monitor.py hub=COM4 tag=COM3 --summary 60 --log run.txt` for hours;
+1. **Long-run loss test**: leave `ShelfKit-Server` attached and watch the Console and Logs screens for hours;
    then repeat at distance / through walls. Expect near-0 % loss at short range; failures show up as
    `att=2+` or `FAILED`.
 2. **PA2/PA5 transistor lines** are unidentified and off by default (`SHELF_POWER_LINES 0` in
@@ -209,4 +206,4 @@ source entries and no longer reports a failed link.
    demo `main.c` was replaced (it is in git history, commit `69eb9fe`); the e-paper drivers are still in
    `Shelfkit-*/src` and compiled but unused by `main.c`.
 10. Nothing is committed yet. `WirelessDemo/` is untracked and was left unmodified as the vendor reference.
-    `tooling/__pycache__/` should be git-ignored.
+    `ShelfKit-Firmware/Tooling/__pycache__/` should be git-ignored.

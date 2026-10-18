@@ -30,7 +30,7 @@
   "upload": {
     "tool": "python",
     "args": [
-      "../../tooling/axsem-flasher.py",
+      "../Tooling/axsem-flasher.py",
       "${outputHex}",
       "-p",
       "${config:comPort}"

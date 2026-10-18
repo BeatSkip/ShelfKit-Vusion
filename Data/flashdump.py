@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """flashdump.py - reset the imagotag and capture its serial flash dump.
 
-Boot setup mirrors tooling/axsem-flasher.py: DTR drives the BOOT pin,
+Boot setup mirrors ShelfKit-Firmware/Tooling/axsem-flasher.py: DTR drives the BOOT pin,
 RTS drives RESET. The boot pin selects the boot mode (PB3 on the tag):
 
     boot pin released (DTR low)  + reset pulse  -> application (default)
@@ -12,12 +12,12 @@ hexdump once, ending with "*** end of dump ***". Everything runs at
 38400 baud, the bootloader's native rate.
 
 Usage:
-    python tooling/dumps/flashdump.py COM7
-    python tooling/dumps/flashdump.py COM7 -o dump1.txt
-    python tooling/dumps/flashdump.py COM7 --bootloader            # show bootloader banner
-    python tooling/dumps/flashdump.py COM7 --bootloader --run      # banner, then R + capture
-    python tooling/dumps/flashdump.py COM7 --reset none            # you reset by hand
-    python tooling/dumps/flashdump.py --list
+    python Data/flashdump.py COM7
+    python Data/flashdump.py COM7 -o dump1.txt
+    python Data/flashdump.py COM7 --bootloader            # show bootloader banner
+    python Data/flashdump.py COM7 --bootloader --run      # banner, then R + capture
+    python Data/flashdump.py COM7 --reset none            # you reset by hand
+    python Data/flashdump.py --list
 """
 
 import argparse
