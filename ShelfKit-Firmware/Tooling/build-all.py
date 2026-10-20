@@ -266,6 +266,124 @@ def build_target(folder: str, out_dir: Path, version: str | None, clean: bool) -
         shutil.rmtree(work, ignore_errors=True)
 
 
+# ── one HEX with both images in it ─────────────────────────────────────────
+# Where the bootloader's own code lives; keep in sync with -Wl-bHOME in the
+# Bootloader project and with `_jmp_vector` in its main.c.
+BOOT_BASE = 0xD800
+APP_VECTOR = 0xD7FE
+
+
+def read_hex(path: Path) -> dict[int, int]:
+    """Intel HEX -> {address: byte}. Gaps stay gaps; nothing is filled in."""
+    cells: dict[int, int] = {}
+    base = 0
+    for number, line in enumerate(path.read_text(encoding="ascii", errors="replace").splitlines(), 1):
+        line = line.strip()
+        if not line:
+            continue
+        if not line.startswith(":"):
+            raise SystemExit(f"{path}:{number}: not an Intel HEX record")
+        raw = bytes.fromhex(line[1:])
+        if sum(raw) & 0xFF:
+            raise SystemExit(f"{path}:{number}: bad checksum")
+        count, addr, rtype = raw[0], (raw[1] << 8) | raw[2], raw[3]
+        payload = raw[4:4 + count]
+        if rtype == 0x00:
+            for i, byte in enumerate(payload):
+                at = base + addr + i
+                if at in cells and cells[at] != byte:
+                    raise SystemExit(f"{path}:{number}: 0x{at:04X} appears twice with different data")
+                cells[at] = byte
+        elif rtype == 0x01:
+            break
+        elif rtype == 0x02:
+            base = ((payload[0] << 8) | payload[1]) << 4
+        elif rtype == 0x04:
+            base = ((payload[0] << 8) | payload[1]) << 16
+    return cells
+
+
+def hex_runs(addresses: list[int]) -> list[tuple[int, int]]:
+    """Sorted addresses -> the contiguous [start, end] runs they form."""
+    runs: list[tuple[int, int]] = []
+    for addr in addresses:
+        if runs and addr == runs[-1][1] + 1:
+            runs[-1] = (runs[-1][0], addr)
+        else:
+            runs.append((addr, addr))
+    return runs
+
+
+def write_hex(cells: dict[int, int], record: int = 16) -> str:
+    """{address: byte} -> Intel HEX, ascending, one record per 16-byte slice of a run."""
+    out = []
+    for start, end in hex_runs(sorted(cells)):
+        addr = start
+        while addr <= end:
+            n = min(record, end - addr + 1)
+            data = bytes(cells[a] for a in range(addr, addr + n))
+            body = bytes([n, (addr >> 8) & 0xFF, addr & 0xFF, 0x00]) + data
+            out.append(":" + (body + bytes([(-sum(body)) & 0xFF])).hex().upper())
+            addr += n
+    out.append(":00000001FF")
+    return "\n".join(out) + "\n"
+
+
+def bundle(tag_hex: Path, boot_hex: Path, out_dir: Path, version: str | None) -> Path:
+    """Merge the bootloader and the application into the HEX one flash run needs.
+
+    Two things make this more than a concatenation:
+
+    * Address 0x0000 belongs to the *bootloader's* reset jump, not the
+      application's: the application's own three bytes are dropped, otherwise
+      flashing both would leave the chip booting straight into the app and the
+      bootloader would never run (so no OTA, no serial update path).
+    * The application's entry address is installed in the bootloader's jump
+      vector at 0xD7FE, exactly as `ota_program()` does after an OTA image - so
+      a freshly flashed tag starts its application immediately.
+    """
+    boot = read_hex(boot_hex)
+    app = read_hex(tag_hex)
+
+    if not boot:
+        raise SystemExit(f"{boot_hex} is empty")
+    if not app:
+        raise SystemExit(f"{tag_hex} is empty")
+    if app.get(0) != 0x02:
+        raise SystemExit(f"{tag_hex}: the application does not start with a reset jump")
+    entry = (app[1] << 8) | app[2]
+    app = {a: b for a, b in app.items() if a > 2}
+
+    high = max(boot)
+    if high >= 0x10000:
+        raise SystemExit(f"{boot_hex}: address 0x{high:04X} is not internal flash")
+    if min(boot) != 0 or not all(a < 3 or a >= BOOT_BASE for a in boot):
+        raise SystemExit(f"{boot_hex}: expected only the vector at 0 and code from 0x{BOOT_BASE:04X}")
+    if max(app) >= BOOT_BASE:
+        raise SystemExit(f"{tag_hex}: the application runs into the bootloader at 0x{BOOT_BASE:04X}")
+
+    overlap = set(app) & set(boot)
+    if overlap:
+        raise SystemExit(f"the two images overlap at 0x{min(overlap):04X}")
+    if APP_VECTOR in boot or APP_VECTOR in app or APP_VECTOR + 1 in app:
+        raise SystemExit(f"the jump vector at 0x{APP_VECTOR:04X} is already occupied")
+
+    merged = dict(boot)
+    merged.update(app)
+    merged[APP_VECTOR] = entry & 0xFF        # run_application() reads low byte first
+    merged[APP_VECTOR + 1] = entry >> 8
+
+    name = build_stem("vusion-full", version)
+    target = out_dir / f"{name}.hex"
+    target.write_text(write_hex(merged), encoding="utf-8")
+    print(f"\n=== one HEX for both ===")
+    print(f"  {display(target)}")
+    print(f"  bootloader 0x{BOOT_BASE:04X}..0x{max(boot):04X}  ({len(boot)} bytes)")
+    print(f"  application 0x0003..0x{max(app):04X}  ({len(app)} bytes, entry 0x{entry:04X})")
+    print(f"  jump vector 0x{APP_VECTOR:04X} = {entry & 0xFF:02X} {entry >> 8:02X}")
+    return target
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -275,6 +393,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--version", help="version tag for the file names (default: date + git hash)")
     parser.add_argument("--out", default=str(DEFAULT_OUT), help=f"output folder (default {DEFAULT_OUT})")
     parser.add_argument("--clean", action="store_true", help="remove existing .hex/.map first")
+    parser.add_argument("--no-bundle", action="store_true",
+                        help="do not also write the bootloader+application HEX")
     args = parser.parse_args(argv)
 
     if args.targets.strip().lower() == "all":
@@ -295,6 +415,13 @@ def main(argv: list[str] | None = None) -> int:
     print(f"SDCC {find_tool('sdcc')}")
     print(f"output {out_dir}")
     results = [build_target(folder, out_dir, args.version, args.clean) for folder in chosen]
+
+    if not args.no_bundle and "Vusion" in chosen and "Bootloader" in chosen:
+        by_target = {row["target"]: row["hex"] for row in results}
+        try:
+            bundle(by_target["Vusion"], by_target["Bootloader"], out_dir, args.version)
+        except SystemExit as exc:
+            print(f"\n!!! could not bundle: {exc}")
 
     print("\n=== ready to flash ===")
     for row in results:

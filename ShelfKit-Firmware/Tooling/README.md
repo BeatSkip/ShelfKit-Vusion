@@ -22,11 +22,22 @@ python ShelfKit-Firmware/Tooling/build-all.py --clean
 ```
 
 ```
+=== one HEX for both ===
+  Release/vusion-full-20261021-12a46fc-dirty.hex
+  bootloader 0xD800..0xF876  (8314 bytes)
+  application 0x0003..0xA484  (42088 bytes, entry 0x021B)
+  jump vector 0xD7FE = 1B 02
+
 === ready to flash ===
-  vusion-20261018-1326e7e-dirty.hex      106841 bytes  code 37866/59389, xram 1047/8192
-  vusion-hub-20261018-1326e7e-dirty.hex  106286 bytes  code 37675/59389, xram 1130/8192
-  bootloader-20261018-1326e7e-dirty.hex   17120 bytes  code 6038/65536, xram 392/8192
+  vusion-20261021-12a46fc-dirty.hex      118827 bytes  code 42117/59389, xram 1111/8192
+  vusion-hub-20261021-12a46fc-dirty.hex  106527 bytes  code 37763/59389, xram 1140/8192
+  bootloader-20261021-12a46fc-dirty.hex   23518 bytes  code 8314/65536, xram 428/8192
 ```
+
+`vusion-full-*.hex` holds the bootloader **and** the application, with the
+application's entry installed in the bootloader's jump vector: one flash operation
+for a tag that has neither yet. See
+[../Bootloader/README.md](../Bootloader/README.md#installing-the-bootloader-and-the-application-at-once).
 
 It builds each target exactly the way SDCC-MDF does, because it reads the target's own
 `sdcc-project.json` and the board definition that file names:

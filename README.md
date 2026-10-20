@@ -95,7 +95,8 @@ Requirements: [SDCC](https://sdcc.sourceforge.net/) (verified against 3.6.0) and
 2. **Ctrl+Shift+B** — `firmware.ihx`, `.hex`, `.map` and `.mem` land in that target's `build/`.
 3. Flash it: *SDCC: Flash* already runs
    [ShelfKit-Firmware/Tooling/axsem-flasher.py](ShelfKit-Firmware/Tooling/axsem-flasher.py), and the
-   same script works from a shell.
+   same script works from a shell. A tag that has no bootloader yet can be flashed with both at
+   once — `build-all.py` writes `Release/vusion-full-*.hex` for exactly that.
 
 To build **all** targets at once instead of one window per project (Vusion, Vusion-Hub and the
 bootloader), with the HEX files collected and named for you:

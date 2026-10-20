@@ -77,6 +77,46 @@ Both are compiled exactly as they were: the `.c` with `sdcc`, the `.asm` with `s
 The `.sdcc/` board cache that came with the skeleton was removed; the board definition is read from
 `../Shared/boards` like every other target.
 
+## Installing the bootloader and the application at once
+
+A tag that has neither has to be flashed once with a debug adapter. `build-all.py`
+writes the HEX for that: one file with both images in it, so it is a single flash
+operation instead of two.
+
+```
+python ShelfKit-Firmware/Tooling/build-all.py          # Release/vusion-full-<date>-<hash>.hex
+```
+
+```
+=== one HEX for both ===
+  bootloader 0xD800..0xF876  (8314 bytes)
+  application 0x0003..0xA484  (42088 bytes, entry 0x021B)
+  jump vector 0xD7FE = 1B 02
+```
+
+It is not a concatenation of the two files. Two things are done on the way:
+
+- **Address 0x0000 keeps the bootloader's reset jump** (`ljmp 0xD838`). The
+  application's own three bytes are dropped — flashing both as they come out of
+  their linkers would leave the chip booting straight into the application, and the
+  bootloader would never run.
+- **The application's entry is installed at 0xD7FE**, the slot `run_application()`
+  reads, exactly as `ota_program()` does after an over-the-air image. A freshly
+  flashed tag therefore starts its application immediately, and OTA keeps working.
+
+The merge refuses to produce a file when the two images overlap, when the
+application reaches past `0xD800`, or when the jump-vector slot is already taken.
+
+Two properties worth knowing:
+
+- The file is **sparse**, like the linker output: only bytes the linker emitted are
+  present, so unprogrammed gaps stay erased. Flash it onto an erased chip.
+- It is **not an OTA image** — `ota-send.py` refuses it (63,607 bytes, against the
+  43 KB window), which is the right answer: an OTA image must not carry a bootloader.
+
+`--no-bundle` skips it, and it is only produced when both `vusion` and `bootloader`
+are in the built set (`--targets vusion,bootloader`).
+
 ## Building and flashing
 
 Open **this folder** in VS Code, **Ctrl+Shift+B**, output in `build/`. Or by hand from here:

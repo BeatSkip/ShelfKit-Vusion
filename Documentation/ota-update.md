@@ -89,6 +89,11 @@ The bootloader moved from `0xE400` to `0xD800` for this feature: at `0xE400` it 
 109 bytes free, the OTA path needed ~2.3 KB (bit-bang SPI, the program loop, and
 SDCC's reentrant support for the shared CRC/header code).
 
+A tag that has no bootloader yet gets one with the merged HEX from
+`build-all.py` (`vusion-full-*.hex`), which contains both images and already has the
+application's entry in the jump-vector slot — see
+[ShelfKit-Firmware/Bootloader/README.md](../ShelfKit-Firmware/Bootloader/README.md#installing-the-bootloader-and-the-application-at-once).
+
 ## Using it
 
 ```
