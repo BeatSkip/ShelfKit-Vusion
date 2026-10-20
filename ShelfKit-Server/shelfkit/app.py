@@ -30,6 +30,10 @@ RESET_PULSE_S = 0.1  # how long the momentary Reset button holds RTS asserted
 # shelfkit.preview (one pipeline for the preview and the bytes that are sent).
 # The tag's identity opcode, from Shared/firmware/shelflink/inc/shelfmsg.h
 SM_OP_SET_ID = 7
+# How long the tag takes to erase its flash after BEGIN (it is busy there, so the
+# first chunk would otherwise be lost and need a retry).
+FLASH_ERASE_SETTLE_S = 0.6
+REPO_ROOT = Path(__file__).resolve().parents[2]
 # Tag ids below this are reserved (0 and 1, the latter being the hub).
 FIRST_TAG_ID = 0x0100
 
@@ -419,6 +423,7 @@ class App:
                 "status": self.status,
                 "reset_ms": int(RESET_PULSE_S * 1000),
                 "max_lines": MAX_LOG_LINES,
+                "firmware": self.firmware_candidates(),
                 "editor": {
                     "fit": self.fit,
                     "dither": self.dither,
@@ -723,6 +728,113 @@ class App:
             self.status = f"{addr:04X} is now {new:04X}"
         self._event("assign", f"{new:04X}", f"was {addr:04X}")
         return {"ok": True, "old": f"{addr:04X}", "id": f"{new:04X}"}
+
+    # ── wireless firmware update ────────────────────────────────────────────
+    def firmware_candidates(self) -> list[dict]:
+        """The HEX files a tag could be updated with: Release/ newest first."""
+        from . import firmware
+
+        found = []
+        folder = REPO_ROOT / "Release"
+        try:
+            files = sorted(folder.glob("*.hex"), key=lambda p: p.stat().st_mtime, reverse=True)
+        except OSError:
+            files = []
+        for path in files[:12]:
+            try:
+                stat = path.stat()
+            except OSError:
+                continue
+            found.append({
+                "name": path.name,
+                "path": str(path),
+                "size": stat.st_size,
+                "at": round(stat.st_mtime, 1),
+                "ok": not path.name.count("-full-"),   # a bundle carries the bootloader
+            })
+        return found
+
+    def flash_firmware(self, addr: int, path: str) -> dict:
+        """Stream a new application to a tag (SM_OP_FW_*), over the hub port.
+
+        The tag stores it in its SPI flash, verifies the CRC and resets; the
+        bootloader then programs it and clears the marker. Nothing is opened or
+        closed here: it is the port the console already holds.
+        """
+        from . import firmware
+
+        try:
+            image, entry = firmware.check_image(Path(path))
+        except firmware.ImageError as exc:
+            return {"ok": False, "error": str(exc)}
+        key = self.hub_key()
+        pane = self.panes.get(key)
+        if pane is None:
+            return {"ok": False, "error": "no hub pane"}
+        if not pane.worker.is_open:
+            return {"ok": False, "error": f"open the {pane.spec.name} port first"}
+        with self.lock:
+            if self.sending:
+                return {"ok": False, "error": "another transfer is running"}
+            self.sending = True
+            self.send_to = addr
+            self.progress = ""
+            self._cancel = threading.Event()
+            self.status = f"flashing {Path(path).name} to {addr:04X} ..."
+            cancel = self._cancel
+        name = Path(path).name
+        self._event("flash", f"{addr:04X}", f"{name} ({len(image)} B)")
+        threading.Thread(
+            target=self._flash_worker,
+            args=(key, addr, image, name, cancel),
+            name="flash-firmware",
+            daemon=True,
+        ).start()
+        return {"ok": True, "frames": 2 + (len(image) + firmware.SM_FW_CHUNK - 1) // firmware.SM_FW_CHUNK,
+                "entry": f"{entry:04X}", "bytes": len(image)}
+
+    def _flash_worker(self, key: str, addr: int, image: bytes, name: str, cancel) -> None:
+        from . import firmware
+
+        total = 2 + (len(image) + firmware.SM_FW_CHUNK - 1) // firmware.SM_FW_CHUNK
+        ok = False
+        try:
+            if not self._ping_hub(key, cancel):
+                self.note(key, "# hub did not answer P - right port, hub flashed?")
+                return
+            self.note(key, f"# firmware {name}: {len(image)} B, {total} frames -> {addr:04X}")
+            for index, payload in enumerate(firmware.frames(image), 1):
+                if cancel.is_set():
+                    self.note(key, f"# cancelled at frame {index}/{total}")
+                    return
+                if not self._send_frame(key, addr, payload, cancel):
+                    if cancel.is_set():
+                        self.note(key, f"# cancelled at frame {index}/{total}")
+                    else:
+                        self.note(key, f"# gave up at frame {index}/{total} "
+                                       f"(last hub answer: {self.last_answer})")
+                    return
+                with self.lock:
+                    self.progress = f"{index}/{total}"
+                if index == 1:
+                    # BEGIN makes the tag erase its flash: give it room before
+                    # the first chunk, else that frame just needs a retry
+                    cancel.wait(FLASH_ERASE_SETTLE_S)
+                elif index % 100 == 0:
+                    self.note(key, f"# frame {index}/{total}")
+            ok = True
+            self.note(key, f"# {addr:04X} has the new firmware, it is resetting")
+        except Exception as exc:  # noqa: BLE001 - never leave the bar stuck
+            self.note(key, f"# flash error: {exc}")
+            self._event("error", f"{addr:04X}", str(exc)[:120])
+        finally:
+            with self.lock:
+                self.sending = False
+                self.send_to = None
+                self.progress = ""
+                self.status = ("firmware sent, the tag is flashing it" if ok
+                               else "firmware not sent - see the log")
+            self._event("ok" if ok else "fail", f"{addr:04X}", name)
 
     def _rename_tag(self, old: int, new: int) -> None:
         """Re-key every in-memory table and the stored row after an assignment."""

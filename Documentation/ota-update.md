@@ -96,6 +96,10 @@ application's entry in the jump-vector slot — see
 
 ## Using it
 
+From the server: **Fleet** → click the tag → **Firmware update** → pick the HEX → **Reflash**.
+
+From a shell:
+
 ```
 python ShelfKit-Firmware/Tooling/build-all.py                  # Release/vusion-<date>-<hash>.hex
 python ShelfKit-Firmware/Tooling/ota-send.py Release/vusion-…​.hex --addr 0100 -p COM4

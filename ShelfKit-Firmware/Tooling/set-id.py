@@ -20,8 +20,8 @@ import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(REPO / "ShelfKit-Server" / "shelfkit"))
-import hubhost  # noqa: E402 - needs the path above
+sys.path.insert(0, str(REPO / "ShelfKit-Server"))
+from shelfkit import hubhost  # noqa: E402 - needs the path above
 
 SM_OP_SET_ID = 7          # shelfmsg.h
 

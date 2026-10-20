@@ -279,6 +279,38 @@ int16_t host_rx_getc(void)
     return c;
 }
 
+/* ── radio power ──────────────────────────────────────────────────────────
+ *
+ * Between polls nothing has to be heard: the hub only ever answers a POLL, and
+ * an image or firmware transfer cannot start until one has arrived. So the
+ * transceiver goes to its deep-sleep mode for the gap, which is worth more than
+ * everything else on the board together (a listening AX5043 is ~10 mA, the rest
+ * of the tag is microamps).
+ *
+ * If SHELF_XTAL_OFF is set the 26 MHz crystal is released too: it is shared with
+ * the transceiver and only forced on for radio work. Waking re-forces it and
+ * gives it a few milliseconds to settle before the radio is asked to receive.
+ */
+void shelfhw_radio_sleep(void)
+{
+    (void)axradio_set_mode(AXRADIO_MODE_DEEPSLEEP);
+#if SHELF_XTAL_OFF
+    OSCFORCERUN &= (uint8_t)~0x04;  /* stop forcing the 26 MHz crystal */
+#endif
+}
+
+void shelfhw_radio_wake(void)
+{
+#if SHELF_XTAL_OFF
+    uint8_t n = 20;
+
+    OSCFORCERUN |= 0x04;            /* crystal on ... */
+    while (n--)                     /* ... and let it settle (~2 ms) */
+        delay(100);
+#endif
+    (void)axradio_set_mode(AXRADIO_MODE_ASYNC_RECEIVE);
+}
+
 void shelfhw_poll(void)
 {
     wtimer_runcallbacks();

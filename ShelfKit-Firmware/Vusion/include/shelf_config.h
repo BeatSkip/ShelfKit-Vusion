@@ -9,9 +9,16 @@
  * Tooling/set-id.py, and the id survives firmware updates. */
 #define SHELF_NET_ID        0x5A
 
-/* Seconds between polls. Short while bringing the link up; keep the 1 % duty
- * cycle of the 868.3 MHz sub-band in mind when going lower. */
-#define SHELF_POLL_INTERVAL_S   5
+/* Seconds between polls. 60 s is the practical ceiling: the wake-up timer counts
+ * SHELFHW_TICKS_PER_S (640) per second in 16 bits, so anything above ~102 s
+ * overflows. The 1 % duty cycle of the 868.3 MHz sub-band is not a concern at
+ * this rate (a poll is a few milliseconds of air). */
+#define SHELF_POLL_INTERVAL_S   60
+
+/* How long the tag listens after each poll, in seconds. Everything the hub sends
+ * (images, firmware, a new identity) follows a POLL, so this window is the only
+ * time the tag can be reached. Longer = easier pushes, shorter = less RX time. */
+#define SHELF_LISTEN_WINDOW_S   8
 
 /* Print the link statistics every this many polls */
 #define SHELF_STATS_EVERY       10

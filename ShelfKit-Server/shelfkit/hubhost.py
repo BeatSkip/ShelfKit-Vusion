@@ -45,7 +45,7 @@ CHUNK = 28                  # SM_IMG_CHUNK
 BEGIN_SETTLE_S = 5.0        # the tag resets the panel after acknowledging BEGIN and answers nothing meanwhile
 END_SETTLE_S = 20.0         # ... and refreshes it after acknowledging END
 CMD_TIMEOUT_S = 3.0
-CMD_RETRY_WINDOW_S = 20.0   # keep repeating a frame this long: a busy tag fails fast, so count time, not tries
+CMD_RETRY_WINDOW_S = 90.0   # a tag sleeps between polls (60 s + 8 s window), so a frame may wait a whole cycle
 CMD_RETRY_PAUSE_S = 0.3
 RETRY_COOLDOWN_S = 30.0
 

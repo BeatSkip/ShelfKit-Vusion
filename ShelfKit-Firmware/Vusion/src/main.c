@@ -30,6 +30,8 @@ static uint8_t __xdata last_attempts;
 static int8_t __xdata last_hub_rssi;
 static uint16_t __xdata polls_done;
 static uint16_t __xdata node_id;   /* from the SPI flash record, see shelf_id.c */
+static struct wtimer_desc __xdata listen_timer;
+static uint8_t __xdata radio_asleep;
 
 static void log_stats(void)
 {
@@ -48,6 +50,24 @@ static void log_stats(void)
     log_puts(" stray=");
     log_dec(sl_stats.rx_stray);
     log_nl();
+}
+
+/* The listening window is over and nothing arrived: park the radio until the
+ * next poll. Anything that has to reach the tag - an image, a new firmware, an
+ * identity - arrives as DATA right after a POLL, so it lands inside the window. */
+static void listen_cb(struct wtimer_desc __xdata *desc)
+{
+    (void)desc;
+    if (img_rx_active() || fw_rx_active()) {
+        /* a transfer is running: stay awake, and check again once it should be
+         * over - the window re-arms itself instead of leaving the radio on until
+         * the next poll */
+        desc->time += (uint32_t)SHELF_LISTEN_WINDOW_S * SHELFHW_TICKS_PER_S;
+        wtimer0_addabsolute(desc);
+        return;
+    }
+    shelfhw_radio_sleep();
+    radio_asleep = 1;
 }
 
 static void on_done(const struct sl_done __xdata *done)
@@ -106,6 +126,14 @@ static void poll_cb(struct wtimer_desc __xdata *desc)
     if (img_rx_active() || fw_rx_active())
         return;
 
+    /* wake the radio for this poll and open the listening window */
+    if (radio_asleep) {
+        shelfhw_radio_wake();
+        radio_asleep = 0;
+    }
+    listen_timer.time = (uint32_t)SHELF_LISTEN_WINDOW_S * SHELFHW_TICKS_PER_S;
+    wtimer0_addrelative(&listen_timer);
+
     poll_payload[SM_POLL_UPTIME_LO] = (uint8_t)up;
     poll_payload[SM_POLL_UPTIME_HI] = (uint8_t)(up >> 8);
     poll_payload[SM_POLL_ATTEMPTS] = last_attempts;
@@ -149,7 +177,10 @@ void main(void)
 
     poll_timer.handler = poll_cb;
     poll_timer.time = SHELFHW_TICKS_PER_S;
-    wtimer0_addrelative(&poll_timer);
+    wtimer0_addabsolute(&poll_timer);
+
+    /* armed by poll_cb, not before: an un-armed descriptor is simply not linked */
+    listen_timer.handler = listen_cb;
 
     /* While an image or a firmware image arrives the tag must hear every frame,
      * so no standby */

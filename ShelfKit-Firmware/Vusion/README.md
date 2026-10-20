@@ -74,6 +74,33 @@ The build prints the memory report: 40,622 B of code and 1,084 B of XRAM out of 
 the memory model allows. Internal RAM is at the wall — new code has to keep its locals out of the
 overlay (the OTA receiver uses `__xdata` statics, and the shared CRC/header helpers are `__reentrant`).
 
+## Power
+
+The tag polls every `SHELF_POLL_INTERVAL_S` (60 s) and sleeps in between:
+
+| block | between polls | why |
+|---|---|---|
+| MCU | standby (`wtimer_idle(WTFLAG_CANSTANDBY)`) | woken by the low-power timer, which runs off LPOSC |
+| radio | `AXRADIO_MODE_DEEPSLEEP` | a listening AX5043 is ~10 mA, more than everything else together |
+| 26 MHz crystal | not forced (`OSCFORCERUN` bit 2 cleared) | shared with the transceiver; only needed while it is awake |
+| panel | rail off (`pwr_off()` after `epd_sleep()`) | the glass holds the image without power |
+| UART log | still on 38400 when awake | costs a couple of milliseconds per poll, no idle current |
+
+`SHELF_LISTEN_WINDOW_S` (8 s) is the only time the tag can be reached: everything
+the hub sends follows a POLL. An image or firmware transfer keeps the tag awake
+until it finishes, then the window re-arms and the radio sleeps again.
+
+Two consequences worth knowing:
+
+- **The wake-up timer caps the interval at ~102 s** (`SHELFHW_TICKS_PER_S` = 640
+  ticks per second in a 16-bit comparison). 60 s is the intended value.
+- **Pushes wait for a window.** The server retries a frame for 90 s
+  (`hubhost.CMD_RETRY_WINDOW_S`), so a push started at any moment lands within one
+  poll cycle; starting it just after a poll means waiting up to a minute.
+
+Build with `-DSHELF_XTAL_OFF=0` to keep the crystal running if a radio mode change
+turns out to need it (`sdcc-project.json` → `defines`).
+
 ## Hardware notes that cost real time
 
 - **PA5 (transistor U4) is the panel supply, active low.** Without it the panel accepts a whole init

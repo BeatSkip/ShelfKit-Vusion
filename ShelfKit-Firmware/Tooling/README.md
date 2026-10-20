@@ -9,7 +9,7 @@ Python 3 helpers that build and flash the boards over their serial link. The hos
 |---|---|
 | `build-all.py` | Builds every firmware target and writes ready-to-flash Intel HEX files to `Release/` at the repository root |
 | `axsem-flasher.py` | Programs an Intel HEX file over the AX8052 serial bootloader: `?` banner → `K` erase → hex lines → `R` run |
-| `ota-send.py` | Sends a new application to a tag over the wireless link (OTA): converts the HEX, sends BEGIN/CHUNK/END, checks the image first with `--dry-run` |
+| `ota-send.py` | Sends a new application to a tag over the wireless link (OTA): converts the HEX, sends BEGIN/CHUNK/END, checks the image first with `--dry-run`. The server's Reflash button does the same through the same code (`ShelfKit-Server/shelfkit/firmware.py`) |
 | `set-id.py` | Gives a tag its wireless id over the air (`current_id new_id`), which it stores in SPI flash and keeps across updates. The server's Fleet drawer does the same thing with a button |
 
 ## Building everything

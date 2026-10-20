@@ -131,8 +131,12 @@ static void on_end(void)
         /* Only power the panel down once it says it is finished: cutting the
          * rail (or sending POF) in the middle of a waveform leaves the old
          * image on the glass. A panel still busy is left to complete. */
-        if (st == EPD_BUSY_DONE)
+        if (st == EPD_BUSY_DONE) {
             epd_sleep();
+            /* The glass holds the image without power. Leaving the rail (PA5)
+             * driven on costs current for nothing until the next image. */
+            pwr_off();
+        }
     } else {
         log_puts("img incomplete, plane=");
         log_dec(plane);

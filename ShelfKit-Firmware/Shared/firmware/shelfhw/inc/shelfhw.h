@@ -55,6 +55,16 @@ void shelfhw_poll(void);
  * host_rx_getc() between calls. For the always-powered hub only. */
 void shelfhw_poll_awake(void);
 
+/* Put the radio (and, by default, the 26 MHz crystal it shares with the MCU)
+ * into its lowest-power state for the gap between polls; wake it again before
+ * talking. Both are idempotent. Build with -DSHELF_XTAL_OFF=0 to keep the
+ * crystal running if a radio mode change turns out to need it. */
+#ifndef SHELF_XTAL_OFF
+#define SHELF_XTAL_OFF 1
+#endif
+void shelfhw_radio_sleep(void);
+void shelfhw_radio_wake(void);
+
 /* Host command input on UART0 RX (PB5). Hub only: on the tag PB5 is the EPD
  * reset line. Polled, there is no interrupt and no buffer beyond the UART's own
  * holding register - the host protocol is line based with a checksum. */

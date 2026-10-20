@@ -86,6 +86,9 @@ const ui = {
   drawerNotes: $("drawer-notes"),
   drawerSave: $("drawer-save"),
   drawerNewId: $("drawer-newid"),
+  drawerFw: $("drawer-fw"),
+  drawerFwStatus: $("drawer-fw-status"),
+  drawerFlash: $("drawer-flash"),
   drawerAssign: $("drawer-assign"),
 
   picker: $("picker"),
@@ -548,6 +551,31 @@ function renderDrawer() {
     if (active !== ui.drawerNotes) ui.drawerNotes.value = row.notes || "";
   }
   ui.drawerNewId.placeholder = nextFreeId() || "next free";
+
+  const firmwares = (state?.firmware || []).filter((f) => f.ok);
+  const wanted = firmwares.map((f) => f.path).join(",");
+  if (signatures.drawerFw !== wanted) {
+    signatures.drawerFw = wanted;
+    const keep = ui.drawerFw.value;
+    ui.drawerFw.innerHTML = "";
+    if (!firmwares.length) {
+      const option = el("option", null, "(no HEX in Release/ - build first)");
+      option.value = "";
+      ui.drawerFw.append(option);
+    }
+    for (const fw of firmwares) {
+      const option = el("option", null, `${fw.name}  (${Math.round(fw.size / 1024)} kB)`);
+      option.value = fw.path;
+      ui.drawerFw.append(option);
+    }
+    if (keep && [...ui.drawerFw.options].some((option) => option.value === keep)) {
+      ui.drawerFw.value = keep;
+    }
+  }
+  ui.drawerFlash.disabled = !!state?.sending;
+  ui.drawerFwStatus.textContent = state?.sending && state.progress
+    ? `${state.status} - frame ${state.progress}`
+    : "";
   ui.drawerPush.onclick = () => openEditorFor(drawerHex);
 }
 
@@ -562,6 +590,30 @@ async function saveDrawer() {
     toast(`${drawerHex} saved`, "ok");
   } catch (err) {
     toast(`cannot save ${drawerHex}: ${err.message}`, "bad");
+  }
+}
+
+async function flashFirmware() {
+  if (!drawerHex) return;
+  const path = ui.drawerFw.value;
+  if (!path) {
+    toast("build a firmware first: python ShelfKit-Firmware/Tooling/build-all.py", "bad");
+    return;
+  }
+  ui.drawerFlash.disabled = true;
+  try {
+    const payload = await postJSON(`/api/tags/${drawerHex}/flash`, { path });
+    render(payload.state);
+    const result = payload.result || {};
+    if (!result.ok) {
+      toast(result.error || "the firmware was not sent", "bad");
+      ui.drawerFlash.disabled = false;
+      return;
+    }
+    toast(`${result.bytes} bytes -> ${drawerHex}, entry ${result.entry}`, "ok");
+  } catch (err) {
+    toast(`cannot flash: ${err.message}`, "bad");
+    ui.drawerFlash.disabled = false;
   }
 }
 
@@ -1249,6 +1301,7 @@ ui.copyLogs.addEventListener("click", copyLogs);
 ui.drawerClose.addEventListener("click", closeDrawer);
 ui.drawerSave.addEventListener("click", saveDrawer);
 ui.drawerAssign.addEventListener("click", assignId);
+ui.drawerFlash.addEventListener("click", flashFirmware);
 ui.pickerUp.addEventListener("click", () => pickerParent && loadDir(pickerParent));
 ui.pickerCancel.addEventListener("click", () => (ui.picker.hidden = true));
 ui.picker.addEventListener("click", (event) => {
