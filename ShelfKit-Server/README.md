@@ -81,7 +81,7 @@ blocks. `color-scheme` is set per theme too, which keeps scrollbars and native c
 
 | Screen | Working today | Interface only (marked in the page) |
 |---|---|---|
-| **Fleet** | Tag table from every `POLL src=<id>` the hub prints: 4-char hex id, **alias**, status dot (online if heard in the last 30 s, pending while an image is in flight, else offline), last-push age **with a thumbnail of the frame that was pushed**, search, status chips, column sort, row selection with bulk actions, tag drilldown drawer that edits the alias and notes | battery, reflash/clear, map view (hidden until a grid is configured) |
+| **Fleet** | Tag table from every `POLL src=<id>` the hub prints: 4-char hex id, **alias**, status dot (online if heard in the last 30 s, pending while an image is in flight, else offline), last-push age **with a thumbnail of the frame that was pushed**, search, status chips, column sort, row selection with bulk actions, tag drilldown drawer that edits the alias and notes and **assigns the tag's wireless id** | battery, reflash/clear, map view (hidden until a grid is configured) |
 | **Editor** | Browse this machine's folders, pick the image and the target tag, **fit mode** (cover/contain/stretch), **dither** (threshold/Floyd-Steinberg/Bayer 4×4), the **three previews** — colour original, 1:1 on-device frame, and a 4× zoom that follows a drag — a midtone warning, and Push / Cancel with live frame progress. Push is only enabled once a preview has been rendered | templates, plain text, QR, multi-target push, the content library, the render → confirm → queue split |
 | **Queue** | The transfer in flight as a single `sending` row, with its frame progress, and Cancel | job history, attempts, retry, per-tag replacement |
 | **Logs** | Event table recorded by the server (`sync`, `push`, `ok`, `fail`, `error`, `boot`, `bootloader`, `open`), consecutive duplicates collapsed into `×N`, filtered by tag or event, **kept across restarts** | the firmware's own event stream (low batt / err) and the per-tag log |
@@ -173,6 +173,24 @@ muddy photo onto three colours does not come out well.
 The preview is addressed by a hash of its inputs (`/api/preview.png?t=…`), so it survives a reload
 and the browser may cache it; picking a new image or changing fit/dither invalidates it and Push
 turns back off until it has been rendered again.
+
+### Assigning a tag's wireless id
+
+A tag's node id is not built into its firmware — it lives in the tag's SPI flash, so one
+image fits the whole fleet and the id survives updates. A brand new tag generates a random
+16-bit id at first boot and logs it (`id? 3F2A new`); the hub prints it as `POLL src=3f2a …`
+like any other tag.
+
+To give it a proper id: click the row in **Fleet**, then under **Wireless identity** either
+type a hex id or leave the field empty to take the lowest free one, and press **Assign**. The
+server sends one DATA frame (`SM_OP_SET_ID`) over the hub port the Console already has open;
+the tag writes the id, reads it back and moves its radio address, so a successful ACK means
+the id will still be there after a reset. The server then moves everything it knew about that
+tag — alias, notes, map position, counters, last frame — to the new row, so the fleet shows
+one tag, not two.
+
+The same thing from a shell, without the UI:
+`python ShelfKit-Firmware/Tooling/set-id.py 3F2A 0100`.
 
 ### Pushing an image
 

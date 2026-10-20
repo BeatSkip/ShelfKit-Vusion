@@ -140,6 +140,24 @@ uint8_t sl_init(uint16_t id, uint8_t net, sl_rx_handler rx_handler, sl_done_hand
     return r;
 }
 
+static struct axradio_address_mask __xdata local_addr;
+
+uint8_t sl_set_local(uint16_t id, uint8_t net)
+{
+    struct axradio_address_mask *local = &local_addr;
+
+    node_id = id;
+    net_id = net;
+    fill_addr((struct axradio_address __xdata *)local, id);
+    local->mask[0] = 0xFF;
+    local->mask[1] = 0xFF;
+    local->mask[2] = 0xFF;
+    local->mask[3] = 0x00;
+    local->mask[4] = 0x00;
+    axradio_set_local_address(local);
+    return 0;
+}
+
 uint8_t sl_busy(void)
 {
     return state != ST_IDLE;

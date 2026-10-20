@@ -19,14 +19,17 @@
 #include "shelflink.h"
 #include "shelfmsg.h"
 #include "shelf_config.h"
+#include "fw_rx.h"
 #include "img_rx.h"
 #include "pwr.h"
+#include "shelf_id.h"
 
 static struct wtimer_desc __xdata poll_timer;
 static uint8_t __xdata poll_payload[SM_POLL_LEN];
 static uint8_t __xdata last_attempts;
 static int8_t __xdata last_hub_rssi;
 static uint16_t __xdata polls_done;
+static uint16_t __xdata node_id;   /* from the SPI flash record, see shelf_id.c */
 
 static void log_stats(void)
 {
@@ -83,7 +86,12 @@ static void on_done(const struct sl_done __xdata *done)
 
 static void on_rx(const struct sl_rx __xdata *rx)
 {
-    if (rx->type == SL_T_DATA)
+    if (rx->type != SL_T_DATA)
+        return;
+    /* firmware opcodes start at SM_OP_FW_BEGIN; image opcodes are below them */
+    if (rx->len && rx->payload[0] >= SM_OP_FW_BEGIN)
+        (void)fw_rx_data(rx->payload, rx->len);
+    else
         (void)img_rx_data(rx->payload, rx->len);
 }
 
@@ -95,7 +103,7 @@ static void poll_cb(struct wtimer_desc __xdata *desc)
     desc->time += (uint32_t)SHELF_POLL_INTERVAL_S * SHELFHW_TICKS_PER_S;
     wtimer0_addabsolute(desc);
 
-    if (img_rx_active())
+    if (img_rx_active() || fw_rx_active())
         return;
 
     poll_payload[SM_POLL_UPTIME_LO] = (uint8_t)up;
@@ -116,13 +124,15 @@ void main(void)
     pwr_init();
     pwr_on();
 #endif
+    node_id = shelf_id_boot();
+
     log_puts("\r\n*** ShelfKit tag, node ");
-    log_hex16(SHELF_NODE_ID);
+    log_hex16(node_id);
     log_puts(" net ");
     log_hex8(SHELF_NET_ID);
     log_nl();
 
-    r = sl_init(SHELF_NODE_ID, SHELF_NET_ID, on_rx, on_done);
+    r = sl_init(node_id, SHELF_NET_ID, on_rx, on_done);
     if (r != AXRADIO_ERR_NOERROR) {
         log_puts("radio init failed, err=");
         log_dec(r);
@@ -141,9 +151,10 @@ void main(void)
     poll_timer.time = SHELFHW_TICKS_PER_S;
     wtimer0_addrelative(&poll_timer);
 
-    /* While an image arrives the tag must hear every frame, so no standby */
+    /* While an image or a firmware image arrives the tag must hear every frame,
+     * so no standby */
     for (;;) {
-        if (img_rx_active())
+        if (img_rx_active() || fw_rx_active())
             shelfhw_poll_awake();
         else
             shelfhw_poll();

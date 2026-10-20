@@ -108,6 +108,10 @@ typedef void (*sl_done_handler)(const struct sl_done __xdata *done);
  * Returns an AXRADIO_ERR_* value (0 = ok, AXRADIO_ERR_NOCHIP = radio not found). */
 uint8_t sl_init(uint16_t node_id, uint8_t net_id, sl_rx_handler on_rx, sl_done_handler on_done);
 
+/* Re-point the hardware address at another id (and net) without re-initialising
+ * the radio: used when the tag is given its identity over the air. */
+uint8_t sl_set_local(uint16_t node_id, uint8_t net_id);
+
 /* Reliable send of one POLL or DATA message to node dst. */
 uint8_t sl_send(uint16_t dst, uint8_t type, const uint8_t __xdata *payload, uint8_t len);
 

@@ -2,11 +2,13 @@
   "name": "Bootloader",
   "board": "axsem-8052f143",
   "sources": [
-    "src"
+    "src",
+    "../Shared/firmware/shelfota"
   ],
   "includes": [
     "include",
-    "../Shared/sdk/libmf/include"
+    "../Shared/sdk/libmf/include",
+    "../Shared/firmware/shelfota/inc"
   ],
   "defines": [],
   "libraries": [
@@ -22,7 +24,7 @@
       "--code-size",
       "65536",
       "-Wl-bVECTOR=0x0000",
-      "-Wl-bHOME=0xe400"
+      "-Wl-bHOME=0xd800"
     ],
     "hooks": {}
   },

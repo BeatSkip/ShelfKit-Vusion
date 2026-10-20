@@ -1,10 +1,12 @@
 #ifndef SHELF_CONFIG_H
 #define SHELF_CONFIG_H
 
-/* Radio identity of this node. The three bytes on air are
- * {node id low, node id high, network id}; both ends must use the same network id.
- * Give every tag its own node id (0x0100 and up). */
-#define SHELF_NODE_ID       0x0100u
+/* Radio identity. The on-air address is {node id low, node id high, net id}; the
+ * net id is the fleet-wide constant below, and the node id is NOT built in: it is
+ * read from the tag's SPI flash (src/shelf_id.c), which is what lets one firmware
+ * image fit the whole fleet. A brand new tag generates a random id at first boot
+ * and keeps it; the server can assign a proper one at any time with
+ * Tooling/set-id.py, and the id survives firmware updates. */
 #define SHELF_NET_ID        0x5A
 
 /* Seconds between polls. Short while bringing the link up; keep the 1 % duty

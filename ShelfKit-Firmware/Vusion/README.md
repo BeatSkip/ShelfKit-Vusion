@@ -25,6 +25,12 @@ poll timer (SHELF_POLL_INTERVAL_S) ─► POLL ─► hub
 - **`src/img_rx.c`** — the receiving side: on DATA, powers the panel rail, brings the panel up from
   deep sleep, writes each chunk into the controller as it arrives (there is no room to buffer a
   frame), refreshes, and logs `img done busy=N S.Ss` so you can see whether the glass reacted.
+- **`src/shelf_id.c`** — the wireless identity: read from SPI flash at boot, random at
+  first boot, assignable over the air, and kept across updates
+  ([Documentation/tag-identity.md](../../Documentation/tag-identity.md)).
+- **`src/fw_rx.c`** — the firmware receiver: streams an OTA image into the SPI flash, checks
+  its CRC, stores the magic the bootloader looks for and resets (see
+  [Documentation/ota-update.md](../../Documentation/ota-update.md)).
 - **`src/epd.c`** — the GDEW026Z39/IL0373 driver: rotated 152 wide × 296 tall, two 5624-byte planes
   (black/white and red), OTP waveform, BUSY-bounded command waits.
 - **`src/spi.c`**, **`src/flash.c`**, **`src/pwr.c`**, **`src/board.c`** — bus, serial flash,
@@ -41,8 +47,7 @@ Everything tag-specific is in one header:
 
 | Setting | Meaning |
 |---|---|
-| `SHELF_NODE_ID` | This tag's address on air (`0x0100` and up; the hub is `SL_NODE_HUB` `0x0001`) |
-| `SHELF_NET_ID` | Network id, must match the hub (`0x5A`) |
+| `SHELF_NET_ID` | Network id, must match the hub (`0x5A`). The node id is not here — it lives in the tag's SPI flash |
 | `SHELF_POLL_INTERVAL_S` | Seconds between polls (default 5; mind the 1 % duty cycle of the 868.3 MHz sub-band) |
 | `SHELF_STATS_EVERY` | Print link statistics every N polls |
 | `SHELF_POWER_LINES` | Drive the unidentified PA2/PA5 lines before the radio starts — the panel rail is separate and handled around each image |
@@ -65,8 +70,9 @@ $flags = @('-mmcs51','--model-small','--iram-size','256','--xram-size','8192','-
 # … the rest of src/*.c, then link with ../Shared/lib/*.lib
 ```
 
-The build prints the memory report: 37,866 B of code and 1,047 B of XRAM out of the 59,389 B / 8,192 B
-the memory model allows, which leaves 154 B of stack.
+The build prints the memory report: 40,622 B of code and 1,084 B of XRAM out of the 59,389 B / 8,192 B
+the memory model allows. Internal RAM is at the wall — new code has to keep its locals out of the
+overlay (the OTA receiver uses `__xdata` statics, and the shared CRC/header helpers are `__reentrant`).
 
 ## Hardware notes that cost real time
 

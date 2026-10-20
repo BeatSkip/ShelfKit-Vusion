@@ -85,6 +85,8 @@ const ui = {
   drawerAlias: $("drawer-alias"),
   drawerNotes: $("drawer-notes"),
   drawerSave: $("drawer-save"),
+  drawerNewId: $("drawer-newid"),
+  drawerAssign: $("drawer-assign"),
 
   picker: $("picker"),
   pickerUp: $("picker-up"),
@@ -503,6 +505,14 @@ function renderFleet() {
 }
 
 // ── drawer ─────────────────────────────────────────────────────────────────
+/** The lowest unused id at or above 0x0100, to prefill the identity field. */
+function nextFreeId() {
+  const used = new Set((state?.tags || []).map(([addr]) => Number(addr)));
+  let candidate = 0x0100;
+  while (used.has(candidate)) candidate += 1;
+  return hex4(candidate);
+}
+
 function openDrawer(hex) {
   drawerHex = hex;
   ui.drawer.hidden = false;
@@ -537,6 +547,7 @@ function renderDrawer() {
     if (active !== ui.drawerAlias) ui.drawerAlias.value = row.alias || "";
     if (active !== ui.drawerNotes) ui.drawerNotes.value = row.notes || "";
   }
+  ui.drawerNewId.placeholder = nextFreeId() || "next free";
   ui.drawerPush.onclick = () => openEditorFor(drawerHex);
 }
 
@@ -551,6 +562,29 @@ async function saveDrawer() {
     toast(`${drawerHex} saved`, "ok");
   } catch (err) {
     toast(`cannot save ${drawerHex}: ${err.message}`, "bad");
+  }
+}
+
+async function assignId() {
+  if (!drawerHex) return;
+  const wanted = ui.drawerNewId.value.trim();
+  ui.drawerAssign.disabled = true;
+  try {
+    const payload = await postJSON(`/api/tags/${drawerHex}/assign`, { id: wanted });
+    render(payload.state);
+    const result = payload.result || {};
+    if (result.ok) {
+      toast(`${drawerHex} is now ${result.id}`, "ok");
+      ui.drawerNewId.value = "";
+      drawerHex = result.id;          // the row moved; keep following this tag
+      renderDrawer();
+    } else {
+      toast(result.error || "assignment failed", "bad");
+    }
+  } catch (err) {
+    toast(`cannot assign an id: ${err.message}`, "bad");
+  } finally {
+    ui.drawerAssign.disabled = false;
   }
 }
 
@@ -1214,6 +1248,7 @@ ui.copyLogs.addEventListener("click", copyLogs);
 
 ui.drawerClose.addEventListener("click", closeDrawer);
 ui.drawerSave.addEventListener("click", saveDrawer);
+ui.drawerAssign.addEventListener("click", assignId);
 ui.pickerUp.addEventListener("click", () => pickerParent && loadDir(pickerParent));
 ui.pickerCancel.addEventListener("click", () => (ui.picker.hidden = true));
 ui.picker.addEventListener("click", (event) => {

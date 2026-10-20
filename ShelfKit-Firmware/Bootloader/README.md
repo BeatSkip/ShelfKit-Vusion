@@ -35,22 +35,21 @@ image changes.
 The reference project's placement is reproduced with two project flags in `sdcc-project.json`:
 
 ```json
-"flags": ["--code-size", "65536", "-Wl-bVECTOR=0x0000", "-Wl-bHOME=0xe400"]
+"flags": ["--code-size", "65536", "-Wl-bVECTOR=0x0000", "-Wl-bHOME=0xd800"]
 ```
 
 | Symbol | Address | Why |
 |---|---|---|
 | `__interrupt_vect` | `0x0000` | the reset vector, `ljmp __sdcc_gsinit_startup` — three bytes of the VECTOR area |
-| `__sdcc_gsinit_startup` | `0x0E438` | high byte **0xE4** is what the erase loop and the banner CRC calculate from |
-| `_bootloader` | `0x0EA41` | entered from the startup, because `crtstart.asm` ends with `ljmp _bootloader` (there is no `main`) |
-| `_jmp_vector` | `0x0E3FE` | the 3-byte application vector, in the slot just below the bootloader; written at run time, never baked into the image |
-| code end | `0x0FB92` | inside the 6 KB the CRC covers (`0xE400 … 0xFBFF`) |
+| `__sdcc_gsinit_startup` | `0x0D838` | high byte **0xD8** is what the erase loop and the banner CRC calculate from |
+| `_bootloader` | `0x0E204` | entered from the startup, because `crtstart.asm` ends with `ljmp _bootloader` (there is no `main`) |
+| `_jmp_vector` | `0x0D7FE` | the application's entry address (low byte first), in the two bytes just below the bootloader; written at run time, never baked into the image |
+| code end | `0x0F876` | 902 bytes short of the top page; the CRC covers `0xD800 … 0xFBFF` (9 KiB) |
 
 Verified after the conversion with the real toolchain: `--code-size 65536` wins over the board's
 59389-byte app limit (the last `-C` wins), the image is 205 hex records from `0x0000` to `0xFB92`,
 `_jmp_vector` is *absent* from the image (so the slot stays `0xFF` until an app is flashed), and the
-first record is `:0300000002E438…` — the reset jump to the startup. 392 B of XRAM, 223 B of stack
-free.
+first record is `:0300000002E438…` — the reset jump to the startup. 428 B of XRAM, and 902 B free in the region.
 
 ## Sources
 
@@ -96,16 +95,25 @@ the **mask-ROM** bootloader selected by the BOOT pin (DTR on the adapter) — th
 can write the `0xE400` region, since a flash-resident bootloader cannot erase itself while it runs.
 Once this image is in place, applications can be uploaded over UART0 without touching the BOOT pin.
 
+## Wireless update (OTA)
+
+This is the bootloader's other job now, and it is deliberately as small as it can
+be: bit-banged SPI, one 32-byte buffer, no radio code. If the tag's SPI flash holds
+the magic sequence the application stored there, the bootloader verifies the image
+CRC, programs it over the application, clears the magic and starts it. The full
+design — flash layout, header, CRC, ordering rules and why it is safe — is in
+[Documentation/ota-update.md](../../Documentation/ota-update.md).
+
+Serial flashing is untouched and still works when an OTA image is broken: a bad CRC
+clears the magic and drops into the command loop instead of destroying anything.
+
 ## Deliberately not done yet
 
-This step is the conversion only. The questions a real bootloader has to answer are still open:
-
-- **Who owns the reset vector.** Today `0x0000` always jumps to the bootloader and the application's
-  entry is expected at `0xE3FE`. A ShelfKit app built by `ShelfKit-Firmware/Vusion` does not write that
-  slot, so installing one would leave the bootloader with nothing to jump to. This is the first design
-  decision of the next step.
-- **The application region.** The current erase loop steps 1 KB pages from `0x0400` up to `0xE4`,
-  erasing everything below the bootloader, including the config page at `0x0400`.
-- **How an update is initiated.** The reference needs SW5 (`PINB & 0x08`) held low at reset; there is
-  no software entry from the application and no "update pending" flag.
-- **No verification step.** Records are written and read back, but there is no whole-image checksum.
+- **The application region.** The erase loop steps 1 KB pages from `0x0400` up to the
+  bootloader's page, so everything below the bootloader (including the page at `0x0400`) goes.
+- **How an update is initiated over serial.** The reference needs SW5 (`PINB & 0x08`) held low at
+  reset; the wireless path needs no button, but there is no software "enter the bootloader" command.
+- **Whole-image verification on the serial path.** OTA images get a CRC; an Intel HEX file sent over
+  the wire is still only checked record by record.
+- **`run_application()` and the jump vector** need a hardware check: it reads the vector with `MOVX`
+  while the vector is stored in flash (see the OTA document's open questions).

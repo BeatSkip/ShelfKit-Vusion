@@ -28,6 +28,11 @@ RESET_PULSE_S = 0.1  # how long the momentary Reset button holds RTS asserted
 
 # Image push defaults. The editor's fit mode and dither come from
 # shelfkit.preview (one pipeline for the preview and the bytes that are sent).
+# The tag's identity opcode, from Shared/firmware/shelflink/inc/shelfmsg.h
+SM_OP_SET_ID = 7
+# Tag ids below this are reserved (0 and 1, the latter being the hub).
+FIRST_TAG_ID = 0x0100
+
 IMAGE_SUFFIXES = frozenset(
     {".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp", ".tif", ".tiff"}
 )
@@ -657,6 +662,76 @@ class App:
             self.status = str(candidate)
         self._save_setting("editor.image", str(candidate))
         return True
+
+    # ── identity ────────────────────────────────────────────────────────────
+    def next_tag_id(self) -> int:
+        """The lowest free id at or above FIRST_TAG_ID."""
+        with self.lock:
+            used = set(self.tags)
+        candidate = FIRST_TAG_ID
+        while candidate in used:
+            candidate += 1
+        return candidate
+
+    def assign_id(self, addr: int, hex_id: str | None = None) -> dict:
+        """Give a tag a new wireless id (SM_OP_SET_ID), and move its record.
+
+        One DATA frame over the hub port the console already has open - the same
+        path images and firmware updates use, so nothing is reopened. The tag
+        stores the id, reads it back and only then moves its radio address, so a
+        successful ACK means the id will still be there after a reset.
+        """
+        key = self.hub_key()
+        pane = self.panes.get(key)
+        if pane is None:
+            return {"ok": False, "error": "no hub pane"}
+        if not pane.worker.is_open:
+            return {"ok": False, "error": f"open the {pane.spec.name} port first"}
+
+        if hex_id in (None, ""):
+            new = self.next_tag_id()
+        else:
+            try:
+                new = int(str(hex_id).strip().replace("0x", ""), 16)
+            except ValueError:
+                return {"ok": False, "error": f"{hex_id!r} is not a hex id"}
+        if new < 2:
+            return {"ok": False, "error": "0 and 1 are reserved (1 is the hub)"}
+        if new > 0xFFFF:
+            return {"ok": False, "error": "node ids are 16 bits"}
+        if new == addr:
+            return {"ok": False, "error": f"{new:04X} is already that tag's id"}
+        with self.lock:
+            if new in self.tags:
+                return {"ok": False, "error": f"{new:04X} is in use by another tag"}
+        if new >= 0x10000:
+            return {"ok": False, "error": "no free id left"}
+
+        payload = bytes([SM_OP_SET_ID, new & 0xFF, new >> 8])
+        cancel = threading.Event()
+        if not self._ping_hub(key, cancel):
+            return {"ok": False, "error": "the hub did not answer P"}
+        with self.lock:
+            self.status = f"assigning {new:04X} to {addr:04X} ..."
+        if not self._send_frame(key, addr, payload, cancel):
+            with self.lock:
+                self.status = f"{addr:04X} did not acknowledge the id change"
+            return {"ok": False, "error": "the tag did not acknowledge"}
+
+        self._rename_tag(addr, new)
+        with self.lock:
+            self.status = f"{addr:04X} is now {new:04X}"
+        self._event("assign", f"{new:04X}", f"was {addr:04X}")
+        return {"ok": True, "old": f"{addr:04X}", "id": f"{new:04X}"}
+
+    def _rename_tag(self, old: int, new: int) -> None:
+        """Re-key every in-memory table and the stored row after an assignment."""
+        with self.lock:
+            for table in (self.tags, self.tag_seen, self.tag_push, self.tag_meta):
+                if old in table:
+                    table[new] = table.pop(old)
+        if self.store is not None:
+            self.store.rename_tag(f"{old:04X}", f"{new:04X}")
 
     # ── editor: fit/dither + the preview ───────────────────────────────────
     def set_options(self, fit: str | None = None, dither: str | None = None) -> None:

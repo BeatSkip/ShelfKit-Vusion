@@ -187,6 +187,27 @@ class Store:
             row = self._db.execute("SELECT * FROM tags WHERE hex_id=?", (hex_id,)).fetchone()
         return dict(row) if row else None
 
+    def rename_tag(self, old_hex: str, new_hex: str) -> bool:
+        """Move a tag's row to another id (identity assignment).
+
+        The tag keeps working through the change, but it polls with the new id
+        afterwards, so everything the server knew about it - alias, notes, map
+        position, counters, last pushed frame - has to move with it.
+        """
+        with self._lock:
+            taken = self._db.execute(
+                "SELECT 1 FROM tags WHERE hex_id=?", (new_hex,)
+            ).fetchone()
+            if taken:
+                # the id already belongs to a tag: keep that row, drop the stale one
+                self._db.execute("DELETE FROM tags WHERE hex_id=?", (old_hex,))
+            else:
+                self._db.execute(
+                    "UPDATE tags SET hex_id=? WHERE hex_id=?", (new_hex, old_hex)
+                )
+            self._db.commit()
+            return not taken
+
     def record_push(self, hex_id: str, name: str, bitmap_key: str | None,
                     at: float | None = None) -> None:
         when = time.time() if at is None else at

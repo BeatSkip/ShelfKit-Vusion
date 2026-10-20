@@ -5,7 +5,9 @@
     "src",
     "../Shared/firmware/axradio",
     "../Shared/firmware/shelfhw",
-    "../Shared/firmware/shelflink"
+    "../Shared/firmware/shelflink",
+    "../Shared/firmware/shelfota",
+    "../Shared/firmware/shelfid"
   ],
   "includes": [
     "include",
@@ -13,7 +15,9 @@
     "../Shared/sdk/libaxdvk2/include",
     "../Shared/firmware/axradio/inc",
     "../Shared/firmware/shelfhw/inc",
-    "../Shared/firmware/shelflink/inc"
+    "../Shared/firmware/shelflink/inc",
+    "../Shared/firmware/shelfota/inc",
+    "../Shared/firmware/shelfid/inc"
   ],
   "defines": [],
   "libraries": [

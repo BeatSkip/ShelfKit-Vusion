@@ -58,6 +58,8 @@ choice is remembered, or `?theme=light` / `?theme=dark` forces one for a link or
 | Image pipeline | Fit (cover/contain/stretch), threshold / Floyd-Steinberg / Bayer 4×4 dither, server-rendered previews, midtone warning |
 | Image push | Reliable frame-by-frame transfer over the port the console already has open, with cancel and progress |
 | **Storage** | Everything the server must remember across a restart, in one SQLite file: tag aliases/notes/positions, announcement counts and ages, the last frame per tag, the rendered bitmaps, the editor's image and options, the port each pane used, and the event history behind Logs |
+| OTA update | A tag receives a new application over the air into its SPI flash and the bootloader programs it on the next reset — **implemented, not yet tested on hardware** ([design](Documentation/ota-update.md)) |
+| Tag identity | Random 16-bit node id on a brand new tag, stored in SPI flash; assignable over the air from the server's Fleet drawer (or `Tooling/set-id.py`); survives firmware updates ([design](Documentation/tag-identity.md)) |
 | Honest gaps | No job history, battery reporting, templates, stats history, OTA, map view, or auth |
 
 Nothing above is a mockup: the screenshots are the running app, taken against simulated serial data

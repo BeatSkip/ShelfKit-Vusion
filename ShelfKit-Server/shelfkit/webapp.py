@@ -22,6 +22,7 @@ long-lived poll connection per browser tab. The API is small and boring:
     POST /api/send                 {"addr": 256}
     POST /api/cancel
     POST /api/tags/<hex>           {"alias": "...", "notes": "...", "grid_row": 1, "grid_col": 3}
+    POST /api/tags/<hex>/assign    {"id": "0100"}  (empty = next free) over the hub port
 
 State that has to outlive the process lives in shelfkit/store.py (one SQLite
 file): settings, tag metadata, rendered bitmaps and the event log.
@@ -165,6 +166,13 @@ class Handler(BaseHTTPRequestHandler):
                 if updated is None:
                     return self._error(f"bad tag id {parts[2]}")
                 return self._json({"tag": updated, "state": self.app.state()})
+            if len(parts) == 4 and parts[1] == "tags" and parts[3] == "assign":
+                try:
+                    addr = int(parts[2], 16)
+                except ValueError:
+                    return self._error(f"bad tag id {parts[2]}")
+                result = self.app.assign_id(addr, body.get("id"))
+                return self._json({"result": result, "state": self.app.state()})
             if len(parts) == 4 and parts[1] == "pane":
                 return self._pane_command(parts[2], parts[3], body)
         except Exception as exc:  # noqa: BLE001 - a bad request must not kill the server

@@ -8,6 +8,7 @@
 #include <libmfuart0.h>
 #include <libmfflash.h>
 #include <libmfcrc.h>
+#include "shelfota.h"
 
 /*
  * Configure whether the FRC Oscillator (which is used for Baud Rate Generation)
@@ -31,7 +32,11 @@ extern void _sdcc_gsinit_startup(void);
 #define bootloader_reset_vector_hi() ((uint8_t)(bootloader_reset_vector() >> 8))
 #define bootloader_reset_vector_lo() ((uint8_t)bootloader_reset_vector())
 
-const __code __at(0xe3fe) uint16_t jmp_vector;
+/* The application's entry vector, in the two bytes just below the bootloader.
+ * Written from the image's own reset jump when an application is flashed, read
+ * back by run_application() to jump into it. It must stay immediately below
+ * HOME (see -Wl-bHOME in sdcc-project.json). */
+const __code __at(0xd7fe) uint16_t jmp_vector;
 __xdata uint8_t orig_jmp_vector[3];
 __xdata uint8_t orig_jmp_vector_mask;
 __xdata uint8_t line_buffer[260];
@@ -354,6 +359,187 @@ static void write_banner(void)
     uart0_writestr(uart_crlf);
 }
 
+
+/* ── OTA update from the tag's SPI flash ──────────────────────────────────────
+ *
+ * The application is the only part that transfers and stores a new firmware; it
+ * leaves a magic sequence and a CRC in sector 0 of the SPI flash and resets. All
+ * this side does is: notice the magic, verify the CRC *before* it destroys the
+ * application, program the image, and erase the magic so the update runs once.
+ *
+ * Deliberately bit-banged and buffer-at-a-time: no SPI driver, no radio, and no
+ * second copy of anything the serial path already has. It costs ~0.5 KB, which
+ * is why the bootloader now sits at 0xE000 instead of 0xE400 (see -Wl-bHOME).
+ */
+#define OTA_CHUNK   32
+
+static uint8_t __xdata ota_buf[OTA_CHUNK];
+
+static uint8_t ota_spi(uint8_t out)
+{
+    uint8_t i, in = 0;
+
+    for (i = 0; i < 8; i++) {
+        if (out & 0x80)
+            PORTC_2 = 1;
+        else
+            PORTC_2 = 0;
+        out <<= 1;
+        PORTC_1 = 1;                /* mode 0: sample on the rising edge */
+        in <<= 1;
+        if (PORTC_3)
+            in |= 1;
+        PORTC_1 = 0;
+    }
+    return in;
+}
+
+static void ota_spi_begin(void)
+{
+    DIRC |= 0x07;                   /* CS, SCK, MOSI out ... */
+    DIRC &= (uint8_t)~0x08;         /* ... MISO in */
+    PORTC_0 = 1;                    /* CS idle high */
+    PORTC_1 = 0;                    /* clock idles low */
+}
+
+static void ota_flash_read(uint32_t addr, uint8_t *buf, uint8_t len)
+{
+    uint8_t i;
+
+    PORTC_0 = 0;
+    ota_spi(0x03);
+    ota_spi((uint8_t)(addr >> 16));
+    ota_spi((uint8_t)(addr >> 8));
+    ota_spi((uint8_t)addr);
+    for (i = 0; i < len; i++)
+        buf[i] = ota_spi(0x00);
+    PORTC_0 = 1;
+}
+
+static void ota_flash_wait(void)
+{
+    uint8_t status;
+
+    do {
+        PORTC_0 = 0;
+        ota_spi(0x05);              /* read status */
+        status = ota_spi(0x00);
+        PORTC_0 = 1;
+    } while (status & 0x01);        /* write/erase in progress */
+}
+
+static void ota_flash_erase_header(void)
+{
+    ota_flash_wait();
+    PORTC_0 = 0;
+    ota_spi(0x06);                  /* write enable */
+    PORTC_0 = 1;
+    PORTC_0 = 0;
+    ota_spi(0x20);                  /* 4 KiB sector erase at 0 */
+    ota_spi(0x00);
+    ota_spi(0x00);
+    ota_spi(0x00);
+    PORTC_0 = 1;
+    ota_flash_wait();
+}
+
+static uint16_t __xdata ota_len;
+static uint16_t __xdata ota_crc;
+
+/* 1 when the SPI flash holds a committed image whose header checks out. */
+static uint8_t ota_pending(void)
+{
+    uint8_t header[OTA_HDR_BYTES];
+
+    ota_spi_begin();
+    ota_flash_read(OTA_HDR_ADDR, header, OTA_HDR_BYTES);
+    if (!ota_header_parse(header, &ota_len, &ota_crc))
+        return 0;
+    uart0_writestr("OTA image len=");
+    uart0_writenum16(ota_len, 1, 0);
+    uart0_writestr(" crc=");
+    uart0_writehex16(ota_crc, 4, WRNUM_PADZERO);
+    uart0_writestr("\r\n");
+    return 1;
+}
+
+/* Verify, erase, program, clear the magic. 0 = the application was replaced. */
+static int8_t ota_program(void)
+{
+    uint8_t i, n;
+    uint16_t crc, off, word;
+    int8_t st;
+
+    /* 1. the CRC first: a corrupt image must never cost the working firmware */
+    crc = OTA_CRC_INIT;
+    for (off = 0; off < ota_len; off += OTA_CHUNK) {
+        n = (uint8_t)(((uint16_t)(ota_len - off) < OTA_CHUNK) ? (ota_len - off) : OTA_CHUNK);
+        ota_flash_read(OTA_IMAGE_ADDR + off, ota_buf, n);
+        crc = ota_crc16(ota_buf, n, crc);
+    }
+    if (crc != ota_crc) {
+        uart0_writestr("OTA ERR crc\r\n");
+        ota_flash_erase_header();
+        return -1;
+    }
+
+    /* 2. the entry vector: the image's reset jump is 02 hi lo, and
+     * run_application() jumps through jmp_vector (low byte first) */
+    ota_flash_read(OTA_IMAGE_ADDR, ota_buf, 3);
+    if (ota_buf[0] != 0x02) {
+        uart0_writestr("OTA ERR entry\r\n");
+        ota_flash_erase_header();
+        return -2;
+    }
+
+    st = erase_app();
+    if (st) {
+        uart0_writestr("OTA ERR erase\r\n");
+        return st;
+    }
+
+    flash_unlock();
+    NVADDR0 = (uint16_t)&jmp_vector;
+    NVADDR1 = ((uint16_t)&jmp_vector) >> 8;
+    NVDATA0 = ota_buf[2];
+    NVDATA1 = ota_buf[1];
+    NVSTATUS = 0x30;
+    st = waitflash(128);
+    if (st) {
+        flash_lock();
+        return st;
+    }
+
+    /* 3. the image itself, 32-byte words at a time. Addresses 0..2 are the
+     * bootloader's own reset vector: skipped. The word at 2 keeps its low byte
+     * (0xFF programs nothing) and carries image byte 3 in its high byte. */
+    for (off = 0; off < ota_len; off += OTA_CHUNK) {
+        n = (uint8_t)(((uint16_t)(ota_len - off) < OTA_CHUNK) ? (ota_len - off) : OTA_CHUNK);
+        ota_flash_read(OTA_IMAGE_ADDR + off, ota_buf, n);
+        for (i = 0; i < n; i += 2) {
+            word = (uint16_t)(off + i);
+            if (word < 2)
+                continue;
+            NVADDR0 = (uint8_t)word;
+            NVADDR1 = (uint8_t)(word >> 8);
+            NVDATA0 = (word == 2) ? 0xFF : ota_buf[i];
+            NVDATA1 = (uint8_t)((i + 1 < n) ? ota_buf[i + 1] : 0xFF);
+            NVSTATUS = 0x30;
+            st = waitflash(128);
+            if (st) {
+                flash_lock();
+                return st;
+            }
+        }
+    }
+    flash_lock();
+
+    /* 4. the magic goes last: the update must not run twice */
+    ota_flash_erase_header();
+    uart0_writestr("OTA ok, booting\r\n");
+    return 0;
+}
+
 uint8_t _sdcc_external_startup(void)
 {
     DPS = 0x00;
@@ -477,6 +663,12 @@ __start__stack:
     PALTA |= 0x01;
     DIRA |= 0x01;
 #endif
+
+    if (ota_pending()) {
+        if (ota_program() == 0) {
+            /* fall through: jmp_vector now points into the new application */
+        }
+    }
 
     write_banner();
 

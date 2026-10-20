@@ -412,6 +412,16 @@
         <span class="hint">stored on the server, so it survives a restart</span>
       </div>
 
+      <h3>Wireless identity</h3>
+      <div class="row">
+        <input id="drawer-newid" class="mono" maxlength="6" placeholder="next free"
+               spellcheck="false" title="new node id in hex; leave empty for the next free one">
+        <button id="drawer-assign">Assign</button>
+      </div>
+      <p class="hint">Sent to the tag over the hub port, which stores it in SPI flash and moves
+        its radio address. The tag keeps this id across firmware updates. Leave the field empty
+        to take the next free id.</p>
+
       <h3>History <span class="chip">soon</span></h3>
       <p class="hint">Per-tag bitmap history needs a content store per tag; the last frame is kept
         and shown above.</p>
