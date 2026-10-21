@@ -123,6 +123,36 @@ every real transfer. It also refuses an image that would not fit the window
 
 ### Headroom
 
+The image window is 43,006 bytes and the application is now **31,694**, so there are
+**11,312 bytes** free. Until recently there were 64: `src/epd_image.c` — a
+compiled-in boot logo worth 11,248 bytes — was linked into both radio images while
+nothing referenced it any more (the boot demo it belonged to was replaced by the
+shelf-link main). It was deleted from both targets, which also shrank the hub from
+37,775 to 26,210 bytes.
+
+## Using it
+
+From the server: **Fleet** → click the tag → **Firmware update** → pick the HEX → **Reflash**.
+
+From a shell:
+
+```
+python ShelfKit-Firmware/Tooling/build-all.py                  # Release/vusion-<date>-<hash>.hex
+python ShelfKit-Firmware/Tooling/ota-send.py Release/vusion-…​.hex --addr 0100 -p COM4
+```
+
+`ota-send.py` converts the Intel HEX to the binary the tag wants (gap-filling with
+0xFF), prints the entry address and CRC, then sends BEGIN, 1451 chunks and END.
+A 40 KB image is ~2 minutes at the current radio settings. The tag's log shows
+`fw begin len=… crc=…`, then `fw stored, resetting`, and after the reboot the
+bootloader prints `OTA image len=… crc=…` and `OTA ok, booting`.
+
+`--dry-run` parses and checksums without touching the radio — worth doing before
+every real transfer. It also refuses an image that would not fit the window
+(`0x3000–0xD7FE`, 43,006 bytes).
+
+### Headroom
+
 The image window is 43,006 bytes and the application is 42,117, so there are
 **889 bytes** left (635 under the sender's 0xA700 cap). That is thin — the next
 feature that needs a kilobyte will not fit in an OTA image even though it fits in

@@ -89,6 +89,7 @@ const ui = {
   drawerSave: $("drawer-save"),
   drawerNewId: $("drawer-newid"),
   drawerFw: $("drawer-fw"),
+  drawerService: $("drawer-service"),
   drawerFwStatus: $("drawer-fw-status"),
   drawerFlash: $("drawer-flash"),
   drawerForget: $("drawer-forget"),
@@ -636,6 +637,22 @@ async function forget(path, body, what) {
   } catch (err) {
     toast(`cannot forget: ${err.message}`, "bad");
     return 0;
+  }
+}
+
+async function serviceImage() {
+  if (!drawerHex) return;
+  ui.drawerService.disabled = true;
+  try {
+    const payload = await postJSON(`/api/tags/${drawerHex}/service`, {});
+    render(payload.state);
+    const result = payload.result || {};
+    if (result.ok) toast(`service label for ${result.id} is on its way`, "ok");
+    else toast(result.error || "the label was not sent", "bad");
+  } catch (err) {
+    toast(`cannot send the service image: ${err.message}`, "bad");
+  } finally {
+    ui.drawerService.disabled = false;
   }
 }
 
@@ -1348,6 +1365,7 @@ ui.drawerClose.addEventListener("click", closeDrawer);
 ui.drawerSave.addEventListener("click", saveDrawer);
 ui.drawerAssign.addEventListener("click", assignId);
 ui.drawerFlash.addEventListener("click", flashFirmware);
+ui.drawerService.addEventListener("click", serviceImage);
 ui.drawerForget.addEventListener("click", () => {
   armForget(ui.drawerForget, "Forget tag", async () => {
     if (!drawerHex) return;

@@ -907,6 +907,36 @@ class App:
                 self.status = f"forgot {len(hexes)} tag(s)"
         return {"forgot": len(hexes), "hexes": hexes}
 
+    def service_image(self, addr: int, note: str | None = None,
+                      alias: str | None = None) -> dict:
+        """Draw this tag's service label and push it over the air.
+
+        The label carries what a tag in hand needs to be identified: the node id,
+        the alias and a note (the tag's stored note unless one is given). It is
+        generated at panel size, so it is rendered with fit=stretch and
+        dither=threshold - dithering text makes it illegible - and pushed through
+        the same wireless path as any other image. The hub port is the only serial
+        link involved, and the tag needs nothing plugged in.
+        """
+        from . import service_image
+
+        with self.lock:
+            meta = self.tag_meta.get(addr) or {}
+            used_alias = alias if alias is not None else meta.get("alias")
+            used_note = note if note is not None else meta.get("notes")
+        used_note = (used_note or "").strip()
+
+        path = REPO_ROOT / "ShelfKit-Server" / "data" / "service" / f"service-{addr:04X}.png"
+        try:
+            service_image.write(path, addr, used_alias, used_note)
+        except Exception as exc:  # noqa: BLE001 - Pillow or font trouble
+            return {"ok": False, "error": f"cannot draw the label: {exc}"}
+
+        if not self.send(addr, fit="stretch", dither="threshold", image_path=str(path)):
+            return {"ok": False, "error": self.status, "image": str(path)}
+        return {"ok": True, "id": f"{addr:04X}", "alias": used_alias,
+                "note": used_note, "image": str(path)}
+
     def factory_reset(self, addr: int) -> dict:
         """Wipe a tag's flash and let it come back as a new tag (SM_OP_WIPE).
 
@@ -970,8 +1000,8 @@ class App:
     def render_preview(self) -> dict:
         """Render the picked image for the panel and remember it for the page."""
         with self.lock:
-            image = self.image
-            fit, dither = self.fit, self.dither
+            fit = fit or self.fit
+            dither = dither or self.dither
         if image is None:
             return {"ok": False, "error": "pick an image first"}
         try:
@@ -1080,12 +1110,14 @@ class App:
             time.sleep(hubhost.CMD_RETRY_PAUSE_S)
         return False
 
-    def send(self, addr: int) -> bool:
+    def send(self, addr: int, fit: str | None = None, dither: str | None = None,
+             image_path: str | None = None) -> bool:
         with self.lock:
             if self.sending:
                 self.status = "a transfer is already running"
                 return False
-            if self.image is None:
+            image = Path(image_path) if image_path else self.image
+            if image is None:
                 self.status = "pick an image first"
                 return False
             key = self.hub_key()
@@ -1094,8 +1126,8 @@ class App:
             if not port:
                 self.status = "the hub pane has no port set"
                 return False
-            image = self.image
-            fit, dither = self.fit, self.dither
+            fit = fit or self.fit
+            dither = dither or self.dither
 
         if not pane.worker.is_open:
             # The user asked for this, so open it rather than refusing - but say so,

@@ -35,8 +35,6 @@ poll timer (SHELF_POLL_INTERVAL_S) ─► POLL ─► hub
   (black/white and red), OTP waveform, BUSY-bounded command waits.
 - **`src/spi.c`**, **`src/flash.c`**, **`src/pwr.c`**, **`src/board.c`** — bus, serial flash,
   the transistor lines (U4 = panel supply), and the pin map.
-- **`src/epd_image.c`** — a compiled-in logo, the boot screen. Regenerate it from a PNG with
-  `../../ShelfKit-Server/shelfkit/png2epd.py`.
 
 The wire protocol, retries, addressing and the image frame format are in
 [Documentation/wireless-link.md](../../Documentation/wireless-link.md).

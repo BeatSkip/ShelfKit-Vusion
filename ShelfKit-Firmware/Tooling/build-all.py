@@ -437,7 +437,7 @@ def main(argv: list[str] | None = None) -> int:
         if row["target"] == "Vusion" and row.get("code", 0) > OTA_IMAGE_WINDOW:
             print(f"\n!!! the tag image is {row['code']} B, over the {OTA_IMAGE_WINDOW} B OTA window:")
             print("    it flashes over the wire, but ota-send.py and the server will refuse it.")
-            print("    Free space in the application (src/epd_image.c is 11,248 B of it).")
+            print("    Free space in the application, or move bytes out of it.")
 
     print("\n=== ready to flash ===")
     for row in results:

@@ -218,6 +218,30 @@ which covers it.
 The shell equivalent is `Tooling/ota-send.py`; both use `shelfkit/firmware.py`, so they cannot
 disagree about the opcodes or the CRC.
 
+### Service labels
+
+**Fleet** → click a tag → **Service image**. The server draws a label at panel size
+and pushes it over the wireless link, like any other image — no serial connection to
+the tag is involved, only the hub port.
+
+The label follows the stock tag label's layout (top/bottom marks, the ShelfKit
+banner, black and red patches) and carries what a tag in hand needs:
+
+| element | source |
+|---|---|
+| wireless id, large | the tag's current node id |
+| alias | the tag's alias, if it has one |
+| note | the tag's **notes** field, or a one-off `note` in the request |
+| timestamp | when the label was drawn (`YYYY-MM-DD HH:MM`) |
+| B/W/R patches | a panel that has lost a colour is obvious next to them |
+
+It is drawn at 152×296 and rendered with `fit=stretch, dither=threshold` — dithering
+text makes it illegible — through the same pipeline as every other image, so what
+you see in the Editor when you reload is what the tag got. A one-off note does not
+change the stored one: `POST /api/tags/<hex>/service {"note": "cable 12"}` labels a
+single push. The editor's own image is not replaced by this (`send()` takes the path
+explicitly).
+
 ### Assigning a tag's wireless id
 
 A tag's node id is not built into its firmware — it lives in the tag's SPI flash, so one
@@ -325,18 +349,19 @@ python ShelfKit-Server/shelfkit/hubhost.py --list
 tag announces itself and the file is new or changed since the last successful push (remembered in
 `images/.sent.json`).
 
-## Regenerating a target's boot image
+## Converting an image for the panel by hand
 
-`shelfkit/png2epd.py` writes into a firmware folder, so run it from the target so the default
-`--out-dir src` lands in the right place:
+`shelfkit/png2epd.py` is the standalone converter: it composites transparency over
+white, quantises to black/white/red (optionally with Floyd-Steinberg dithering) and
+rotates to the panel's mounted orientation.
 
 ```
-cd ShelfKit-Firmware/Vusion
-python ../../ShelfKit-Server/shelfkit/png2epd.py polyform-eink.png
+python ShelfKit-Server/shelfkit/png2epd.py photo.png --out-dir out/   # photo_bw.c / photo_red.c
 ```
 
-`--rotate 90` is the default and is what the checked-in planes were generated with; add
-`--dither` for Floyd-Steinberg dithering, or `--out-dir` to write the planes elsewhere.
+Nothing in the firmware links a converted image any more — the tag's `src/` has no
+boot logo since the boot demo was replaced, and the Editor renders on the fly. The
+converter is kept for generating C arrays when something does need one.
 
 ## How it is put together
 
