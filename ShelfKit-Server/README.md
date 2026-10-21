@@ -336,6 +336,23 @@ Storage is best-effort by design: if the database cannot be opened the server pr
 without it, and a failed write is reported in the log rather than failing the request. A console that
 refuses to start because its history file is locked would be a worse tool.
 
+## Smoke test
+
+```
+python ShelfKit-Server/tests/smoke.py
+```
+
+No hardware and no test framework: the two ports are fakes that answer `P` with `PONG`
+and every `S` frame with `SENT … ok`, so the real code paths run end to end — the
+Editor's render/preview (including the restore-on-start re-render), a service label
+being drawn and pushed, an ordinary image push (404 frames), and the preview coming
+back after a restart. Exit code 0 means everything passed.
+
+It exists because two regressions in this code were only found on hardware or by
+hand: a broad text edit once silently hit both `send()` and `render_preview()`, which
+left the Editor's render path raising `UnboundLocalError` while every other screen
+looked fine.
+
 ## The same thing from a shell
 
 ```

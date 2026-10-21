@@ -45,11 +45,9 @@ void extflash_read(uint32_t addr, uint8_t *buf, uint16_t len)
     spi_deselect(SPI_DEV_FLASH);
 }
 
-#define FLASH_READY_POLLS   500     /* x delay(1000) ~= 0.5 s: a sector erase is ~0.1 s */
-
-uint8_t extflash_wait_ready(void) __reentrant
+uint8_t extflash_wait_ready(uint16_t polls) __reentrant
 {
-    uint16_t n = FLASH_READY_POLLS;
+    uint16_t n = polls;
     uint8_t status;
 
     for (;;) {
@@ -78,7 +76,7 @@ uint8_t extflash_write(uint32_t addr, const uint8_t *buf, uint16_t len) __reentr
         uint16_t room = (uint16_t)(FLASH_PAGE - (addr & (FLASH_PAGE - 1)));
         uint16_t n = (len < room) ? len : room;
 
-        if (!extflash_wait_ready())
+        if (!extflash_wait_ready(FLASH_POLL_MS_PROGRAM))
             return 0;
         flash_write_enable();
         spi_select(SPI_DEV_FLASH);
@@ -93,13 +91,13 @@ uint8_t extflash_write(uint32_t addr, const uint8_t *buf, uint16_t len) __reentr
         buf += n;
         len -= n;
     }
-    return extflash_wait_ready();
+    return extflash_wait_ready(FLASH_POLL_MS_PROGRAM);
 }
 
 uint8_t extflash_erase(uint32_t addr, uint16_t len) __reentrant
 {
     while (len) {
-        if (!extflash_wait_ready())
+        if (!extflash_wait_ready(FLASH_POLL_MS_PROGRAM))
             return 0;
         flash_write_enable();
         spi_select(SPI_DEV_FLASH);
@@ -112,5 +110,5 @@ uint8_t extflash_erase(uint32_t addr, uint16_t len) __reentrant
         addr += FLASH_SECTOR;
         len = (len > FLASH_SECTOR) ? (uint16_t)(len - FLASH_SECTOR) : 0;
     }
-    return extflash_wait_ready();
+    return extflash_wait_ready(FLASH_POLL_MS_ERASE);
 }

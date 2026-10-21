@@ -29,8 +29,12 @@ void extflash_read_jedec_id(uint8_t id[3]);
 void extflash_read(uint32_t addr, uint8_t *buf, uint16_t len);
 
 /* Block until the chip's write/erase in progress bit clears. Returns 1 when it
- * did, 0 on timeout (~0.5 s): a chip that never answers must not hang the tag. */
-uint8_t extflash_wait_ready(void) __reentrant;
+ * did, 0 on timeout: a chip that never answers must not hang the tag.
+ * `polls` is in milliseconds (~500 for a sector erase, ~20 for a page program -
+ * a program that is going to fail must not block the radio for half a second). */
+#define FLASH_POLL_MS_ERASE   500
+#define FLASH_POLL_MS_PROGRAM  20
+uint8_t extflash_wait_ready(uint16_t polls) __reentrant;
 
 /* Program len bytes at addr (0x02 page program). Splits at the chip's 256-byte
  * page boundaries by itself, so callers only have to erase first.

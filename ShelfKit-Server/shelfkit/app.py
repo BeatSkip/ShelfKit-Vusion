@@ -1000,8 +1000,8 @@ class App:
     def render_preview(self) -> dict:
         """Render the picked image for the panel and remember it for the page."""
         with self.lock:
-            fit = fit or self.fit
-            dither = dither or self.dither
+            image = self.image
+            fit, dither = self.fit, self.dither
         if image is None:
             return {"ok": False, "error": "pick an image first"}
         try:

@@ -156,8 +156,13 @@ void main(void)
     uint8_t r;
 
     shelfhw_init();
-#if SHELF_POWER_LINES
+    /* PA5 (U4, the panel supply) must be driven to its *off* level right away.
+     * Left floating, the unpowered panel is back-powered through its SPI pins and
+     * loads the bus the flash shares with it: reads still return sane data, but a
+     * page program is not accepted (the identity write failed with "read back
+     * ffff" until an image had been pushed, i.e. until pwr_init() had run). */
     pwr_init();
+#if SHELF_POWER_LINES
     pwr_on();
 #endif
     node_id = shelf_id_boot();

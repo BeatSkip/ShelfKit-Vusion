@@ -125,6 +125,12 @@ Other consequences:
 
 ## Hardware notes that cost real time
 
+- **PA5 (transistor U4) must be driven off at boot, not left floating.** Floating, the
+  unpowered panel is back-powered through the SPI pins it shares with the flash: reads
+  still look sane, but a page program is not accepted. That is why the identity write
+  failed ("read back ffff") until an image push had run `pwr_init()`, and why OTA
+  chunks stalled the tag for the old 0.5 s flash timeout and lost their ACKs. `main()`
+  now calls `pwr_init()` (rail driven off) before it touches the flash.
 - **PA5 (transistor U4) is the panel supply, active low.** Without it the panel accepts a whole init
   sequence and a whole frame over SPI and then runs no refresh waveform — which looks exactly like a
   dead panel. `img_rx.c::panel_power_on()` drives it on before every image, independently of

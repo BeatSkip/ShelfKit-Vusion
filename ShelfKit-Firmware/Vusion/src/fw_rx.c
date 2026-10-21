@@ -115,7 +115,11 @@ static void on_chunk(void)
          * decides, so just ignore it */
         return;
     }
-    extflash_write(OTA_IMAGE_ADDR + got, msg + SM_FW_HDR, n);
+    if (!extflash_write(OTA_IMAGE_ADDR + got, msg + SM_FW_HDR, n)) {
+        log_puts("fw write FAILED, flash busy\r\n");
+        abort_transfer();
+        return;
+    }
     crc_calc = ota_crc16(msg + SM_FW_HDR, n, crc_calc);
     got += n;
 }
