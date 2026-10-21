@@ -27,6 +27,27 @@ static uint8_t __xdata rec[SHELFID_BYTES];
 static uint16_t __xdata id;
 static uint8_t __xdata flags;
 
+/* Sectors the OTA image window spans; above 0xA700 nothing is ever written. */
+#define WIPE_IMAGE_SECTORS  ((uint16_t)((OTA_MAX_IMAGE + OTA_SECTOR - 1) / OTA_SECTOR))
+
+/* The flash only belongs to this firmware once it holds an identity record.
+ * Anything else may be left over from another firmware on a used tag: a stale
+ * OTA marker at 0x0000 (which would make the bootloader overwrite this very
+ * application on the next reset), an old image, a previous owner's data.
+ * So the first boot wipes every sector this firmware owns before writing its
+ * own record - the identity sector included, since its content is exactly what
+ * we have just decided not to trust. */
+static void wipe_owned_sectors(void) __reentrant
+{
+    uint16_t i;
+
+    extflash_erase(OTA_HDR_ADDR, (uint16_t)OTA_SECTOR);
+    extflash_erase(OTA_RESERVED_ADDR, (uint16_t)OTA_SECTOR);
+    for (i = 0; i < WIPE_IMAGE_SECTORS; i++)
+        extflash_erase(OTA_IMAGE_ADDR + (uint32_t)i * OTA_SECTOR, (uint16_t)OTA_SECTOR);
+    extflash_erase(SHELFID_ADDR, (uint16_t)SHELFID_SECTOR);
+}
+
 static void store(uint16_t node_id, uint8_t set_flags) __reentrant
 {
     shelfid_build(rec, node_id, set_flags);
@@ -47,6 +68,13 @@ uint16_t shelf_id_boot(void) __reentrant
         return id;
     }
 
+#if SHELF_WIPE_FIRST_BOOT
+    /* an unreadable record means this flash is not ours yet: start from a
+     * known-empty state instead of inheriting someone else's */
+    wipe_owned_sectors();
+    log_puts("flash wiped\r\n");
+#endif
+
     /* nothing stored yet (or unreadable): pick one and keep it */
     do {
         id = shelfhw_random();
@@ -56,6 +84,14 @@ uint16_t shelf_id_boot(void) __reentrant
     log_hex16(id);
     log_puts(" new\r\n");
     return id;
+}
+
+uint8_t shelf_id_factory_reset(void) __reentrant
+{
+    spi_init();
+    extflash_release_powerdown();
+    wipe_owned_sectors();
+    return 1;
 }
 
 uint8_t shelf_id_assign(uint16_t node_id) __reentrant

@@ -17,6 +17,13 @@
 uint16_t shelf_id_boot(void) __reentrant;
 
 /**
+ * Erase every SPI flash sector this firmware owns (OTA header, identity,
+ * reserved, the whole image window). The next boot then finds no identity, so
+ * it generates a random id and starts from a clean slate.
+ */
+uint8_t shelf_id_factory_reset(void) __reentrant;
+
+/**
  * Take an id handed to the tag over the air: store it, read it back to verify,
  * then re-point the radio's address at it. Returns 1 only when all three
  * happened, so the tag never reports an id it would not survive a reset with.

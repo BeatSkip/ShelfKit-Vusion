@@ -69,6 +69,8 @@
           <button class="chip" data-status="unreachable">Unreachable</button>
         </div>
         <span class="grow"></span>
+        <button id="fleet-forget-stale" class="ghost"
+                title="Delete every tag that has not been heard for 10 minutes">Forget silent</button>
         <div class="segmented">
           <button class="on">Table</button>
           <button disabled title="Configure a grid in Settings first">Map</button>
@@ -79,7 +81,7 @@
         <span id="fleet-selected">0 selected</span>
         <button id="bulk-push">Push</button>
         <button disabled title="Firmware updates go to one tag at a time (open its row)">Reflash</button>
-        <button disabled title="Not implemented yet">Clear</button>
+        <button id="bulk-forget" class="primary cancel" title="Delete the server's record of the selected tags">Forget</button>
       </div>
 
       <table class="grid" id="fleet-table">
@@ -266,6 +268,8 @@
       <div class="screen-head">
         <h1>Stats</h1>
         <span class="grow"></span>
+        <button id="fleet-forget-stale" class="ghost"
+                title="Delete every tag that has not been heard for 10 minutes">Forget silent</button>
         <div class="segmented"><button class="on">24h</button><button>7d</button></div>
       </div>
       <div class="cards">
@@ -431,6 +435,16 @@
         listens for a few seconds after each poll, so a transfer can take up to a minute to
         start.</p>
       <span id="drawer-fw-status" class="dim"></span>
+
+      <div class="row">
+        <button id="drawer-forget" class="primary cancel"
+                title="Delete the server's record of this tag">Forget tag</button>
+        <button id="drawer-wipe" class="primary cancel"
+                title="Wipe the tag's flash and reset it">Factory reset</button>
+      </div>
+      <p class="hint">Forget only drops the server's row; the tag keeps its id and comes back if
+        it polls. Factory reset also tells the tag to erase its flash: it returns with a new random
+        id and no pending firmware.</p>
 
       <h3>History <span class="chip">soon</span></h3>
       <p class="hint">Per-tag bitmap history needs a content store per tag; the last frame is kept

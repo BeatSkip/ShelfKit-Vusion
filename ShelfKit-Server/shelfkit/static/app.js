@@ -39,6 +39,8 @@ const ui = {
   fleetOpenSerial: $("fleet-open-serial"),
   fleetTable: $("fleet-table"),
   bulkPush: $("bulk-push"),
+  bulkForget: $("bulk-forget"),
+  fleetForgetStale: $("fleet-forget-stale"),
 
   editorTargets: $("editor-targets"),
   editorImage: $("editor-image"),
@@ -89,6 +91,8 @@ const ui = {
   drawerFw: $("drawer-fw"),
   drawerFwStatus: $("drawer-fw-status"),
   drawerFlash: $("drawer-flash"),
+  drawerForget: $("drawer-forget"),
+  drawerWipe: $("drawer-wipe"),
   drawerAssign: $("drawer-assign"),
 
   picker: $("picker"),
@@ -590,6 +594,48 @@ async function saveDrawer() {
     toast(`${drawerHex} saved`, "ok");
   } catch (err) {
     toast(`cannot save ${drawerHex}: ${err.message}`, "bad");
+  }
+}
+
+// A delete is irreversible, so the button arms itself first: click once and it
+// asks, click again within a few seconds and it goes.
+let armed = null;
+let armedTimer = null;
+
+function armForget(button, label, action) {
+  if (armed === button) {
+    disarmForget();
+    action();
+    return;
+  }
+  disarmForget();
+  armed = button;
+  button.dataset.label = label;
+  button.textContent = "Really forget?";
+  armedTimer = setTimeout(disarmForget, 4000);
+}
+
+function disarmForget() {
+  if (armedTimer) clearTimeout(armedTimer);
+  armedTimer = null;
+  if (armed) {
+    armed.textContent = armed.dataset.label || "Forget";
+    armed = null;
+  }
+}
+
+async function forget(path, body, what) {
+  try {
+    const payload = await postJSON(path, body);
+    render(payload.state);
+    const result = payload.result || {};
+    const n = result.forgot || 0;
+    if (n) toast(`forgot ${n} tag${n === 1 ? "" : "s"}`, "ok");
+    else toast(`nothing to forget: ${what}`, "warn");
+    return n;
+  } catch (err) {
+    toast(`cannot forget: ${err.message}`, "bad");
+    return 0;
   }
 }
 
@@ -1302,6 +1348,49 @@ ui.drawerClose.addEventListener("click", closeDrawer);
 ui.drawerSave.addEventListener("click", saveDrawer);
 ui.drawerAssign.addEventListener("click", assignId);
 ui.drawerFlash.addEventListener("click", flashFirmware);
+ui.drawerForget.addEventListener("click", () => {
+  armForget(ui.drawerForget, "Forget tag", async () => {
+    if (!drawerHex) return;
+    const hex = drawerHex;
+    if (await forget(`/api/tags/${hex}/forget`, {}, hex)) {
+      closeDrawer();
+    }
+  });
+});
+ui.drawerWipe.addEventListener("click", () => {
+  armForget(ui.drawerWipe, "Factory reset", async () => {
+    if (!drawerHex) return;
+    const hex = drawerHex;
+    try {
+      const payload = await postJSON(`/api/tags/${hex}/wipe`, {});
+      render(payload.state);
+      const result = payload.result || {};
+      if (result.ok) {
+        toast(`${hex} wiped, it comes back with a new id`, "ok");
+        closeDrawer();
+      } else {
+        toast(result.error || "the tag was not reset", "bad");
+      }
+    } catch (err) {
+      toast(`cannot reset the tag: ${err.message}`, "bad");
+    }
+  });
+});
+ui.bulkForget.addEventListener("click", () => {
+  armForget(ui.bulkForget, "Forget", async () => {
+    const addrs = [...picked];
+    if (!addrs.length) return;
+    if (await forget("/api/tags/forget", { addrs })) {
+      picked.clear();
+      render(state);
+    }
+  });
+});
+ui.fleetForgetStale.addEventListener("click", () => {
+  armForget(ui.fleetForgetStale, "Forget silent", async () => {
+    await forget("/api/tags/forget", { not_seen_for: 600 }, "silent tags");
+  });
+});
 ui.pickerUp.addEventListener("click", () => pickerParent && loadDir(pickerParent));
 ui.pickerCancel.addEventListener("click", () => (ui.picker.hidden = true));
 ui.picker.addEventListener("click", (event) => {

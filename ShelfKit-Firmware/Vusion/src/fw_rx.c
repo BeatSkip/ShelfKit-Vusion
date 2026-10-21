@@ -165,6 +165,11 @@ uint8_t fw_rx_data(const uint8_t __xdata *payload, uint8_t len)
     case SM_OP_FW_END:
         on_end();
         break;
+    case SM_OP_WIPE:
+        log_puts("factory reset\r\n");
+        (void)shelf_id_factory_reset();
+        cpu_reset();
+        break;
     case SM_OP_SET_ID:
         if (len < 3)
             return 1;

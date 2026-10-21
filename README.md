@@ -54,7 +54,7 @@ choice is remembered, or `?theme=light` / `?theme=dark` forces one for a link or
 | Firmware — tag | Polls with retry/back-off, image reception straight to the panel, BWR refresh, deep sleep |
 | E-paper driver | IL0373 init, 152×296 rotated portrait, black/white/red planes, BUSY-bounded waits |
 | Build | SDCC 3.6.0 + the SDCC-MDF VS Code extension, two targets over one shared vendor tree |
-| Server UI | Fleet, Editor (with real previews), Queue, Logs, Stats, Hub, Console, Settings — light and dark |
+| Server UI | Fleet (with per-tag and bulk **forget**, wireless **id assignment** and **firmware update**), Editor (with real previews), Queue, Logs, Stats, Hub, Console, Settings — light and dark |
 | Image pipeline | Fit (cover/contain/stretch), threshold / Floyd-Steinberg / Bayer 4×4 dither, server-rendered previews, midtone warning |
 | Image push | Reliable frame-by-frame transfer over the port the console already has open, with cancel and progress |
 | **Storage** | Everything the server must remember across a restart, in one SQLite file: tag aliases/notes/positions, announcement counts and ages, the last frame per tag, the rendered bitmaps, the editor's image and options, the port each pane used, and the event history behind Logs |

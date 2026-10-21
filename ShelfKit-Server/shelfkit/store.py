@@ -208,6 +208,21 @@ class Store:
             self._db.commit()
             return not taken
 
+    def forget_tags(self, hex_ids: list[str]) -> int:
+        """Delete tag rows, and the events that only exist because of them.
+
+        Removing a tag is a cleanup of the *server's* bookkeeping: nothing is sent
+        to the tag, and a tag that keeps polling simply reappears as a new row.
+        """
+        removed = 0
+        with self._lock:
+            for hex_id in hex_ids:
+                cursor = self._db.execute("DELETE FROM tags WHERE hex_id=?", (hex_id,))
+                removed += cursor.rowcount or 0
+                self._db.execute("DELETE FROM events WHERE hex_id=?", (hex_id,))
+            self._db.commit()
+        return removed
+
     def record_push(self, hex_id: str, name: str, bitmap_key: str | None,
                     at: float | None = None) -> None:
         when = time.time() if at is None else at

@@ -30,6 +30,8 @@ RESET_PULSE_S = 0.1  # how long the momentary Reset button holds RTS asserted
 # shelfkit.preview (one pipeline for the preview and the bytes that are sent).
 # The tag's identity opcode, from Shared/firmware/shelflink/inc/shelfmsg.h
 SM_OP_SET_ID = 7
+# Erases the tag's flash and resets it into a fresh random identity
+SM_OP_WIPE = 8
 # How long the tag takes to erase its flash after BEGIN (it is busy there, so the
 # first chunk would otherwise be lost and need a retry).
 FLASH_ERASE_SETTLE_S = 0.6
@@ -835,6 +837,81 @@ class App:
                 self.status = ("firmware sent, the tag is flashing it" if ok
                                else "firmware not sent - see the log")
             self._event("ok" if ok else "fail", f"{addr:04X}", name)
+
+    # ── forgetting tags ─────────────────────────────────────────────────────
+    def forget_tags(self, addrs, not_seen_for: float | None = None) -> dict:
+        """Delete tags from the server: selected ones, or everything silent for a while.
+
+        Only the server's own bookkeeping goes: aliases, notes, map positions,
+        counters, the last frame and the log lines about that id. Nothing is sent
+        to the tag - it keeps its wireless id and will show up again as a fresh row
+        the next time it polls, which is the point after a mix-up.
+        """
+        with self.lock:
+            now = time.time()
+            targets: set[int] = set()
+            for value in addrs or []:
+                try:
+                    targets.add(int(value, 16) if isinstance(value, str) else int(value))
+                except (TypeError, ValueError):
+                    continue
+            if not_seen_for is not None:
+                for addr in list(self.tags):
+                    seen = self.tag_seen.get(addr)
+                    if seen is None or now - seen >= float(not_seen_for):
+                        targets.add(addr)
+            # never pull the rug out from under a transfer, and only report ids
+            # that really were known ("forgot 1" for an unknown id would be a lie)
+            for addr in list(targets):
+                if self.sending and self.send_to == addr:
+                    targets.discard(addr)
+            targets &= set(self.tags)
+            for addr in targets:
+                self.tags.pop(addr, None)
+                self.tag_seen.pop(addr, None)
+                self.tag_push.pop(addr, None)
+                self.tag_meta.pop(addr, None)
+            hexes = sorted(f"{addr:04X}" for addr in targets)
+
+        if hexes and self.store is not None:
+            self.store.forget_tags(hexes)
+        if hexes:
+            shown = ", ".join(hexes[:6]) + (f" +{len(hexes) - 6}" if len(hexes) > 6 else "")
+            self._event("forget", None, f"{len(hexes)} tag(s): {shown}")
+            with self.lock:
+                self.status = f"forgot {len(hexes)} tag(s)"
+        return {"forgot": len(hexes), "hexes": hexes}
+
+    def factory_reset(self, addr: int) -> dict:
+        """Wipe a tag's flash and let it come back as a new tag (SM_OP_WIPE).
+
+        Useful when a tag carries an identity that should never have existed: it
+        erases the identity record, the pending update marker and the image
+        window, resets, and then generates a fresh random id. The server's row for
+        the old id is dropped, because that id will not be heard again.
+        """
+        key = self.hub_key()
+        pane = self.panes.get(key)
+        if pane is None:
+            return {"ok": False, "error": "no hub pane"}
+        if not pane.worker.is_open:
+            return {"ok": False, "error": f"open the {pane.spec.name} port first"}
+        if self.sending and self.send_to == addr:
+            return {"ok": False, "error": "a transfer to that tag is running"}
+        cancel = threading.Event()
+        if not self._ping_hub(key, cancel):
+            return {"ok": False, "error": "the hub did not answer P"}
+        with self.lock:
+            self.status = f"factory resetting {addr:04X} ..."
+        if not self._send_frame(key, addr, bytes([SM_OP_WIPE]), cancel):
+            return {"ok": False, "error": "the tag did not acknowledge"}
+        # the row goes first: forgetting a tag also drops its log lines, and the
+        # record of the wipe itself should survive that
+        self.forget_tags([addr])
+        self._event("wipe", f"{addr:04X}", "factory reset")
+        with self.lock:
+            self.status = f"{addr:04X} wiped, it will come back with a new id"
+        return {"ok": True, "old": f"{addr:04X}"}
 
     def _rename_tag(self, old: int, new: int) -> None:
         """Re-key every in-memory table and the stored row after an assignment."""

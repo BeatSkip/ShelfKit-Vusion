@@ -82,4 +82,11 @@
  */
 #define SM_OP_SET_ID        7
 
+/*
+ * Factory reset (hub -> tag), one DATA frame: [0] SM_OP_WIPE.
+ * Erases every flash sector the firmware owns and resets, so the tag comes back
+ * with a fresh random id and no pending image. Nothing else is sent with it.
+ */
+#define SM_OP_WIPE          8
+
 #endif /* SHELFMSG_H */

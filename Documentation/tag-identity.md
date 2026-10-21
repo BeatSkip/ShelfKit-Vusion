@@ -17,6 +17,22 @@ SPI flash sector 1, in the gap the OTA update never touches:
 The record is checked by its own CRC. A torn write, or a flash sector that never
 held a record, is treated as "no identity" rather than trusted.
 
+## What happens to a used tag's flash
+
+A tag whose SPI flash still holds someone else's data is not trusted: when no
+identity record parses (a blank sector, a torn write, or a flash from another
+firmware), the first boot **erases every sector this firmware owns** before it
+generates the random id (`SHELF_WIPE_FIRST_BOOT` in `shelf_config.h`, ~0.5 s once):
+
+| sector | why it has to go |
+|---|---|
+| `0x0000` OTA header | a leftover magic here would make the bootloader overwrite this application on the next reset |
+| `0x1000` identity | its contents are exactly what was just judged untrusted |
+| `0x2000` reserved | future storage, unknown content |
+| `0x3000`+ image window | a stale image nobody will ever want |
+
+Sectors above the image window are left alone: they are not this firmware's.
+
 ## Life of an id
 
 1. **First boot** (`shelf_id.c`): no usable record → a random 16-bit id is picked

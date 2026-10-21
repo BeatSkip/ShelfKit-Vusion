@@ -74,6 +74,15 @@ The build prints the memory report: 40,622 B of code and 1,084 B of XRAM out of 
 the memory model allows. Internal RAM is at the wall — new code has to keep its locals out of the
 overlay (the OTA receiver uses `__xdata` statics, and the shared CRC/header helpers are `__reentrant`).
 
+## First boot on a used tag
+
+With no identity record in the SPI flash, the tag treats the flash as untrusted and
+erases every sector the firmware owns — the OTA header included, because a stale
+update marker there would make the bootloader overwrite the application on the next
+reset — before it generates its random id. `SHELF_WIPE_FIRST_BOOT 0` in
+`shelf_config.h` skips that. The same wipe is available on demand: the server's
+**Factory reset** button sends `SM_OP_WIPE`.
+
 ## Power
 
 The tag polls every `SHELF_POLL_INTERVAL_S` (60 s) and sleeps in between:

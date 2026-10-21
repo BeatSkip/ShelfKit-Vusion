@@ -23,6 +23,12 @@
 /* Print the link statistics every this many polls */
 #define SHELF_STATS_EVERY       10
 
+/* 1 = on the very first boot (no identity record yet) wipe every SPI flash sector
+ * the firmware owns before generating the random id. That clears leftovers from a
+ * used tag - most importantly a stale OTA marker, which would otherwise make the
+ * bootloader overwrite this application on the next reset. Costs ~0.5 s once. */
+#define SHELF_WIPE_FIRST_BOOT   1
+
 /* 1 = drive the unidentified transistor lines PA2/PA5 on (see src/pwr.h) before the radio
  * starts. Left off by default; try it if the range turns out poor.
  * This is about the radio only: the e-paper supply is transistor U4 on PA5, and

@@ -81,7 +81,7 @@ blocks. `color-scheme` is set per theme too, which keeps scrollbars and native c
 
 | Screen | Working today | Interface only (marked in the page) |
 |---|---|---|
-| **Fleet** | Tag table from every `POLL src=<id>` the hub prints: 4-char hex id, **alias**, status dot (online if heard in the last 30 s, pending while an image is in flight, else offline), last-push age **with a thumbnail of the frame that was pushed**, search, status chips, column sort, row selection with bulk actions, tag drilldown drawer that edits the alias and notes and **assigns the tag's wireless id** | battery, reflash/clear, map view (hidden until a grid is configured) |
+| **Fleet** | Tag table from every `POLL src=<id>` the hub prints: 4-char hex id, **alias**, status dot (online if heard in the last 30 s, pending while an image is in flight, else offline), last-push age **with a thumbnail of the frame that was pushed**, search, status chips, column sort, row selection with bulk actions (push, **forget**), tag drilldown drawer that edits the alias and notes, **assigns the tag's wireless id** and **forgets the tag** | battery, reflash/clear, map view (hidden until a grid is configured) |
 | **Editor** | Browse this machine's folders, pick the image and the target tag, **fit mode** (cover/contain/stretch), **dither** (threshold/Floyd-Steinberg/Bayer 4×4), the **three previews** — colour original, 1:1 on-device frame, and a 4× zoom that follows a drag — a midtone warning, and Push / Cancel with live frame progress. Push is only enabled once a preview has been rendered | templates, plain text, QR, multi-target push, the content library, the render → confirm → queue split |
 | **Queue** | The transfer in flight (image or firmware) as a single `sending` row, with its frame progress, and Cancel | job history, attempts, retry, per-tag replacement |
 | **Logs** | Event table recorded by the server (`sync`, `push`, `ok`, `fail`, `error`, `boot`, `bootloader`, `open`), consecutive duplicates collapsed into `×N`, filtered by tag or event, **kept across restarts** | the firmware's own event stream (low batt / err) and the per-tag log |
@@ -173,6 +173,26 @@ muddy photo onto three colours does not come out well.
 The preview is addressed by a hash of its inputs (`/api/preview.png?t=…`), so it survives a reload
 and the browser may cache it; picking a new image or changing fit/dither invalidates it and Push
 turns back off until it has been rendered again.
+
+### Removing tags
+
+Cleaning up after a mix-up is server-side bookkeeping only — nothing is sent to a tag, and a tag
+that is still polling simply reappears as a fresh row (with no alias) on its next poll.
+
+| Where | What it does |
+|---|---|
+| Drawer → **Forget tag** | deletes that one tag, its stored metadata and its log lines |
+| Fleet → select rows → **Forget** | the same for a selection |
+| Fleet → **Forget silent** | deletes every tag not heard for 10 minutes (a sleeping tag polls once a minute, so it stays) |
+| Drawer → **Factory reset** | sends the tag a wipe command: it erases its SPI flash, resets and comes back with a **new random id**; the old row is dropped |
+
+Each delete arms itself: the first click turns the button into **Really forget?**, the second
+commits, and it disarms again after four seconds. A tag that is mid-transfer is skipped.
+
+`POST /api/tags/<hex>/forget` removes one; `POST /api/tags/forget` takes `{"addrs": [...]}` or
+`{"not_seen_for": 600}`; `POST /api/tags/<hex>/wipe` is the factory reset. Both return `{"result": {"forgot": n, "hexes": [...]}, "state": ...}` —
+`forgot` counts only tags that actually existed, and ids freed this way are available to the next
+identity assignment.
 
 ### Updating a tag's firmware over the air
 

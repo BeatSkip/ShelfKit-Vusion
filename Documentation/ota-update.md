@@ -31,6 +31,12 @@ so the existing reliable relay (one frame in flight, ACK per frame) carries them
 | `0x002000` | **reserved** for future persistent storage (`OTA_RESERVED_ADDR`); an update never touches it |
 | `0x003000` | the image, byte 0 = internal flash address 0 |
 
+A tag that has never seen this firmware may still carry a *valid* header from
+something else, which would make the bootloader install that stale image at the next
+reset. The first boot therefore erases the header sector (along with the identity,
+the reserved sector and the whole image window) before it stores its own identity —
+see [tag-identity.md](tag-identity.md#what-happens-to-a-used-tags-flash).
+
 The header lives in its own 4 KiB sector so erasing it never touches the image,
 and the magic is written **last**, after the CRC of everything received has
 matched. An interrupted transfer therefore leaves no magic and the bootloader

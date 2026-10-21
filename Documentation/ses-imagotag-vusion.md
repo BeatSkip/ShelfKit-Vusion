@@ -13,6 +13,7 @@
 - Panel BUSY is **active low** on this board.
 - LEDs PB0/PB7/PB6/PC4 (white/blue/green/red): pulse only, never hold on.
 - Internal RAM is full — buffers go in `__xdata`.
+- SPI flash (128 KiB class): sector 0 holds an OTA header, sector 1 the identity record, sector 2 is reserved, image from sector 3. The tag wipes 0–3..11 on first boot when no identity parses, so a used tag starts clean.
 
 
 i have a custom bootloader that allows me to flash the firmware for this board over serial. i want to change the bootloader so i can also flash firmware over the air without any hardware interaction. i was thinking to add functionality to the regular firmware that runs on it to receive new firmware over the air, write it into the spi nor flash and then trigger a reboot into the bootloader. the bootloader checks if a new firmware package is staged in the spi nor flash and if so, flashes the main firmware. i would like to do it this way to keep the bootloader size minimal. is this a good way of working? or would you recommend a different scheme. i would like to also keep the current uart flashing capabilities intact
