@@ -50,6 +50,17 @@ Sectors above the image window are left alone: they are not this firmware's.
 
 ## Why random instead of 0
 
+**The id must survive a reboot**, so the boot path is deliberately suspicious of
+its own reading: the record is read twice (with a delay, since the first read after
+power-up can come back bad) before the flash is declared untrusted, and a blank
+sector — nothing written yet — is not a reason to wipe 13 sectors. Getting that wrong
+was visible on hardware as an id that "reverted": a failed parse at boot led to a
+fresh id, the random source was seeded with a timer that had not moved yet, so it
+drew the *same* value every time, and overwrote the id that had just been assigned.
+
+The random source now mixes the trimmed 20 MHz FRC frequency the boot calibration
+measured (chip-specific) with timer jitter, so two tags - and two boots - differ.
+
 `id 0` is a valid, *specific* address — not a broadcast — so every unprovisioned
 tag would poll as the same source. The hub could not tell them apart, and a
 `SET_ID` frame to `0x0000` would be accepted by all of them.

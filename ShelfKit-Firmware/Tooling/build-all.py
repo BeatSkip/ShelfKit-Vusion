@@ -44,6 +44,9 @@ SDCC_DIRS = [Path(r"C:\Program Files\SDCC\bin"), Path(r"C:\Program Files (x86)\S
 SOURCE_SUFFIXES = {".c", ".asm"}
 # folder name -> the name you pass to --targets
 TARGETS = {"vusion": "Vusion", "hub": "Vusion-Hub", "bootloader": "Bootloader"}
+# shelfota.h OTA_MAX_IMAGE: an application bigger than this cannot be sent over the
+# air, even though it still fits when flashed over the wire.
+OTA_IMAGE_WINDOW = 0xA7F0
 
 
 # ── toolchain ──────────────────────────────────────────────────────────────
@@ -261,7 +264,14 @@ def build_target(folder: str, out_dir: Path, version: str | None, clean: bool) -
         digest = hashlib.sha256(hex_file.read_bytes()).hexdigest()[:16]
         size = hex_file.stat().st_size
         print(f"  -> {display(hex_file)}  {size} bytes  sha256:{digest}  {usage}")
-        return {"target": folder, "hex": hex_file, "bytes": size, "sha256": digest, "usage": usage}
+        code = 0
+        if usage:
+            try:
+                code = int(usage.split()[1].split("/")[0]) if usage.startswith("code ") else 0
+            except (IndexError, ValueError):
+                code = 0
+        return {"target": folder, "hex": hex_file, "bytes": size, "sha256": digest,
+                "usage": usage, "code": code}
     finally:
         shutil.rmtree(work, ignore_errors=True)
 
@@ -422,6 +432,12 @@ def main(argv: list[str] | None = None) -> int:
             bundle(by_target["Vusion"], by_target["Bootloader"], out_dir, args.version)
         except SystemExit as exc:
             print(f"\n!!! could not bundle: {exc}")
+
+    for row in results:
+        if row["target"] == "Vusion" and row.get("code", 0) > OTA_IMAGE_WINDOW:
+            print(f"\n!!! the tag image is {row['code']} B, over the {OTA_IMAGE_WINDOW} B OTA window:")
+            print("    it flashes over the wire, but ota-send.py and the server will refuse it.")
+            print("    Free space in the application (src/epd_image.c is 11,248 B of it).")
 
     print("\n=== ready to flash ===")
     for row in results:

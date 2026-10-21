@@ -85,10 +85,18 @@ static void on_begin(void)
     extflash_release_powerdown();
     /* the old update (if any) goes first: from here on there is no magic, so a
      * crash mid-transfer can never make the bootloader flash half an image */
-    extflash_erase(OTA_HDR_ADDR, (uint16_t)OTA_SECTOR);
+    if (!extflash_erase(OTA_HDR_ADDR, (uint16_t)OTA_SECTOR)) {
+        log_puts("fw erase FAILED, flash busy\r\n");
+        abort_transfer();
+        return;
+    }
     sectors = ota_sectors_for(total);
     for (sector_i = 0; sector_i < sectors; sector_i++)
-        extflash_erase(OTA_IMAGE_ADDR + (uint32_t)sector_i * OTA_SECTOR, (uint16_t)OTA_SECTOR);
+        if (!extflash_erase(OTA_IMAGE_ADDR + (uint32_t)sector_i * OTA_SECTOR, (uint16_t)OTA_SECTOR)) {
+            log_puts("fw erase FAILED, flash busy\r\n");
+            abort_transfer();
+            return;
+        }
 
     crc_calc = OTA_CRC_INIT;
     got = 0;

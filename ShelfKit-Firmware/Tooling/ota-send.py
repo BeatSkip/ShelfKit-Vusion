@@ -36,7 +36,7 @@ SM_OP_FW_BEGIN = firmware.SM_OP_FW_BEGIN
 SM_OP_FW_CHUNK = firmware.SM_OP_FW_CHUNK
 SM_OP_FW_END = firmware.SM_OP_FW_END
 SM_FW_CHUNK = firmware.SM_FW_CHUNK
-IMAGE_MAX = firmware.IMAGE_MAX
+IMAGE_MAX = firmware.IMAGE_MAX   # 0xA7F0, the 0x3000..0xD7FE window
 crc16 = firmware.crc16
 load_image = firmware.load_image
 # the tag erases its flash after BEGIN; give it room before the first chunk

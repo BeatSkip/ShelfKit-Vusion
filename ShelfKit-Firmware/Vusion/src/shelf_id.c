@@ -48,18 +48,57 @@ static void wipe_owned_sectors(void) __reentrant
     extflash_erase(SHELFID_ADDR, (uint16_t)SHELFID_SECTOR);
 }
 
-static void store(uint16_t node_id, uint8_t set_flags) __reentrant
+/* shelfhw_random() is a xorshift seeded from the wake-up timer, and at boot that
+ * timer has barely moved: every tag - and every boot - would draw the same
+ * "random" id (0x8283 on this build). The one per-device number available is the
+ * trimmed 20 MHz FRC frequency the calibration just measured, so it goes into the
+ * mix, together with a little timer jitter. */
+static uint16_t fresh_id(void) __reentrant
+{
+    uint16_t x;
+    uint8_t i;
+
+    delay(1000);                    /* let the wake-up timer move */
+    x = (uint16_t)(wtimer0_curtime() ^ ((uint16_t)FRCOSCFREQ1 << 8));
+    for (i = 0; i < 4; i++)
+        x ^= shelfhw_random();
+    if (x < 2 || x == SL_NODE_HUB)
+        x = (uint16_t)(0x4100u | (x & 0x3Fu));   /* never 0, 1 or the hub */
+    return x;
+}
+
+/* An erased sector reads as 0xFF; an all-0xFF record means "nothing here yet",
+ * which is not the same as "something here that is broken". */
+static uint8_t record_is_blank(void) __reentrant
+{
+    uint8_t i;
+
+    for (i = 0; i < SHELFID_BYTES; i++)
+        if (rec[i] != 0xFF)
+            return 0;
+    return 1;
+}
+
+static uint8_t store(uint16_t node_id, uint8_t set_flags) __reentrant
 {
     shelfid_build(rec, node_id, set_flags);
-    extflash_erase(SHELFID_ADDR, (uint16_t)SHELFID_SECTOR);
-    extflash_write(SHELFID_ADDR, rec, SHELFID_BYTES);
+    if (!extflash_erase(SHELFID_ADDR, (uint16_t)SHELFID_SECTOR))
+        return 0;
+    return extflash_write(SHELFID_ADDR, rec, SHELFID_BYTES);
 }
 
 uint16_t shelf_id_boot(void) __reentrant
 {
     spi_init();
     extflash_release_powerdown();
+    delay(2000);                    /* tPUW / tRES1: the first read after power-up
+                                     * or release-from-power-down can come back bad */
     extflash_read(SHELFID_ADDR, rec, SHELFID_BYTES);
+
+    if (!shelfid_parse(rec, &id, &flags)) {
+        delay(2000);                /* a single bad read must not cost the id */
+        extflash_read(SHELFID_ADDR, rec, SHELFID_BYTES);
+    }
 
     if (shelfid_parse(rec, &id, &flags)) {
         log_puts(flags & SHELFID_FLAG_ASSIGNED ? "id " : "id? ");
@@ -69,17 +108,21 @@ uint16_t shelf_id_boot(void) __reentrant
     }
 
 #if SHELF_WIPE_FIRST_BOOT
-    /* an unreadable record means this flash is not ours yet: start from a
-     * known-empty state instead of inheriting someone else's */
-    wipe_owned_sectors();
-    log_puts("flash wiped\r\n");
+    if (record_is_blank()) {
+        /* nothing of ours and nothing of anyone else's: no need to erase 13
+         * sectors on a factory-fresh tag */
+        log_puts("flash blank\r\n");
+    } else {
+        /* a record that does not parse means this flash is not ours (used tag):
+         * start from a known-empty state instead of inheriting the leftovers */
+        wipe_owned_sectors();
+        log_puts("flash wiped\r\n");
+    }
 #endif
 
-    /* nothing stored yet (or unreadable): pick one and keep it */
-    do {
-        id = shelfhw_random();
-    } while (id < 2 || id == SL_NODE_HUB);
-    store(id, 0);
+    id = fresh_id();
+    if (!store(id, 0))
+        log_puts("id not stored, flash busy\r\n");
     log_puts("id? ");
     log_hex16(id);
     log_puts(" new\r\n");
@@ -99,11 +142,23 @@ uint8_t shelf_id_assign(uint16_t node_id) __reentrant
     if (node_id < 2 || node_id == SL_NODE_HUB)
         return 0;
 
-    store(node_id, SHELFID_FLAG_ASSIGNED);
+    if (!store(node_id, SHELFID_FLAG_ASSIGNED)) {
+        log_puts("id set FAILED, flash busy\r\n");
+        return 0;
+    }
 
     extflash_read(SHELFID_ADDR, rec, SHELFID_BYTES);
-    if (!shelfid_parse(rec, &id, &flags) || id != node_id)
+    if (!shelfid_parse(rec, &id, &flags) || id != node_id) {
+        /* reading back what is actually there is the whole difference between
+         * "the write was lost" and "the record is unreadable" */
+        log_puts("id set FAILED, read back ");
+        log_hex16((uint16_t)rec[6] | ((uint16_t)rec[7] << 8));
+        log_puts(" magic ");
+        log_hex8(rec[0]);
+        log_hex8(rec[1]);
+        log_nl();
         return 0;
+    }
 
     /* the record is on flash and verified: point the radio at it */
     sl_set_local(id, SHELF_NET_ID);

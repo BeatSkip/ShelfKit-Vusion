@@ -28,14 +28,17 @@ void extflash_read_jedec_id(uint8_t id[3]);
 /* Read len bytes from addr into buf using command 0x03. */
 void extflash_read(uint32_t addr, uint8_t *buf, uint16_t len);
 
-/* Block until the chip's write/erase in progress bit clears. */
-void extflash_wait_ready(void) __reentrant;
+/* Block until the chip's write/erase in progress bit clears. Returns 1 when it
+ * did, 0 on timeout (~0.5 s): a chip that never answers must not hang the tag. */
+uint8_t extflash_wait_ready(void) __reentrant;
 
 /* Program len bytes at addr (0x02 page program). Splits at the chip's 256-byte
- * page boundaries by itself, so callers only have to erase first. */
-void extflash_write(uint32_t addr, const uint8_t *buf, uint16_t len) __reentrant;
+ * page boundaries by itself, so callers only have to erase first.
+ * Returns 1 on success, 0 if the chip stayed busy. */
+uint8_t extflash_write(uint32_t addr, const uint8_t *buf, uint16_t len) __reentrant;
 
-/* Erase the 4 KiB sectors covering [addr, addr+len). addr must be aligned. */
-void extflash_erase(uint32_t addr, uint16_t len) __reentrant;
+/* Erase the 4 KiB sectors covering [addr, addr+len). addr must be aligned.
+ * Returns 1 on success, 0 if the chip stayed busy. */
+uint8_t extflash_erase(uint32_t addr, uint16_t len) __reentrant;
 
 #endif /* FLASH_DRIVER_H */

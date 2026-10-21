@@ -45,16 +45,24 @@ void extflash_read(uint32_t addr, uint8_t *buf, uint16_t len)
     spi_deselect(SPI_DEV_FLASH);
 }
 
-void extflash_wait_ready(void) __reentrant
+#define FLASH_READY_POLLS   500     /* x delay(1000) ~= 0.5 s: a sector erase is ~0.1 s */
+
+uint8_t extflash_wait_ready(void) __reentrant
 {
+    uint16_t n = FLASH_READY_POLLS;
     uint8_t status;
 
-    do {
+    for (;;) {
         spi_select(SPI_DEV_FLASH);
         spi_transfer(CMD_RDSR);
         status = spi_transfer(0x00);
         spi_deselect(SPI_DEV_FLASH);
-    } while (status & 0x01);        /* bit 0 = write/erase in progress */
+        if (!(status & 0x01))       /* bit 0 = write/erase in progress */
+            return 1;
+        if (!--n)
+            return 0;               /* never hang the tag on a dead SPI bus */
+        delay(1000);
+    }
 }
 
 static void flash_write_enable(void)
@@ -64,13 +72,14 @@ static void flash_write_enable(void)
     spi_deselect(SPI_DEV_FLASH);
 }
 
-void extflash_write(uint32_t addr, const uint8_t *buf, uint16_t len) __reentrant
+uint8_t extflash_write(uint32_t addr, const uint8_t *buf, uint16_t len) __reentrant
 {
     while (len) {
         uint16_t room = (uint16_t)(FLASH_PAGE - (addr & (FLASH_PAGE - 1)));
         uint16_t n = (len < room) ? len : room;
 
-        extflash_wait_ready();
+        if (!extflash_wait_ready())
+            return 0;
         flash_write_enable();
         spi_select(SPI_DEV_FLASH);
         spi_transfer(CMD_PP);
@@ -84,13 +93,14 @@ void extflash_write(uint32_t addr, const uint8_t *buf, uint16_t len) __reentrant
         buf += n;
         len -= n;
     }
-    extflash_wait_ready();
+    return extflash_wait_ready();
 }
 
-void extflash_erase(uint32_t addr, uint16_t len) __reentrant
+uint8_t extflash_erase(uint32_t addr, uint16_t len) __reentrant
 {
     while (len) {
-        extflash_wait_ready();
+        if (!extflash_wait_ready())
+            return 0;
         flash_write_enable();
         spi_select(SPI_DEV_FLASH);
         spi_transfer(CMD_SE);
@@ -102,5 +112,5 @@ void extflash_erase(uint32_t addr, uint16_t len) __reentrant
         addr += FLASH_SECTOR;
         len = (len > FLASH_SECTOR) ? (uint16_t)(len - FLASH_SECTOR) : 0;
     }
-    extflash_wait_ready();
+    return extflash_wait_ready();
 }

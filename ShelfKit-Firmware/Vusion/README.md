@@ -85,30 +85,45 @@ reset — before it generates its random id. `SHELF_WIPE_FIRST_BOOT 0` in
 
 ## Power
 
-The tag polls every `SHELF_POLL_INTERVAL_S` (60 s) and sleeps in between:
+The tag polls every `SHELF_POLL_INTERVAL_S` (30 s). Two very different things are
+available for the current draw, and only the first one is enabled by default:
 
-| block | between polls | why |
-|---|---|---|
-| MCU | standby (`wtimer_idle(WTFLAG_CANSTANDBY)`) | woken by the low-power timer, which runs off LPOSC |
-| radio | `AXRADIO_MODE_DEEPSLEEP` | a listening AX5043 is ~10 mA, more than everything else together |
-| 26 MHz crystal | not forced (`OSCFORCERUN` bit 2 cleared) | shared with the transceiver; only needed while it is awake |
-| panel | rail off (`pwr_off()` after `epd_sleep()`) | the glass holds the image without power |
-| UART log | still on 38400 when awake | costs a couple of milliseconds per poll, no idle current |
+**Always on (default, what is verified on hardware):**
 
-`SHELF_LISTEN_WINDOW_S` (8 s) is the only time the tag can be reached: everything
-the hub sends follows a POLL. An image or firmware transfer keeps the tag awake
-until it finishes, then the window re-arms and the radio sleeps again.
+| block | between polls |
+|---|---|
+| MCU | standby (`wtimer_idle(WTFLAG_CANSTANDBY)`), woken by the low-power timer |
+| radio | listening (`AXRADIO_MODE_ASYNC_RECEIVE`) - this is the ~10 mA |
+| panel | rail off after a refresh (`pwr_off()`), image held without power |
 
-Two consequences worth knowing:
+**Opt-in radio sleep (`SHELF_RADIO_SLEEP 1`) - experimental:**
 
-- **The wake-up timer caps the interval at ~102 s** (`SHELFHW_TICKS_PER_S` = 640
-  ticks per second in a 16-bit comparison). 60 s is the intended value.
-- **Pushes wait for a window.** The server retries a frame for 90 s
-  (`hubhost.CMD_RETRY_WINDOW_S`), so a push started at any moment lands within one
-  poll cycle; starting it just after a poll means waiting up to a minute.
+| block | between polls |
+|---|---|
+| radio | `AXRADIO_MODE_DEEPSLEEP` for the gap, woken before each poll |
+| 26 MHz crystal | not forced (`OSCFORCERUN` bit 2 cleared), only with `SHELF_XTAL_OFF 1` |
+| tags | listens `SHELF_LISTEN_WINDOW_S` (8 s) after each poll, since that is when the hub can send |
 
-Build with `-DSHELF_XTAL_OFF=0` to keep the crystal running if a radio mode change
-turns out to need it (`sdcc-project.json` → `defines`).
+> **It does not work yet on hardware.** With this enabled a tag polled once and then
+> went completely silent, which points at `radio_enter_deepsleep()`: it rewrites
+> `RADIOMUX`/`PORTR` and drives the AX5043's SYSCLK output, and the AX8052F143 takes
+> its clock from that same domain. Enable it in two steps while watching the tag's
+> log:
+>
+> 1. `SHELF_RADIO_SLEEP 1`, `SHELF_XTAL_OFF 0` — radio only. The tag logs `sleep`
+>    when it parks the radio and `wake` before the next poll.
+> 2. If that survives, `SHELF_XTAL_OFF 1` as well — adds the crystal stop.
+>
+> Silence in the log *after* `sleep` means the chip stopped rather than the timer;
+> repeating `poll FAILED` lines mean the timer is fine and the radio came back wrong.
+
+Other consequences:
+
+- **The wake-up timer caps the interval at ~102 s** (`SHELFHW_TICKS_PER_S` = 640 ticks
+  per second compared in 16 bits). 30 s is the default, 60 s works, 100 s is the edge.
+- **Pushes wait for a window when the radio sleeps.** The server retries a frame for
+  90 s (`hubhost.CMD_RETRY_WINDOW_S`), so a push started at any moment lands within
+  one poll cycle. With the radio always listening (default) this does not apply.
 
 ## Hardware notes that cost real time
 

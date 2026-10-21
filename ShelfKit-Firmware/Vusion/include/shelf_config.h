@@ -9,11 +9,25 @@
  * Tooling/set-id.py, and the id survives firmware updates. */
 #define SHELF_NET_ID        0x5A
 
+/* 1 = put the transceiver into its deep-sleep mode between polls (and, with
+ * SHELF_XTAL_OFF, stop forcing the 26 MHz crystal).
+ *
+ * OFF by default: on hardware a tag that entered the radio's deep sleep polled
+ * once and then went silent, which points at the SYSCLK / pin-mux reconfiguration
+ * `radio_enter_deepsleep()` does - the AX8052F143 takes its clock from that
+ * domain. Enable one piece at a time when you can watch the tag:
+ *   1. SHELF_RADIO_SLEEP 1, SHELF_XTAL_OFF 0   (radio only)
+ *   2. then SHELF_XTAL_OFF 1 as well            (radio + crystal)
+ * The tag logs "sleep" when it parks the radio and "wake" when it brings it back,
+ * so a silent log after "sleep" means the chip itself stopped. */
+#define SHELF_RADIO_SLEEP   0
+#define SHELF_XTAL_OFF      0
+
 /* Seconds between polls. 60 s is the practical ceiling: the wake-up timer counts
  * SHELFHW_TICKS_PER_S (640) per second in 16 bits, so anything above ~102 s
  * overflows. The 1 % duty cycle of the 868.3 MHz sub-band is not a concern at
  * this rate (a poll is a few milliseconds of air). */
-#define SHELF_POLL_INTERVAL_S   60
+#define SHELF_POLL_INTERVAL_S   30
 
 /* How long the tag listens after each poll, in seconds. Everything the hub sends
  * (images, firmware, a new identity) follows a POLL, so this window is the only

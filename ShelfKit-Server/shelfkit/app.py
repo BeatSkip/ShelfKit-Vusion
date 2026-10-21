@@ -32,9 +32,15 @@ RESET_PULSE_S = 0.1  # how long the momentary Reset button holds RTS asserted
 SM_OP_SET_ID = 7
 # Erases the tag's flash and resets it into a fresh random identity
 SM_OP_WIPE = 8
+# What the tag logs when it has handled one (see Vusion/src/fw_rx.c): "id set 0102"
+# or "id set FAILED, ...". The link-layer ACK only proves the frame arrived.
+RE_ID_RESULT = re.compile(r"id set (\S+)")
+RE_WIPED = re.compile(r"factory reset")
 # How long the tag takes to erase its flash after BEGIN (it is busy there, so the
 # first chunk would otherwise be lost and need a retry).
 FLASH_ERASE_SETTLE_S = 0.6
+# How long to wait for the tag's own log line after an identity frame
+ID_CONFIRM_S = 6.0
 REPO_ROOT = Path(__file__).resolve().parents[2]
 # Tag ids below this are reserved (0 and 1, the latter being the hub).
 FIRST_TAG_ID = 0x0100
@@ -720,10 +726,29 @@ class App:
             return {"ok": False, "error": "the hub did not answer P"}
         with self.lock:
             self.status = f"assigning {new:04X} to {addr:04X} ..."
+        with self.lock:
+            start = self.panes[key].seq
         if not self._send_frame(key, addr, payload, cancel):
             with self.lock:
                 self.status = f"{addr:04X} did not acknowledge the id change"
             return {"ok": False, "error": "the tag did not acknowledge"}
+
+        # the ACK only says the frame arrived; the tag stores the record, reads it
+        # back and only then moves its radio address. Wait for it to say so.
+        answer = self._wait_line(key, RE_ID_RESULT, start, ID_CONFIRM_S)
+        if answer is None:
+            with self.lock:
+                self.status = f"{addr:04X} did not confirm the id change"
+            return {"ok": False,
+                    "error": "the tag did not confirm - is it awake? see the Console log",
+                    "old": f"{addr:04X}", "id": f"{new:04X}"}
+        verdict = answer.group(1)
+        if verdict.upper().startswith("FAILED"):
+            with self.lock:
+                self.status = f"{addr:04X} could not store {new:04X}"
+            return {"ok": False,
+                    "error": f"the tag could not store the id ({verdict}) - see the Console log",
+                    "old": f"{addr:04X}", "id": f"{new:04X}"}
 
         self._rename_tag(addr, new)
         with self.lock:
@@ -903,8 +928,12 @@ class App:
             return {"ok": False, "error": "the hub did not answer P"}
         with self.lock:
             self.status = f"factory resetting {addr:04X} ..."
+        with self.lock:
+            start = self.panes[key].seq
         if not self._send_frame(key, addr, bytes([SM_OP_WIPE]), cancel):
             return {"ok": False, "error": "the tag did not acknowledge"}
+        if self._wait_line(key, RE_WIPED, start, ID_CONFIRM_S) is None:
+            return {"ok": False, "error": "the tag did not confirm the reset - see the Console log"}
         # the row goes first: forgetting a tag also drops its log lines, and the
         # record of the wipe itself should survive that
         self.forget_tags([addr])

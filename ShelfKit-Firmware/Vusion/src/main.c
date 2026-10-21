@@ -58,6 +58,7 @@ static void log_stats(void)
 static void listen_cb(struct wtimer_desc __xdata *desc)
 {
     (void)desc;
+#if SHELF_RADIO_SLEEP
     if (img_rx_active() || fw_rx_active()) {
         /* a transfer is running: stay awake, and check again once it should be
          * over - the window re-arms itself instead of leaving the radio on until
@@ -66,8 +67,12 @@ static void listen_cb(struct wtimer_desc __xdata *desc)
         wtimer0_addabsolute(desc);
         return;
     }
+    log_puts("sleep\r\n");
     shelfhw_radio_sleep();
     radio_asleep = 1;
+#else
+    (void)desc;
+#endif
 }
 
 static void on_done(const struct sl_done __xdata *done)
@@ -126,13 +131,16 @@ static void poll_cb(struct wtimer_desc __xdata *desc)
     if (img_rx_active() || fw_rx_active())
         return;
 
+#if SHELF_RADIO_SLEEP
     /* wake the radio for this poll and open the listening window */
     if (radio_asleep) {
+        log_puts("wake\r\n");
         shelfhw_radio_wake();
         radio_asleep = 0;
     }
     listen_timer.time = (uint32_t)SHELF_LISTEN_WINDOW_S * SHELFHW_TICKS_PER_S;
     wtimer0_addrelative(&listen_timer);
+#endif
 
     poll_payload[SM_POLL_UPTIME_LO] = (uint8_t)up;
     poll_payload[SM_POLL_UPTIME_HI] = (uint8_t)(up >> 8);

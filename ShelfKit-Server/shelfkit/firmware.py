@@ -18,7 +18,7 @@ SM_FW_HDR = 3
 SM_FW_CHUNK = 28          # SL_MAX_PAYLOAD - SM_FW_HDR
 
 # shelfota.h: the image has to fit between 0x3000 and the bootloader's jump vector
-IMAGE_MAX = 0xA700
+IMAGE_MAX = 0xA7F0        # 0x3000..0xD7FE, minus the two vector bytes
 BYTES = "bytes"           # only used in messages
 
 

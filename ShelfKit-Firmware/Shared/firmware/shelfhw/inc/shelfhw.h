@@ -60,7 +60,7 @@ void shelfhw_poll_awake(void);
  * talking. Both are idempotent. Build with -DSHELF_XTAL_OFF=0 to keep the
  * crystal running if a radio mode change turns out to need it. */
 #ifndef SHELF_XTAL_OFF
-#define SHELF_XTAL_OFF 1
+#define SHELF_XTAL_OFF 0
 #endif
 void shelfhw_radio_sleep(void);
 void shelfhw_radio_wake(void);

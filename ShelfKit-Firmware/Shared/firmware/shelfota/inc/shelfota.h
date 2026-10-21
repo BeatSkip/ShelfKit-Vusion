@@ -54,12 +54,12 @@
 #define OTA_IMAGE_ADDR      0x003000UL   /* SPI flash: first sector after the fixed ones */
 #define OTA_SECTOR          4096UL
 
-/* Largest image we accept. The image is stored contiguously from OTA_IMAGE_ADDR
- * and its length is also its offset span, so it has to end below the bootloader's
- * jump vector at 0xD7FE: 0xD7FE - 0x3000 = 43,006 bytes, capped here with a
- * little slack. (The tag's own application may be larger when flashed directly;
- * as an OTA image it has to fit in that window.) */
-#define OTA_MAX_IMAGE       0xA700UL
+/* Largest image we accept: the window between the last fixed sector (0x3000) and
+ * the bootloader's jump vector (0xD7FE), i.e. 43,006 bytes, minus the two bytes the
+ * vector occupies: 0xD7FE - 0x3000 = 0xA7FE, rounded down to a whole page of
+ * slack. The tag's own application may be larger when flashed over the wire; as an
+ * OTA image it has to fit here, so the build script warns when it does not. */
+#define OTA_MAX_IMAGE       0xA7F0UL
 
 #define OTA_CRC_INIT        0xFFFF
 
