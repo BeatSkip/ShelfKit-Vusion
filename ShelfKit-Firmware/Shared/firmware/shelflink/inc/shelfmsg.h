@@ -89,4 +89,22 @@
  */
 #define SM_OP_WIPE          8
 
+/*
+ * SPI flash read-back (hub -> tag, tag -> hub), one request and a stream of
+ * replies. Used to inspect a tag without opening it: the identity record, the
+ * OTA header, whatever is actually on the chip.
+ *
+ *   request  [0] SM_OP_FLASH_DUMP, [1..3] address (LE 24), [4..5] length (LE)
+ *   reply    [0] SM_OP_FLASH_DATA, [1..3] address (LE 24), [4] n, [5..] n bytes
+ *
+ * Replies are DATA frames sent back to the hub, which prints them as hex on its
+ * UART; Tooling/flash-read.py puts them back together. One request covers at
+ * most SM_DUMP_MAX bytes - the host splits bigger reads.
+ */
+#define SM_OP_FLASH_DUMP    9
+#define SM_OP_FLASH_DATA    10
+#define SM_DUMP_HDR         5       /* opcode + 3 address + n */
+#define SM_DUMP_CHUNK       26      /* SL_MAX_PAYLOAD - SM_DUMP_HDR */
+#define SM_DUMP_MAX         4096
+
 #endif /* SHELFMSG_H */

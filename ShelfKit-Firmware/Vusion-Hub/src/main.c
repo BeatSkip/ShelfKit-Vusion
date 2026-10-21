@@ -40,6 +40,14 @@ static void log_rx(const struct sl_rx __xdata *rx)
         log_puts(" retry");
     if (rx->dup)
         log_puts(" dup");
+    if (rx->type == SL_T_DATA && rx->len > 0 && rx->payload[0] == SM_OP_FLASH_DATA) {
+        /* a flash read-back frame from a tag: the host needs the bytes, and this
+         * log is the only way back */
+        uint8_t i;
+        log_puts(" flash=");
+        for (i = 1; i < rx->len; i++)
+            log_hex8(rx->payload[i]);
+    }
     if (rx->type == SL_T_POLL && rx->len >= SM_POLL_LEN) {
         log_puts(" up=");
         log_dec((uint16_t)rx->payload[SM_POLL_UPTIME_LO] |
@@ -197,6 +205,9 @@ void main(void)
     log_hex16(SHELF_NODE_ID);
     log_puts(" net ");
     log_hex8(SHELF_NET_ID);
+    /* tells the host this build forwards tag DATA payloads, which is
+     * what a flash read-back needs */
+    log_puts(" dump=1");
     log_nl();
 
     r = sl_init(SHELF_NODE_ID, SHELF_NET_ID, on_rx, on_done);

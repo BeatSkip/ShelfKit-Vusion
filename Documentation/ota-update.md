@@ -100,6 +100,13 @@ A tag that has no bootloader yet gets one with the merged HEX from
 application's entry in the jump-vector slot — see
 [ShelfKit-Firmware/Bootloader/README.md](../ShelfKit-Firmware/Bootloader/README.md#installing-the-bootloader-and-the-application-at-once).
 
+### Which firmware is on the board
+
+Both boards print a capability marker at the end of their boot banner:
+`*** ShelfKit hub, node 0001 net 5a dump=1`. `dump=1` means the build can forward tag
+DATA payloads, which the flash read-back needs; a hub without it will relay the frames
+but drop their bytes, and the server says so rather than showing an empty dump.
+
 ## Using it
 
 From the server: **Fleet** → click the tag → **Firmware update** → pick the HEX → **Reflash**.
@@ -129,6 +136,13 @@ compiled-in boot logo worth 11,248 bytes — was linked into both radio images w
 nothing referenced it any more (the boot demo it belonged to was replaced by the
 shelf-link main). It was deleted from both targets, which also shrank the hub from
 37,775 to 26,210 bytes.
+
+### Which firmware is on the board
+
+Both boards print a capability marker at the end of their boot banner:
+`*** ShelfKit hub, node 0001 net 5a dump=1`. `dump=1` means the build can forward tag
+DATA payloads, which the flash read-back needs; a hub without it will relay the frames
+but drop their bytes, and the server says so rather than showing an empty dump.
 
 ## Using it
 

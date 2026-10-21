@@ -27,6 +27,8 @@ long-lived poll connection per browser tab. The API is small and boring:
     POST /api/tags/<hex>/forget    delete the server's record of one tag
     POST /api/tags/<hex>/wipe      wipe the tag's flash and reset it into a new id
     POST /api/tags/<hex>/service   draw this tag's service label and push it
+    POST /api/tags/<hex>/read      {"start": 0, "length": 12288} SPI flash read-back
+    GET  /api/dump.bin /api/dump.txt   the last read-back
     POST /api/tags/forget          {"addrs": [...]} or {"not_seen_for": 600}
 
 State that has to outlive the process lives in shelfkit/store.py (one SQLite
@@ -124,6 +126,18 @@ class Handler(BaseHTTPRequestHandler):
             return self._serve_preview(
                 (query.get("t") or [""])[0], (query.get("kind") or ["device"])[0]
             )
+        if path in ("/api/dump.bin", "/api/dump.txt"):
+            kind = "bin" if path.endswith(".bin") else "txt"
+            file = self.app.dump_file(kind)
+            if file is None or not file.is_file():
+                return self._error("no read-back yet", HTTPStatus.NOT_FOUND)
+            body = file.read_bytes()
+            if kind == "bin":
+                content_type = "application/octet-stream"
+            else:
+                content_type = "text/plain; charset=utf-8"
+            self._send(HTTPStatus.OK, body, content_type, cache="no-store")
+            return
         if path == "/api/log":
             text = self.app.combined_log()
             return self._send(
@@ -176,6 +190,18 @@ class Handler(BaseHTTPRequestHandler):
                 if updated is None:
                     return self._error(f"bad tag id {parts[2]}")
                 return self._json({"tag": updated, "state": self.app.state()})
+            if len(parts) == 4 and parts[1] == "tags" and parts[3] == "read":
+                try:
+                    addr = int(parts[2], 16)
+                except ValueError:
+                    return self._error(f"bad tag id {parts[2]}")
+                try:
+                    start = int(str(body.get("start") or "0"), 0)
+                    length = int(str(body.get("length") or hex(0x3000)), 0)
+                except ValueError:
+                    return self._error("start/length must be numbers")
+                result = self.app.read_flash(addr, start, length)
+                return self._json({"result": result, "state": self.app.state()})
             if len(parts) == 4 and parts[1] == "tags" and parts[3] == "service":
                 try:
                     addr = int(parts[2], 16)

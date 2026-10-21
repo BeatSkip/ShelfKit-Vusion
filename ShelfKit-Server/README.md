@@ -184,6 +184,7 @@ that is still polling simply reappears as a fresh row (with no alias) on its nex
 | Drawer → **Forget tag** | deletes that one tag, its stored metadata and its log lines |
 | Fleet → select rows → **Forget** | the same for a selection |
 | Fleet → **Forget silent** | deletes every tag not heard for 10 minutes (a sleeping tag polls once a minute, so it stays) |
+| Drawer → **Read flash** | reads the tag's metadata pages back over the radio and offers the `.bin`/`.txt` |
 | Drawer → **Factory reset** | sends the tag a wipe command: it erases its SPI flash, resets and comes back with a **new random id**; the old row is dropped |
 
 Each delete arms itself: the first click turns the button into **Really forget?**, the second
@@ -241,6 +242,39 @@ you see in the Editor when you reload is what the tag got. A one-off note does n
 change the stored one: `POST /api/tags/<hex>/service {"note": "cable 12"}` labels a
 single push. The editor's own image is not replaced by this (`send()` takes the path
 explicitly).
+
+### Reading a tag's flash
+
+**Fleet** → click a tag → **Read flash**. The server asks the tag for its metadata
+pages over the radio, collects the reply frames from the hub's log, and shows what
+they mean:
+
+```
+identity: id 0x012A (assigned), version 1, CRC ok
+OTA header: blank (no pending update)
+reserved sector: blank
+600 frames, 12288 bytes (12198 still 0xFF)
+```
+
+The default range is `0x0000..0x2FFF` — the OTA header, the identity record and the
+reserved sector, i.e. everything the firmware writes. The result is saved to
+`data/dumps/flash-<id>-<timestamp>.bin` plus a hexdump `.txt`, and both are offered
+as downloads straight from the drawer (`/api/dump.bin`, `/api/dump.txt`). A page
+takes a few seconds; progress shows in the drawer while it runs.
+
+The drawer checks the hub's boot banner first: a hub without `dump=1` disables the
+button and says why, because that firmware relays the frames but drops their bytes.
+If a read does fail with *"the hub is dropping the payload"*, the hub is running firmware
+from before the read-back existed: the tag answers, the hub prints `DATA src=…` but
+with no bytes attached. Both firmwares now announce the capability in their boot
+banner — `*** ShelfKit hub, node 0001 net 5a dump=1` — so a hub without `dump=1` needs
+`vusion-hub-*.hex` from the current build. A read that receives nothing reports the
+error and no summary: "identity: blank" would be a lie.
+
+This is the same wire protocol and the same description code as
+`Tooling/flash-read.py` (`shelfkit/flashdump.py` is shared), so the CLI and the page
+agree byte for byte. The page needs nothing plugged into the tag, only the hub port,
+and it refuses to start while an image or firmware transfer is running.
 
 ### Assigning a tag's wireless id
 

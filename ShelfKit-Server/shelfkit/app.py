@@ -41,6 +41,9 @@ RE_WIPED = re.compile(r"factory reset")
 FLASH_ERASE_SETTLE_S = 0.6
 # How long to wait for the tag's own log line after an identity frame
 ID_CONFIRM_S = 6.0
+# A flash read-back page: the tag streams it in ~26-byte frames
+DUMP_PAGE_TIMEOUT_S = 12.0
+DUMP_MAX = 0x10000
 REPO_ROOT = Path(__file__).resolve().parents[2]
 # Tag ids below this are reserved (0 and 1, the latter being the hub).
 FIRST_TAG_ID = 0x0100
@@ -174,6 +177,7 @@ class App:
         self.send_to: int | None = None
         self.last_answer: str | None = None   # the hub's last SENT/ERR answer
         self._ports = (0.0, [])               # (fetched_at, [(device, description)])
+        self.dump: dict = {"active": False}    # the last flash read-back
         # The DTR (BOOT) level that makes the board run its firmware rather than
         # the serial bootloader. The documented mapping is "released", but the
         # only authority is the board itself: pulse_reset() watches what comes up
@@ -432,6 +436,8 @@ class App:
                 "reset_ms": int(RESET_PULSE_S * 1000),
                 "max_lines": MAX_LOG_LINES,
                 "firmware": self.firmware_candidates(),
+                "dump": self.dump,
+                "hub_caps": self.hub_capabilities(),
                 "editor": {
                     "fit": self.fit,
                     "dither": self.dither,
@@ -906,6 +912,156 @@ class App:
             with self.lock:
                 self.status = f"forgot {len(hexes)} tag(s)"
         return {"forgot": len(hexes), "hexes": hexes}
+
+    def hub_capabilities(self) -> dict:
+        """What the flashed hub can do, read off its boot banner.
+
+        A hub prints `*** ShelfKit hub, node 0001 net 5a dump=1` when it can forward
+        tag DATA payloads, which the flash read-back needs. Without that marker a
+        read will relay frames but drop their bytes, so the page says so up front
+        instead of failing mysteriously.
+        """
+        key = self.hub_key()
+        pane = self.panes.get(key)
+        if pane is None:
+            return {"key": key, "dump": None, "banner": None}
+        with self.lock:
+            lines = [entry[3] for entry in pane.log]
+        dump = None
+        banner = None
+        for line in reversed(lines):
+            if "*** ShelfKit hub" in line:
+                banner = line.strip()
+                dump = "dump=1" in line
+                break
+        return {"key": key, "dump": dump, "banner": banner}
+
+    # ── flash read-back ─────────────────────────────────────────────────────
+    def read_flash(self, addr: int, start: int = 0, length: int = 0x3000) -> dict:
+        """Read a range of a tag's SPI flash back over the radio.
+
+        The tag serves one page at a time; each reply frame appears in the hub
+        pane's log as `flash=<hex>`, so the bytes are collected from there. Runs
+        in a worker: a page takes a few seconds and the page keeps polling.
+        """
+        from . import flashdump
+
+        if length <= 0 or length > DUMP_MAX or start < 0 or start + length > DUMP_MAX:
+            return {"ok": False, "error": f"range 0x{start:X}+{length} is outside the flash"}
+        key = self.hub_key()
+        pane = self.panes.get(key)
+        if pane is None:
+            return {"ok": False, "error": "no hub pane"}
+        if not pane.worker.is_open:
+            return {"ok": False, "error": f"open the {pane.spec.name} port first"}
+        with self.lock:
+            if self.sending:
+                return {"ok": False, "error": "a transfer is running"}
+            if self.dump.get("active"):
+                return {"ok": False, "error": "a read-back is already running"}
+            self.dump = {"active": True, "id": f"{addr:04X}", "start": start,
+                         "length": length, "have": 0, "summary": [], "error": None}
+            cancel = threading.Event()
+            self._dump_cancel = cancel
+            self.status = f"reading 0x{start:04X}..0x{start + length - 1:04X} from {addr:04X}"
+        self._event("dump", f"{addr:04X}", f"0x{start:04X}+{length}")
+        threading.Thread(target=self._dump_worker,
+                         args=(key, addr, start, length, cancel),
+                         name="flash-read", daemon=True).start()
+        return {"ok": True, "start": start, "length": length}
+
+    def _dump_worker(self, key: str, addr: int, start: int, length: int, cancel) -> None:
+        from . import flashdump
+
+        pane = self.panes[key]
+        lines: list[str] = []
+        have: dict[int, bytes] = {}
+        error = None
+        try:
+            if not self._ping_hub(key, cancel):
+                error = "the hub did not answer P"
+                return
+            for page in range(start, start + length, flashdump.PAGE):
+                if cancel.is_set():
+                    error = "cancelled"
+                    return
+                want = min(flashdump.PAGE, start + length - page)
+                with self.lock:
+                    from_seq = pane.seq
+                if not self._send_frame(key, addr,
+                                        flashdump.request_payload(page, want), cancel):
+                    error = f"{addr:04X} did not acknowledge the request for 0x{page:04X}"
+                    return
+                deadline = time.monotonic() + DUMP_PAGE_TIMEOUT_S + want / 512.0
+                got = 0
+                relays = 0             # DATA frames from the tag that carried no dump
+                while time.monotonic() < deadline and got < want:
+                    with self.lock:
+                        fresh = [entry for entry in pane.log if entry[0] > from_seq]
+                    for seq, _arrival, _stamp, line in fresh:
+                        lines.append(line)
+                        parsed = flashdump.parse_line(line)
+                        if parsed and page <= parsed[1] < page + want:
+                            if parsed[1] not in have:
+                                have[parsed[1]] = parsed[2]
+                                got += len(parsed[2])
+                            continue
+                        if re.search(rf"DATA src={addr:04x}\b", line):
+                            relays += 1
+                    if fresh:
+                        from_seq = fresh[-1][0]
+                    with self.lock:
+                        self.dump["have"] = sum(len(chunk) for chunk in have.values())
+                    if got < want and not got and relays >= 5:
+                        # the tag answered, the hub printed its frame, but the bytes
+                        # never made it into the log: an older hub firmware
+                        error = ("the hub is dropping the payload - flash the hub with this "
+                                 "build: its banner must end in dump=1 and its DATA "
+                                 "lines in flash=...")
+                        return
+                    if got < want:
+                        time.sleep(0.05)
+                if got < want:
+                    error = f"page 0x{page:04X} did not arrive complete ({got}/{want} B)"
+                    return
+        except Exception as exc:  # noqa: BLE001 - a read must not kill the worker
+            error = f"{type(exc).__name__}: {exc}"
+        finally:
+            data = flashdump.assemble(lines, length, start)
+            frames = sum(1 for line in lines if flashdump.parse_line(line))
+            # an empty buffer describes nothing: saying "identity: blank" for a read
+            # that received no bytes would be a lie, and a harmful one here
+            notes = flashdump.summary(data, start, frames) if frames else []
+            received = sum(1 for value in data if value != 0xFF)
+            result = {"active": False, "ok": error is None, "id": f"{addr:04X}",
+                      "start": start, "length": length, "frames": frames,
+                      "received": received, "summary": notes, "error": error}
+            if frames:                 # a partial dump is still worth keeping
+                folder = REPO_ROOT / "ShelfKit-Server" / "data" / "dumps"
+                try:
+                    folder.mkdir(parents=True, exist_ok=True)
+                    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+                    base = folder / f"flash-{addr:04X}-{stamp}"
+                    base.with_suffix(".bin").write_bytes(bytes(data))
+                    base.with_suffix(".txt").write_text(
+                        flashdump.hexdump(bytes(data), start), encoding="utf-8")
+                    result.update({"bin": base.with_suffix(".bin").name,
+                                   "txt": base.with_suffix(".txt").name,
+                                   "bin_path": str(base.with_suffix(".bin")),
+                                   "txt_path": str(base.with_suffix(".txt"))})
+                except OSError as exc:
+                    result["error"] = f"saved in memory only: {exc}"
+            with self.lock:
+                self.dump = result
+                self.status = (f"read 0x{start:04X}+{length} from {addr:04X}" if error is None
+                               else f"read failed: {error}")
+            self._event("ok" if error is None else "fail", f"{addr:04X}", "flash read")
+
+    def dump_file(self, kind: str) -> Path | None:
+        """The last read-back's .bin or .txt, for the download links."""
+        with self.lock:
+            path = self.dump.get(f"{kind}_path")
+        return Path(path) if path else None
 
     def service_image(self, addr: int, note: str | None = None,
                       alias: str | None = None) -> dict:

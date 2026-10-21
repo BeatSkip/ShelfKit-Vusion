@@ -93,6 +93,7 @@
             <th data-sort="status">Status</th>
             <th data-sort="battery">Battery</th>
             <th data-sort="seen">Last content</th>
+            <th class="actions"></th>
           </tr>
         </thead>
         <tbody id="fleet-rows"></tbody>
@@ -268,8 +269,6 @@
       <div class="screen-head">
         <h1>Stats</h1>
         <span class="grow"></span>
-        <button id="fleet-forget-stale" class="ghost"
-                title="Delete every tag that has not been heard for 10 minutes">Forget silent</button>
         <div class="segmented"><button class="on">24h</button><button>7d</button></div>
       </div>
       <div class="cards">
@@ -420,6 +419,20 @@
         above and a black/red patch - so a tag in hand can be matched to this row. Sent wirelessly,
         like any other image.</p>
 
+      <h3>Flash read-back</h3>
+      <div class="row">
+        <button id="drawer-read"
+                title="Read the metadata pages back over the radio">Read flash</button>
+        <span id="drawer-read-status" class="dim"></span>
+      </div>
+      <div id="drawer-read-info" class="dump-lines"></div>
+      <div class="row" id="drawer-read-files" hidden>
+        <a id="drawer-read-bin" class="ghost" download>download .bin</a>
+        <a id="drawer-read-txt" class="ghost" download>download .txt</a>
+      </div>
+      <p class="hint">0x0000-0x2FFF: the OTA header, the identity record and the reserved
+        sector. Takes a few seconds per 4 KiB page.</p>
+
       <h3>Wireless identity</h3>
       <div class="row">
         <input id="drawer-newid" class="mono" maxlength="6" placeholder="next free"
@@ -433,6 +446,7 @@
       <h3>Firmware update</h3>
       <div class="row">
         <select id="drawer-fw"></select>
+        <button id="drawer-flash" title="Send the selected firmware to this tag">Reflash</button>
       </div>
       <p class="hint">Sent over the wireless link: the tag stores it in SPI flash, verifies the
         CRC and resets; the bootloader programs it and starts it. The tag keeps its id. It only
@@ -458,7 +472,6 @@
     </div>
     <div class="drawer-foot">
       <button id="drawer-push" class="primary">Push content</button>
-      <button id="drawer-flash" title="Send the selected firmware to this tag">Reflash</button>
     </div>
   </aside>
 

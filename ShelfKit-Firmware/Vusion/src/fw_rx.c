@@ -26,6 +26,7 @@
 #include "fw_rx.h"
 #include "shelfhw.h"
 #include "shelf_id.h"
+#include "shelflink.h"
 #include "shelfmsg.h"
 #include "shelfota.h"
 #include "spi.h"
@@ -39,6 +40,14 @@ static uint16_t __xdata crc_calc;
 static uint16_t __xdata crc_want;
 static uint16_t __xdata last_rx;
 static uint16_t __xdata id;
+
+/* flash read-back state: address, how much is left, 0 = idle, 1 = ready to send,
+ * 2 = a frame is in flight, 3 = give up after repeated failures */
+static uint32_t __xdata dump_addr;
+static uint16_t __xdata dump_left;
+static uint8_t __xdata dump_active;
+static uint8_t __xdata dump_fail;
+static uint8_t __xdata dump_frame[SM_DUMP_HDR + SM_DUMP_CHUNK];
 
 static const uint8_t __xdata * __xdata msg;
 static uint8_t __xdata msg_len;
@@ -177,6 +186,31 @@ uint8_t fw_rx_data(const uint8_t __xdata *payload, uint8_t len)
     case SM_OP_FW_END:
         on_end();
         break;
+    case SM_OP_FLASH_DUMP:
+        if (len < 6)
+            return 1;
+        if (dump_active == 1 || dump_active == 2) {
+            /* a page is still streaming: a second request would overwrite the
+             * address of the one in flight and lose the rest of it */
+            log_puts("dump busy\r\n");
+            break;
+        }
+        dump_addr = (uint32_t)msg[1] | ((uint32_t)msg[2] << 8) | ((uint32_t)msg[3] << 16);
+        dump_left = (uint16_t)msg[4] | ((uint16_t)msg[5] << 8);
+        if (!dump_left || dump_left > SM_DUMP_MAX) {
+            log_puts("dump bad len\r\n");
+            break;
+        }
+        spi_init();
+        extflash_release_powerdown();
+        dump_fail = 0;
+        dump_active = 1;
+        log_puts("dump ");
+        log_hex16((uint16_t)dump_addr);
+        log_puts(" len=");
+        log_dec(dump_left);
+        log_nl();
+        break;
     case SM_OP_WIPE:
         log_puts("factory reset\r\n");
         (void)shelf_id_factory_reset();
@@ -198,6 +232,56 @@ uint8_t fw_rx_data(const uint8_t __xdata *payload, uint8_t len)
         return 0;
     }
     last_rx = (uint16_t)wtimer0_curtime();
+    return 1;
+}
+
+uint8_t fw_dump_active(void)
+{
+    return dump_active && dump_active != 3;
+}
+
+void fw_dump_step(void)
+{
+    uint8_t n;
+
+    if (dump_active != 1 || sl_busy())
+        return;
+    n = (dump_left > SM_DUMP_CHUNK) ? SM_DUMP_CHUNK : (uint8_t)dump_left;
+    dump_frame[0] = SM_OP_FLASH_DATA;
+    dump_frame[1] = (uint8_t)dump_addr;
+    dump_frame[2] = (uint8_t)(dump_addr >> 8);
+    dump_frame[3] = (uint8_t)(dump_addr >> 16);
+    dump_frame[4] = n;
+    extflash_read(dump_addr, dump_frame + SM_DUMP_HDR, n);
+
+    dump_active = 2;
+    if (sl_send(SL_NODE_HUB, SL_T_DATA, dump_frame, (uint8_t)(SM_DUMP_HDR + n)) != SL_OK) {
+        dump_active = 1;            /* still busy: try again next loop */
+    }
+}
+
+uint8_t fw_dump_done(uint8_t result)
+{
+    if (dump_active != 2)
+        return 0;                   /* not a dump frame */
+    if (result != SL_OK) {
+        if (++dump_fail >= 3) {
+            dump_active = 3;
+            log_puts("dump aborted\r\n");
+            return 1;
+        }
+        dump_active = 1;
+        return 1;
+    }
+    dump_fail = 0;
+    dump_addr += dump_frame[4];
+    dump_left -= dump_frame[4];
+    if (!dump_left) {
+        dump_active = 0;
+        log_puts("dump done\r\n");
+    } else {
+        dump_active = 1;
+    }
     return 1;
 }
 

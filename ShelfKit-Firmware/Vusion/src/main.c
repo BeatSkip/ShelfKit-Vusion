@@ -80,6 +80,10 @@ static void on_done(const struct sl_done __xdata *done)
     uint8_t attempts = done->attempts;
     const struct sl_rx __xdata *rsp = done->rsp;
 
+    /* a frame from the flash read-back: handled there, and not a poll result */
+    if (fw_dump_done(done->result))
+        return;
+
     polls_done++;
     last_attempts = attempts;
 
@@ -171,6 +175,7 @@ void main(void)
     log_hex16(node_id);
     log_puts(" net ");
     log_hex8(SHELF_NET_ID);
+    log_puts(" dump=1");
     log_nl();
 
     r = sl_init(node_id, SHELF_NET_ID, on_rx, on_done);
@@ -198,7 +203,9 @@ void main(void)
     /* While an image or a firmware image arrives the tag must hear every frame,
      * so no standby */
     for (;;) {
-        if (img_rx_active() || fw_rx_active())
+        if (fw_dump_active())
+            fw_dump_step();
+        if (img_rx_active() || fw_rx_active() || fw_dump_active())
             shelfhw_poll_awake();
         else
             shelfhw_poll();

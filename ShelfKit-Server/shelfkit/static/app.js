@@ -90,6 +90,12 @@ const ui = {
   drawerNewId: $("drawer-newid"),
   drawerFw: $("drawer-fw"),
   drawerService: $("drawer-service"),
+  drawerRead: $("drawer-read"),
+  drawerReadStatus: $("drawer-read-status"),
+  drawerReadInfo: $("drawer-read-info"),
+  drawerReadFiles: $("drawer-read-files"),
+  drawerReadBin: $("drawer-read-bin"),
+  drawerReadTxt: $("drawer-read-txt"),
   drawerFwStatus: $("drawer-fw-status"),
   drawerFlash: $("drawer-flash"),
   drawerForget: $("drawer-forget"),
@@ -453,14 +459,9 @@ function renderFleet() {
     pickCell.append(box);
 
     const hexCell = el("td", "hex");
-    const link = el("a", null, row.hex);
-    link.href = `#editor`;
-    link.title = "open the editor for this tag";
-    link.addEventListener("click", (event) => {
-      event.preventDefault();
-      openEditorFor(row.hex);
-    });
-    hexCell.append(link);
+    const label = el("span", "tag-id", row.hex);
+    label.title = "open this tag's details";
+    hexCell.append(label);
 
     const aliasCell = row.alias ? el("td", null, row.alias) : el("td", "dim", "—");
     aliasCell.title = row.alias
@@ -474,6 +475,15 @@ function renderFleet() {
 
     const batteryCell = el("td", "dim", "—");
     batteryCell.title = "the firmware does not report battery yet";
+
+    const actionsCell = el("td", "actions");
+    const editButton = el("button", "ghost", "Editor");
+    editButton.title = "open the editor with this tag selected";
+    editButton.addEventListener("click", (event) => {
+      event.stopPropagation();          // the row click opens the drawer instead
+      openEditorFor(row.hex);
+    });
+    actionsCell.append(editButton);
 
     const contentCell = el("td");
     const thumb = el("span", "thumb");
@@ -496,7 +506,7 @@ function renderFleet() {
     contentCell.append(thumb);
     contentCell.title = row.push ? row.push.name : "no content pushed from this session";
 
-    tr.append(pickCell, hexCell, aliasCell, statusCell, batteryCell, contentCell);
+    tr.append(pickCell, hexCell, aliasCell, statusCell, batteryCell, contentCell, actionsCell);
     tr.addEventListener("click", (event) => {
       if (event.target.closest("input, a")) return;
       openDrawer(row.hex);
@@ -577,6 +587,39 @@ function renderDrawer() {
       ui.drawerFw.value = keep;
     }
   }
+  const dump = state?.dump || {};
+  const mine = dump.id === drawerHex;
+  const caps = state?.hub_caps || {};
+  const hubBlind = caps.dump === false;      // an older hub firmware
+  ui.drawerRead.disabled = !!dump.active || !!state?.sending || hubBlind;
+  ui.drawerRead.title = hubBlind
+    ? "this hub firmware cannot forward read-back bytes: flash vusion-hub-*.hex"
+    : "Read the metadata pages back over the radio";
+  ui.drawerReadStatus.textContent =
+    mine && dump.active
+      ? `reading ${dump.have || 0}/${dump.length} B`
+      : "";
+  ui.drawerReadInfo.innerHTML = "";
+  if (hubBlind) {
+    ui.drawerReadInfo.append(el("div", "bad",
+      "this hub is running older firmware: it relays the frames but drops their bytes. " +
+      "Flash vusion-hub-*.hex, then reload this page."));
+  }
+  if (mine && Array.isArray(dump.summary)) {
+    for (const line of dump.summary) ui.drawerReadInfo.append(el("div", null, line));
+  }
+  if (mine && dump.error) {
+    ui.drawerReadInfo.append(el("div", "bad", dump.error));
+  }
+  const ready = mine && (dump.bin || dump.txt);
+  ui.drawerReadFiles.hidden = !ready;
+  if (ready) {
+    ui.drawerReadBin.href = "/api/dump.bin";
+    ui.drawerReadTxt.href = "/api/dump.txt";
+    ui.drawerReadBin.download = dump.bin || "flash.bin";
+    ui.drawerReadTxt.download = dump.txt || "flash.txt";
+  }
+
   ui.drawerFlash.disabled = !!state?.sending;
   ui.drawerFwStatus.textContent = state?.sending && state.progress
     ? `${state.status} - frame ${state.progress}`
@@ -637,6 +680,25 @@ async function forget(path, body, what) {
   } catch (err) {
     toast(`cannot forget: ${err.message}`, "bad");
     return 0;
+  }
+}
+
+async function readFlash() {
+  if (!drawerHex) return;
+  ui.drawerRead.disabled = true;
+  try {
+    // 0x3000 = OTA header + identity record + reserved sector: all metadata
+    const payload = await postJSON(`/api/tags/${drawerHex}/read`,
+      { start: 0, length: 0x3000 });
+    render(payload.state);
+    const result = payload.result || {};
+    if (!result.ok) {
+      toast(result.error || "the read did not start", "bad");
+      ui.drawerRead.disabled = false;
+    }
+  } catch (err) {
+    toast(`cannot read the flash: ${err.message}`, "bad");
+    ui.drawerRead.disabled = false;
   }
 }
 
@@ -1366,6 +1428,7 @@ ui.drawerSave.addEventListener("click", saveDrawer);
 ui.drawerAssign.addEventListener("click", assignId);
 ui.drawerFlash.addEventListener("click", flashFirmware);
 ui.drawerService.addEventListener("click", serviceImage);
+ui.drawerRead.addEventListener("click", readFlash);
 ui.drawerForget.addEventListener("click", () => {
   armForget(ui.drawerForget, "Forget tag", async () => {
     if (!drawerHex) return;

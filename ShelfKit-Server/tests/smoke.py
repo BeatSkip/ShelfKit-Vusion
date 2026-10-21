@@ -31,7 +31,7 @@ SERVER = Path(__file__).resolve().parents[1]
 REPO = SERVER.parent
 sys.path.insert(0, str(SERVER))
 
-from shelfkit import serial_link, store as store_mod, webapp  # noqa: E402
+from shelfkit import firmware, serial_link, store as store_mod, webapp  # noqa: E402
 from shelfkit.app import App  # noqa: E402
 from shelfkit.serial_link import PortSpec  # noqa: E402
 
@@ -107,11 +107,36 @@ class FakePort:
             frame = bytes.fromhex(line[1:])
             addr = frame[0] | (frame[1] << 8)
             self.feed(f"SENT {addr:04x} ok att=1\r\n")
+            payload = frame[2:-1]
+            if payload and payload[0] == 9:          # a flash read-back request
+                start = payload[1] | (payload[2] << 8) | (payload[3] << 16)
+                length = payload[4] | (payload[5] << 8)
+                self.stream(addr, start, length)
         return len(data)
+
+    def stream(self, addr: int, start: int, length: int) -> None:
+        """What the tag would send back: 26 bytes per DATA frame."""
+        for offset in range(0, length, 26):
+            chunk = bytes(FLASH[start + offset:start + offset + min(26, length - offset)])
+            header = bytes([(start + offset) & 0xFF, ((start + offset) >> 8) & 0xFF,
+                            ((start + offset) >> 16) & 0xFF, len(chunk)])
+            self.feed(f"DATA src={addr:04x} seq=1a rssi=-30 flash={(header + chunk).hex()}\r\n")
 
     def flush(self) -> None:
         pass
 
+
+FLASH = bytearray(b"\xff" * 0x3000)          # what the "tag" will read back
+IDENTITY = bytearray(b"\xff" * 10)
+IDENTITY[0:4] = b"SKID"
+IDENTITY[4] = 1
+IDENTITY[5] = 1
+IDENTITY[6] = 0x2A
+IDENTITY[7] = 0x01
+_crc = firmware.crc16(IDENTITY[:8])
+IDENTITY[8] = _crc & 0xFF
+IDENTITY[9] = _crc >> 8
+FLASH[0x1000:0x100A] = IDENTITY
 
 PORTS: dict[str, FakePort] = {}
 serial_link._make_serial = lambda spec: PORTS.setdefault(spec.port, FakePort())
@@ -181,6 +206,22 @@ def main() -> int:
         check("the push finished", wait_idle())
         sent = [w for w in PORTS["SMOKE1"].written[before:] if w.startswith("S")]
         check("an image is still 404 frames", len(sent) == IMAGE_FRAMES, len(sent))
+
+        # the flash read-back: request, collect from the pane log, save, serve
+        result = post("/api/tags/0100/read", {})["result"]
+        check("flash read accepted", result.get("ok") is True, result)
+        end = time.time() + 60
+        while time.time() < end and get("/api/state")["dump"].get("active"):
+            time.sleep(0.05)
+        dump = get("/api/state")["dump"]
+        check("flash read finished", dump.get("ok") is True, dump)
+        notes = "\n".join(dump.get("summary") or [])
+        check("the identity came back over the air", "id 0x012A (assigned)" in notes, notes)
+        check("the reserved sector is reported", "reserved sector: blank" in notes, notes)
+        body = urllib.request.urlopen(base + "/api/dump.bin", timeout=30).read()
+        check("the dump downloads and holds the record",
+              len(body) == 0x3000 and body[0x1000:0x100A] == IDENTITY,
+              [len(body), body[0x1000:0x100A].hex()])
 
         # a restart restores the editor and re-renders its preview
         for pane in app.panes.values():

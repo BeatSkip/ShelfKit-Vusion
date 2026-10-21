@@ -71,6 +71,15 @@ collide, the server sees one source polling with the same id twice, and assignin
 each of them a proper id still works because both accept the frame — so treat a
 duplicate as "assign the next one first".
 
+## Inspecting it
+
+`Tooling/flash-read.py` reads back what is actually on the chip, so a "the id does
+not stick" report can be settled with evidence instead of guesswork: it prints the
+identity record (`id`, `assigned`/`random`, CRC ok or BAD), the OTA header (pending
+update or blank, header CRC), and whether the reserved sector is in use, then saves
+the raw bytes. Empty sectors read as `0xFF`, so `--range 0:0x3000` is a complete
+picture of the metadata in one file.
+
 ## What is deliberately not here
 
 - **No separate provisioning net.** The tag uses the production net from the

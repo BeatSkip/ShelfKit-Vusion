@@ -10,6 +10,7 @@ Python 3 helpers that build and flash the boards over their serial link. The hos
 | `build-all.py` | Builds every firmware target and writes ready-to-flash Intel HEX files to `Release/` at the repository root |
 | `axsem-flasher.py` | Programs an Intel HEX file over the AX8052 serial bootloader: `?` banner → `K` erase → hex lines → `R` run |
 | `ota-send.py` | Sends a new application to a tag over the wireless link (OTA): converts the HEX, sends BEGIN/CHUNK/END, checks the image first with `--dry-run`. The server's Reflash button does the same through the same code (`ShelfKit-Server/shelfkit/firmware.py`) |
+| `flash-read.py` | Reads a tag's SPI flash back over the radio (identity, OTA header, reserved sector, or any range) and writes a `.bin` plus a hexdump; `--from-log` reassembles a saved console log |
 | `set-id.py` | Gives a tag its wireless id over the air (`current_id new_id`), which it stores in SPI flash and keeps across updates. The server's Fleet drawer does the same thing with a button |
 
 ## Building everything
@@ -58,6 +59,36 @@ placement, and the `.mem` figures are printed in the summary.
 `firmware`, which would collide.
 
 `Release/` is git-ignored: it is output, and re-running the script regenerates it.
+
+## Reading a tag's flash back
+
+```
+python ShelfKit-Firmware/Tooling/flash-read.py 0102                     # all metadata, 0x0000..0x2FFF
+python ShelfKit-Firmware/Tooling/flash-read.py 0102 --range 0:0x10000  # the whole chip
+python ShelfKit-Firmware/Tooling/flash-read.py --from-log console.txt  # reassemble a saved log
+```
+
+The host asks the tag for a 4 KB page (`SM_OP_FLASH_DUMP`), the tag answers with
+`SM_OP_FLASH_DATA` frames that the hub prints as `flash=<hex>`, and the script puts
+them back together. It needs nothing plugged into the tag — only the hub port — and
+the tag has to be awake, so a dump waits for its next poll at worst.
+
+The same read is available in the server (**Fleet** → tag → **Read flash**), which
+shows the metadata inline and serves the `.bin` as a download; both share
+`shelfkit/flashdump.py`, so the frames and the descriptions are identical.
+
+Output goes to `Data/dumps/` as `flash-<id>-<timestamp>.bin` and a matching `.txt`
+hexdump, and the script prints what the bytes mean:
+
+```
+  identity: id 0x0177 (assigned), version 1, CRC ok
+  OTA header: blank (no pending update)
+  reserved sector: blank
+  internal reset jump: ljmp 0x021B
+```
+
+A page takes a few seconds, so a whole 128 KiB chip is a coffee break; the default
+range is everything the firmware writes.
 
 ## Flashing a build
 
