@@ -150,6 +150,11 @@ static void poll_cb(struct wtimer_desc __xdata *desc)
     poll_payload[SM_POLL_UPTIME_HI] = (uint8_t)(up >> 8);
     poll_payload[SM_POLL_ATTEMPTS] = last_attempts;
     poll_payload[SM_POLL_RSSI] = (uint8_t)last_hub_rssi;
+    {
+        uint16_t vdd = shelfhw_measure_vdd();
+        poll_payload[SM_POLL_VDD_LO] = (uint8_t)vdd;
+        poll_payload[SM_POLL_VDD_HI] = (uint8_t)(vdd >> 8);
+    }
 
     if (sl_send(SL_NODE_HUB, SL_T_POLL, poll_payload, SM_POLL_LEN) != SL_OK)
         log_puts("poll skipped, previous still in flight\r\n");

@@ -89,6 +89,11 @@ void shelfhw_fatal(uint8_t led);
 /* 16-bit pseudo-random value for retry jitter and initial sequence numbers. */
 uint16_t shelfhw_random(void);
 
+/* Supply voltage in volts*256 (3.00 V -> 0x0300). The AXSEM bootloader's ADC
+ * recipe, averaged over four channels that all sample VDD, so no pin is spent:
+ * it is the battery the tag reports in every poll. */
+uint16_t shelfhw_measure_vdd(void) __reentrant;
+
 /* UART0 TX debug log. */
 void log_putc(uint8_t c);
 void log_puts(const char *s);

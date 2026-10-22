@@ -83,45 +83,44 @@ reset — before it generates its random id. `SHELF_WIPE_FIRST_BOOT 0` in
 
 ## Power
 
-The tag polls every `SHELF_POLL_INTERVAL_S` (30 s). Two very different things are
-available for the current draw, and only the first one is enabled by default:
-
-**Always on (default, what is verified on hardware):**
+The tag polls every `SHELF_POLL_INTERVAL_S` (30 s). Between polls the MCU is in
+standby and the radio is parked in `AXRADIO_MODE_OFF`:
 
 | block | between polls |
 |---|---|
 | MCU | standby (`wtimer_idle(WTFLAG_CANSTANDBY)`), woken by the low-power timer |
-| radio | listening (`AXRADIO_MODE_ASYNC_RECEIVE`) - this is the ~10 mA |
-| panel | rail off after a refresh (`pwr_off()`), image held without power |
+| radio | `AXRADIO_MODE_OFF` = `ax5043_off()`: receiver, synth and baseband down, 26 MHz XTAL kept on so the MCU's SYSCLK stays up |
+| 26 MHz crystal | kept on (see below for the off option) |
+| panel | rail off after a refresh, image held without power |
 
-**Opt-in radio sleep (`SHELF_RADIO_SLEEP 1`) - experimental:**
+For `SHELF_LISTEN_WINDOW_S` (3 s) after each poll the radio is back in receive so
+the hub can start a push; the window re-arms while a transfer is running.
 
-| block | between polls |
-|---|---|
-| radio | `AXRADIO_MODE_DEEPSLEEP` for the gap, woken before each poll |
-| 26 MHz crystal | not forced (`OSCFORCERUN` bit 2 cleared), only with `SHELF_XTAL_OFF 1` |
-| tags | listens `SHELF_LISTEN_WINDOW_S` (8 s) after each poll, since that is when the hub can send |
+**Why `OFF` and not `DEEPSLEEP`.** The first low-power attempt used
+`AXRADIO_MODE_DEEPSLEEP`, and the tag polled once and then died: `radio_enter_deepsleep()`
+rewrites `RADIOMUX`/`PORTR` and drives the AX5043's SYSCLK pin, and the AX8052F143
+takes its clock from that domain, so the CPU clock stopped. `AXRADIO_MODE_OFF` powers
+down the receiver *without* that pin-mux dance, leaving `PWRSTATE_XTAL_ON` +
+`POWERDOWN`, so SYSCLK keeps running and the wake-up timer keeps ticking.
 
-> **It does not work yet on hardware.** With this enabled a tag polled once and then
-> went completely silent, which points at `radio_enter_deepsleep()`: it rewrites
-> `RADIOMUX`/`PORTR` and drives the AX5043's SYSCLK output, and the AX8052F143 takes
-> its clock from that same domain. Enable it in two steps while watching the tag's
-> log:
->
-> 1. `SHELF_RADIO_SLEEP 1`, `SHELF_XTAL_OFF 0` — radio only. The tag logs `sleep`
->    when it parks the radio and `wake` before the next poll.
-> 2. If that survives, `SHELF_XTAL_OFF 1` as well — adds the crystal stop.
->
-> Silence in the log *after* `sleep` means the chip stopped rather than the timer;
-> repeating `poll FAILED` lines mean the timer is fine and the radio came back wrong.
+The 26 MHz XTAL oscillator is the remaining idle drain (of order 1 mA, versus the
+~10 mA receiver it replaces). Stopping it too would need the MCU switched onto the
+internal FRC first (`CLKCON`), because SYSCLK is the radio XTAL; that is the next
+lever and is left unflipped until it can be watched on a meter.
+
+**Battery.** Each poll carries the supply voltage, measured with the AXSEM bootloader's
+ADC recipe (`shelfhw_measure_vdd`, volts*256, e.g. 3.00 V -> 0x0300). The hub prints
+it as `vdd=0300` and the server shows it in the Fleet **Battery** column and the
+drawer, red below 2.5 V. The AX8052 GP ADC has missing codes around mid-scale
+(erratum, all revisions), so treat the last digit as a hint, not a measurement.
 
 Other consequences:
 
 - **The wake-up timer caps the interval at ~102 s** (`SHELFHW_TICKS_PER_S` = 640 ticks
   per second compared in 16 bits). 30 s is the default, 60 s works, 100 s is the edge.
-- **Pushes wait for a window when the radio sleeps.** The server retries a frame for
-  90 s (`hubhost.CMD_RETRY_WINDOW_S`), so a push started at any moment lands within
-  one poll cycle. With the radio always listening (default) this does not apply.
+- **Pushes wait for a window.** The server retries a frame for 90 s
+  (`hubhost.CMD_RETRY_WINDOW_S`), so a push started at any moment lands within one
+  poll cycle.
 
 ## Hardware notes that cost real time
 
@@ -148,6 +147,6 @@ Other consequences:
 ## Known gaps
 
 - Partial refresh and rotation slots; today every update is a full ~15-second flash.
-- No battery or telemetry report on the wire (the fleet table shows `—`).
+- Battery voltage is reported per poll; fuller telemetry (temperature, per-day history) is not.
 - The NFC chip and the serial flash have chip selects and a flash driver, but no NFC driver.
 - U5 (PA2) is still unidentified and left alone.

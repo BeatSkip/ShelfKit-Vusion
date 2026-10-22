@@ -20,7 +20,7 @@
  *   2. then SHELF_XTAL_OFF 1 as well            (radio + crystal)
  * The tag logs "sleep" when it parks the radio and "wake" when it brings it back,
  * so a silent log after "sleep" means the chip itself stopped. */
-#define SHELF_RADIO_SLEEP   0
+#define SHELF_RADIO_SLEEP   1
 #define SHELF_XTAL_OFF      0
 
 /* Seconds between polls. 60 s is the practical ceiling: the wake-up timer counts
@@ -32,7 +32,7 @@
 /* How long the tag listens after each poll, in seconds. Everything the hub sends
  * (images, firmware, a new identity) follows a POLL, so this window is the only
  * time the tag can be reached. Longer = easier pushes, shorter = less RX time. */
-#define SHELF_LISTEN_WINDOW_S   8
+#define SHELF_LISTEN_WINDOW_S   3
 
 /* Print the link statistics every this many polls */
 #define SHELF_STATS_EVERY       10

@@ -16,6 +16,7 @@
 const POLL_MS = 200;          // console lines want to feel live
 const MAX_DOM_LINES = 2000;
 const ONLINE_WINDOW_S = 30;   // a tag heard this recently counts as online
+const LOW_BATTERY_V = 2.5;    // below this the battery is close to done
 const STATUS_RANK = { online: 0, pending: 1, alert: 2, offline: 3, unreachable: 4 };
 const THEME_KEY = "shelfkit-theme";
 
@@ -387,7 +388,7 @@ function tagRows() {
       row: detail.row ?? null,
       col: detail.col ?? null,
       status,
-      battery: null,
+      battery: detail.vdd ? detail.vdd.volts : null,
       seen: detail.seen,
       count: detail.count ?? count,
       push: detail.push || null,
@@ -473,8 +474,18 @@ function renderFleet() {
     wrap.append(el("span", `status-dot s-${row.status}`), el("span", null, row.status));
     statusCell.append(wrap);
 
-    const batteryCell = el("td", "dim", "—");
-    batteryCell.title = "the firmware does not report battery yet";
+    const batteryCell = el("td");
+    if (row.battery != null) {
+      const low = row.battery < LOW_BATTERY_V;
+      const volts = row.battery.toFixed(2);
+      batteryCell.append(el("span", low ? "bad" : null, `${volts} V`));
+      batteryCell.title = low
+        ? `supply ${volts} V - low`
+        : `supply ${volts} V`;
+    } else {
+      batteryCell.append(el("span", "dim", "—"));
+      batteryCell.title = "no voltage reported yet (older firmware)";
+    }
 
     const actionsCell = el("td", "actions");
     const editButton = el("button", "ghost", "Editor");

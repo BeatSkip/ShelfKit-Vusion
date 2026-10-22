@@ -48,7 +48,9 @@ static void log_rx(const struct sl_rx __xdata *rx)
         for (i = 1; i < rx->len; i++)
             log_hex8(rx->payload[i]);
     }
-    if (rx->type == SL_T_POLL && rx->len >= SM_POLL_LEN) {
+    /* 4-byte polls are the old firmware; 6-byte ones add the supply voltage.
+     * Print each field only when the bytes are actually there. */
+    if (rx->type == SL_T_POLL && rx->len >= 4) {
         log_puts(" up=");
         log_dec((uint16_t)rx->payload[SM_POLL_UPTIME_LO] |
                 ((uint16_t)rx->payload[SM_POLL_UPTIME_HI] << 8));
@@ -56,6 +58,11 @@ static void log_rx(const struct sl_rx __xdata *rx)
         log_dec(rx->payload[SM_POLL_ATTEMPTS]);
         log_puts(" hubrssi=");
         log_sdec((int8_t)rx->payload[SM_POLL_RSSI]);
+        if (rx->len >= SM_POLL_LEN) {
+            log_puts(" vdd=");
+            log_hex16((uint16_t)rx->payload[SM_POLL_VDD_LO] |
+                      ((uint16_t)rx->payload[SM_POLL_VDD_HI] << 8));
+        }
     }
     log_nl();
 }

@@ -15,11 +15,14 @@
 #ifndef SHELFMSG_H
 #define SHELFMSG_H
 
-#define SM_POLL_LEN         4
+#define SM_POLL_LEN         6
 #define SM_POLL_UPTIME_LO   0
 #define SM_POLL_UPTIME_HI   1
 #define SM_POLL_ATTEMPTS    2
 #define SM_POLL_RSSI        3
+/* supply voltage in volts*256 (3.00 V -> 0x0300), measured by the tag at each poll */
+#define SM_POLL_VDD_LO      4
+#define SM_POLL_VDD_HI      5
 
 #define SM_RSP_LEN          2
 #define SM_RSP_CMD          0

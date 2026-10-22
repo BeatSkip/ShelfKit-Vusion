@@ -53,6 +53,8 @@ IMAGE_SUFFIXES = frozenset(
 )
 # A tag announces itself on the hub's UART log as "POLL src=<node id>".
 RE_POLL = re.compile(r"^POLL src=([0-9a-fA-F]{4,8})\b")
+# the hub prints the tag's supply voltage as vdd=XXXX (volts*256, 3.00 V -> 0x0300)
+RE_POLL_VDD = re.compile(r"\bvdd=([0-9a-fA-F]{4})\b")
 RE_PONG = re.compile(r"^PONG\b")
 # What the board says when it comes up. Which one appears after a reset tells us
 # which BOOT-pin level the firmware needs (see App.pulse_reset).
@@ -170,6 +172,7 @@ class App:
         # heard, and what it was last sent. Wall-clock seconds (persisted, so a
         # restart keeps the ages meaningful); ages go over the wire.
         self.tag_seen: dict[int, float] = {}
+        self.tag_vdd: dict[int, tuple[int, float]] = {}  # addr -> (raw*256, seen_at)
         # name, when, render key (the key lets the Fleet show the frame as a thumb)
         self.tag_push: dict[int, tuple[str, float, str | None]] = {}
         # Editable per tag: alias, notes, and fleet-map position
@@ -335,6 +338,9 @@ class App:
                 addr = int(match.group(1), 16)
                 self.tags[addr] = self.tags.get(addr, 0) + 1
                 self.tag_seen[addr] = time.time()
+                vdd = RE_POLL_VDD.search(text)
+                if vdd:
+                    self.tag_vdd[addr] = (int(vdd.group(1), 16), time.time())
                 counted = addr
                 event = ("sync", f"{addr:04X}", None)
             if RE_BOOTLOADER.match(text):
@@ -406,6 +412,7 @@ class App:
                     "notes": meta.get("notes"),
                     "row": meta.get("row"),
                     "col": meta.get("col"),
+                    "vdd": self._vdd_of(addr, now),
                     "push": (
                         {
                             "name": push[0],
@@ -1127,6 +1134,14 @@ class App:
         with self.lock:
             self.status = f"{addr:04X} wiped, it will come back with a new id"
         return {"ok": True, "old": f"{addr:04X}"}
+
+    def _vdd_of(self, addr: int, now: float) -> dict | None:
+        """The last reported supply voltage, or None if none has arrived yet."""
+        pair = self.tag_vdd.get(addr)
+        if pair is None:
+            return None
+        raw, seen_at = pair
+        return {"raw": raw, "volts": round(raw / 256.0, 2), "age": round(now - seen_at, 1)}
 
     def _rename_tag(self, old: int, new: int) -> None:
         """Re-key every in-memory table and the stored row after an assignment."""

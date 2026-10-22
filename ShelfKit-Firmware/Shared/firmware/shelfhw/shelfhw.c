@@ -291,9 +291,34 @@ int16_t host_rx_getc(void)
  * the transceiver and only forced on for radio work. Waking re-forces it and
  * gives it a few milliseconds to settle before the radio is asked to receive.
  */
+uint16_t shelfhw_measure_vdd(void) __reentrant
+{
+    uint16_t vdd;
+
+    ADCCH0CONFIG = 0xD9;        /* all four channels sample VDD */
+    ADCCH1CONFIG = 0xD9;
+    ADCCH2CONFIG = 0xD9;
+    ADCCH3CONFIG = 0xD9;
+    ADCCLKSRC = 0x30;           /* start one conversion sweep */
+    ADCCONV = 0x01;
+    while (ADCCLKSRC & 0x80)    /* wait for it to finish */
+        ;
+    ADCCLKSRC = 0x07;
+    vdd = (ADCCH0VAL >> 2) + (ADCCH1VAL >> 2) + (ADCCH2VAL >> 2) + (ADCCH3VAL >> 2);
+    /* average -> volts * 256 */
+    vdd >>= 5;
+    vdd += vdd >> 2;
+    vdd -= 9 << 7;
+    return vdd;
+}
+
 void shelfhw_radio_sleep(void)
 {
-    (void)axradio_set_mode(AXRADIO_MODE_DEEPSLEEP);
+    /* AXRADIO_MODE_OFF = ax5043_off(): receiver, synth and baseband powered down,
+     * XTAL kept running (PWRSTATE_XTAL_ON + POWERDOWN) so the MCU's SYSCLK stays
+     * up and the wake-up timer keeps ticking. DEEPSLEEP would stop SYSCLK and kill
+     * the MCU clock, which is exactly why the first attempt polled once and died. */
+    (void)axradio_set_mode(AXRADIO_MODE_OFF);
 #if SHELF_XTAL_OFF
     OSCFORCERUN &= (uint8_t)~0x04;  /* stop forcing the 26 MHz crystal */
 #endif

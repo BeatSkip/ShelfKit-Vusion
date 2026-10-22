@@ -174,9 +174,12 @@ def main() -> int:
         return False
 
     try:
-        PORTS["SMOKE1"].feed("POLL src=0100 seq=01 rssi=-30\r\n")
+        PORTS["SMOKE1"].feed("POLL src=0100 seq=01 rssi=-30 up=12s att=1 hubrssi=-33 vdd=0300\r\n")
         time.sleep(0.2)
         check("a poll makes a tag appear", [a for a, _ in get("/api/state")["tags"]] == [0x100])
+        check("the poll reports 3.00 V",
+              get("/api/state")["tag_info"]["256"]["vdd"]["volts"] == 3.0,
+              get("/api/state")["tag_info"]["256"].get("vdd"))
 
         # the Editor's render path - the one that used to raise
         image = str((REPO / "Resources" / "polyform-eink.png").resolve())
