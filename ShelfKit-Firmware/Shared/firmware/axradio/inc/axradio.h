@@ -7,11 +7,11 @@
 * $Rev: $
 * $Date: $
 ********************************************************************************************************
-* Copyright 2016 Semiconductor Components Industries LLC (d/b/a “ON Semiconductor”).
+* Copyright 2016 Semiconductor Components Industries LLC (d/b/a ï¿½ON Semiconductorï¿½).
 * All rights reserved.  This software and/or documentation is licensed by ON Semiconductor
 * under limited terms and conditions.  The terms and conditions pertaining to the software
 * and/or documentation are available at http://www.onsemi.com/site/pdf/ONSEMI_T&C.pdf
-* (“ON Semiconductor Standard Terms and Conditions of Sale, Section 8 Software”) and
+* (ï¿½ON Semiconductor Standard Terms and Conditions of Sale, Section 8 Softwareï¿½) and
 * if applicable the software license agreement.  Do not use this software and/or
 * documentation unless you have carefully read and you agree to the limited terms and
 * conditions.  By using this software and/or documentation, you agree to the limited
@@ -173,6 +173,7 @@ __reentrantb void axradio_setup_pincfg1(void) __reentrant;
 __reentrantb void axradio_setup_pincfg2(void) __reentrant;
 
 __reentrantb void axradio_commsleepexit(void) __reentrant;
+void axradio_dbg_snapshot(uint8_t __xdata *out);
 __reentrantb void axradio_dbgpkt_enableIRQ(void) __reentrant;
 
 #ifdef __AXM0F2

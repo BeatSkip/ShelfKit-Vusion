@@ -221,8 +221,26 @@ static void poll_cb(struct wtimer_desc __xdata *desc)
     /* wake the radio for this poll and open the listening window */
     if (radio_asleep) {
         log_puts("wake\r\n");
-        shelfhw_radio_wake();
+        if (shelfhw_radio_wake() != AXRADIO_ERR_NOERROR) {
+            /* still asleep as far as the engine knows: try again next time */
+            log_puts("radio wake failed\r\n");
+            fails++;
+            arm_poll(SHELF_POLL_INTERVAL_S);
+            return;
+        }
         radio_asleep = 0;
+        {
+            uint8_t __xdata snap[8];
+            uint8_t i;
+
+            axradio_dbg_snapshot(snap);
+            log_puts("radio");
+            for (i = 0; i < 8; i++) {
+                log_puts(" ");
+                log_hex8(snap[i]);
+            }
+            log_nl();
+        }
     }
     listen_timer.time = (uint32_t)SHELF_LISTEN_WINDOW_S * SHELFHW_TICKS_PER_S;
     wtimer0_addrelative(&listen_timer);

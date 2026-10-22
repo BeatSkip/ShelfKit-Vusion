@@ -7,11 +7,11 @@
 * $Rev: $
 * $Date: $
 ********************************************************************************************************
-* Copyright 2016 Semiconductor Components Industries LLC (d/b/a “ON Semiconductor”).
+* Copyright 2016 Semiconductor Components Industries LLC (d/b/a ï¿½ON Semiconductorï¿½).
 * All rights reserved.  This software and/or documentation is licensed by ON Semiconductor
 * under limited terms and conditions.  The terms and conditions pertaining to the software
 * and/or documentation are available at http://www.onsemi.com/site/pdf/ONSEMI_T&C.pdf
-* (“ON Semiconductor Standard Terms and Conditions of Sale, Section 8 Software”) and
+* (ï¿½ON Semiconductor Standard Terms and Conditions of Sale, Section 8 Softwareï¿½) and
 * if applicable the software license agreement.  Do not use this software and/or
 * documentation unless you have carefully read and you agree to the limited terms and
 * conditions.  By using this software and/or documentation, you agree to the limited
@@ -1897,6 +1897,13 @@ uint8_t axradio_set_mode(uint8_t mode)
 		if (r)
 			return AXRADIO_ERR_NOCHIP;
 		ax5043_init_registers();
+		/* The chip reset cleared the A/B frequency select (PLLLOOP bit 7), and
+		 * set_registers_rx/tx force it back to "A" later. set_channel writes the
+		 * frequency to whichever set is *not* selected and then flips, so from
+		 * this state it filled FREQB and the next mode change switched back to a
+		 * never-written FREQA: the tag woke on the wrong frequency. Start from
+		 * "B selected" so the frequency lands in FREQA, which stays selected. */
+		radio_write8(AX5043_REG_PLLLOOP, 0x89);
 		r = axradio_set_channel(axradio_curchannel);
 		if (r != AXRADIO_ERR_NOERROR)
 			return r;
@@ -2427,6 +2434,20 @@ void axradio_calibrate_lposc(void)
 __reentrantb void axradio_commsleepexit(void) __reentrant
 {
     ax5043_commsleepexit();
+}
+
+/* Snapshot of the radio registers that decide whether it can transmit, for the
+ * tag's wake log: PWRMODE, POWSTAT, PLLLOOP, PLLRANGINGA, FREQA3..FREQA0. */
+void axradio_dbg_snapshot(uint8_t __xdata *out)
+{
+	out[0] = radio_read8(AX5043_REG_PWRMODE);
+	out[1] = radio_read8(AX5043_REG_POWSTAT);
+	out[2] = radio_read8(AX5043_REG_PLLLOOP);
+	out[3] = radio_read8(AX5043_REG_PLLRANGINGA);
+	out[4] = radio_read8(AX5043_REG_FREQA3);
+	out[5] = radio_read8(AX5043_REG_FREQA2);
+	out[6] = radio_read8(AX5043_REG_FREQA1);
+	out[7] = radio_read8(AX5043_REG_FREQA0);
 }
 
 #ifdef DBGPKT

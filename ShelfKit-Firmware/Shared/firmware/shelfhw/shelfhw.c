@@ -332,6 +332,8 @@ uint16_t shelfhw_measure_vdd(void) __reentrant
     return vdd;
 }
 
+static uint8_t __xdata radio_deep;  /* radio parked in AX5043 deep sleep: SPI pins are GPIO */
+
 void shelfhw_radio_sleep(void)
 {
 #if SHELF_RADIO_DEEPSLEEP
@@ -340,22 +342,50 @@ void shelfhw_radio_sleep(void)
      * keeps executing; the engine wakes the transceiver with the 0xAB wake
      * protocol from axradio_set_mode(ASYNC_RECEIVE) -- see shelfhw_radio_wake(). */
     (void)axradio_set_mode(AXRADIO_MODE_DEEPSLEEP);
+    radio_deep = 1;
 #else
     /* AXRADIO_MODE_OFF = ax5043_off(): receiver, synth and baseband down, XTAL
      * kept running (PWRSTATE_XTAL_ON + POWERDOWN). Reliable, but pays ~1 mA. */
     (void)axradio_set_mode(AXRADIO_MODE_OFF);
 #endif
+    disable_radio_interrupt_in_mcu_pin();
 #if SHELF_XTAL_OFF
     OSCFORCERUN &= (uint8_t)~0x04;  /* stop forcing the 26 MHz crystal */
 #endif
 }
 
-void shelfhw_radio_wake(void)
+uint8_t shelfhw_radio_wake(void)
 {
+    uint8_t err;
+    uint8_t tries = 8;
+
     /* Wake first, then let the PLL lock: waiting *before* the mode change left
      * the transmitter off-frequency on the first frame after a deep-sleep wake,
-     * which is how the hub heard nothing and every poll failed 4/4. */
-    (void)axradio_set_mode(AXRADIO_MODE_ASYNC_RECEIVE);
+     * which is how the hub heard nothing and every poll failed 4/4.
+     *
+     * The mode change can fail: the deep-sleep wake handshake times out, or the
+     * PLL ranging that follows it runs before the crystal has settled. In both
+     * cases the engine returns early and stays in AXRADIO_MODE_DEEPSLEEP, so the
+     * receiver was never turned on and the tag polled into a dead radio. Settle
+     * and retry; the engine re-runs the whole wake sequence from that state. */
+    do {
+        err = axradio_set_mode(AXRADIO_MODE_ASYNC_RECEIVE);
+        if (err == AXRADIO_ERR_NOERROR)
+            break;
+        {
+            uint8_t n = 40;         /* ~4 ms for the crystal to settle */
+            while (n--)
+                delay(100);
+        }
+    } while (--tries);
+    /* The wake protocol leaves PORTR at 0xEB, which includes pull-ups on PR6/PR7.
+     * sl_init() removes them after the first bring-up; do the same here, or those
+     * pins stay pulled up for every later transmission. */
+    axradio_setup_pincfg2();
+    if (err == AXRADIO_ERR_NOERROR) {
+        radio_deep = 0;
+        enable_radio_interrupt_in_mcu_pin();
+    }
 #if SHELF_RADIO_DEEPSLEEP
     {
         uint8_t n = 40;             /* ~4 ms for the crystal + PLL to be usable */
@@ -363,11 +393,15 @@ void shelfhw_radio_wake(void)
             delay(100);
     }
 #endif
+    return err;
 }
 
 void shelfhw_poll(void)
 {
+    uint8_t woke;
+
     wtimer_runcallbacks();
+
     EA = 0;
     IE_1 = 1;                       /* wake-up timer (vector 1) ends the idle; no ISR runs, EA is off */
 #if SHELF_MCU_SLEEP
@@ -375,10 +409,24 @@ void shelfhw_poll(void)
      * the startup returns here instead of restarting at 0x0000; CANSLEEP is the
      * plain restarting sleep as a fallback, and CANSTANDBY is the last resort
      * when wtimer_cansleep() says a wake-up is too close. */
-    wtimer_idle(WTFLAG_CANSLEEPCONT | WTFLAG_CANSLEEP | WTFLAG_CANSTANDBY);
+    woke = wtimer_idle(WTFLAG_CANSLEEPCONT | WTFLAG_CANSLEEP | WTFLAG_CANSTANDBY);
 #else
-    wtimer_idle(WTFLAG_CANSTANDBY);
+    woke = wtimer_idle(WTFLAG_CANSTANDBY);
 #endif
+    if (woke == WTIDLE_SLEEP) {
+        /* Sleep powers down the CPU and radio-interface registers (AND9349/D,
+         * "Power Modes") and enter_sleep_cont() latched the pins. Nothing in the
+         * continue-after-sleep path restores them, so the radio interrupt stayed
+         * disabled and the radio SPI mux was gone: the transmit FIFO never got
+         * fed and every poll after the first sleep went unheard. */
+        GPIOENABLE = 1;
+        IE = 0x40;
+        if (!radio_deep) {
+            axradio_commsleepexit();
+            axradio_setup_pincfg2();
+            enable_radio_interrupt_in_mcu_pin();
+        }
+    }
     IE_1 = 0;
     EA = 1;
 }

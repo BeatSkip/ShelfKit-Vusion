@@ -75,7 +75,7 @@ void shelfhw_poll_awake(void);
 #define SHELF_XTAL_OFF 0
 #endif
 void shelfhw_radio_sleep(void);
-void shelfhw_radio_wake(void);
+uint8_t shelfhw_radio_wake(void);   /* AXRADIO_ERR_NOERROR (0) when the receiver is on */
 
 /* Host command input on UART0 RX (PB5). Hub only: on the tag PB5 is the EPD
  * reset line. Polled, there is no interrupt and no buffer beyond the UART's own
