@@ -157,3 +157,13 @@ clears the magic and drops into the command loop instead of destroying anything.
   the wire is still only checked record by record.
 - **`run_application()` and the jump vector** need a hardware check: it reads the vector with `MOVX`
   while the vector is stored in flash (see the OTA document's open questions).
+
+## Indications
+
+No LED is lit on a normal boot. When an OTA image is committed in the SPI flash the
+bootloader pulses **blue** (500 ms) as it starts programming, **green** when it has
+finished and is about to boot the new app, and **red** if it had to give up (bad CRC,
+bad entry vector or a failed erase), in which case the old application still runs.
+
+The first 500 ms after power-on are deliberately dark: the LED latches are cleared
+while the pins are still inputs, so a level left by the application cannot flash.

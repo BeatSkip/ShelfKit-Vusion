@@ -396,6 +396,13 @@ static uint8_t ota_spi(uint8_t out)
 
 static void ota_spi_begin(void)
 {
+    /* The application resets with `ljmp 0x0000`, which does not reset the
+     * peripherals: it leaves the hardware SPI master enabled (SPMODE = 0x01,
+     * SPCLKSRC = 0xD8). The SPI controller would then keep driving SCK/MOSI and
+     * fight this bit-bang, so the header read came back as 0xFF and the update
+     * was skipped. Hand the pins back to GPIO first. */
+    SPMODE = 0x00;
+    SPCLKSRC = 0x07;
     DIRC |= 0x07;                   /* CS, SCK, MOSI out ... */
     DIRC &= (uint8_t)~0x08;         /* ... MISO in */
     PORTC_0 = 1;                    /* CS idle high */
@@ -446,6 +453,41 @@ static void ota_flash_erase_header(void)
 static uint16_t __xdata ota_len;
 static uint16_t __xdata ota_crc;
 
+/* LEDs (active high): PB0 white, PB7 blue, PB6 green, PC4 red. Nothing is
+ * lit on a normal boot - only an update gets an indication. */
+#define LED_WHITE   0
+#define LED_BLUE    1
+#define LED_GREEN   2
+#define LED_RED     3
+
+static void led_set(uint8_t led, uint8_t on)
+{
+    switch (led) {
+    case LED_WHITE: PORTB_0 = on; break;
+    case LED_BLUE:  PORTB_7 = on; break;
+    case LED_GREEN: PORTB_6 = on; break;
+    default:        PORTC_4 = on; break;
+    }
+}
+
+/* Self-terminating on purpose: an LED left lit behind the e-paper glass warms
+ * the panel into a visible blob, so every indication is on, wait, off. */
+static void led_pulse(uint8_t led, uint16_t ms)
+{
+    led_set(led, 1);
+    while (ms--)
+        delay(1000);            /* libmf delay() is microseconds-ish */
+    led_set(led, 0);
+}
+
+static void led_init(void)
+{
+    PORTB &= (uint8_t)~0xC1;    /* latch off while still inputs ... */
+    PORTC &= (uint8_t)~0x10;
+    DIRB |= 0xC1;               /* ... then drive PB0/PB6/PB7 and PC4 */
+    DIRC |= 0x10;
+}
+
 /* Power the SPI flash's switched rail (PA5, transistor U4, active low) before
  * the first read. At power-up the rail is off, and an unpowered flash reads back
  * as all 0xFF - which the bootloader would take for "no update pending" and the
@@ -454,6 +496,8 @@ static void ota_power_up(void)
 {
     uint16_t i;
 
+    ANALOGA &= (uint8_t)~0x20;  /* PA5 must be digital to drive the rail (startup
+                                 * sets ANALOGA = 0x3F, i.e. PA0..PA5 analog) */
     DIRA |= 0x20;               /* PA5 becomes an output */
     PORTA_5 = 0;                /* U4 active low: rail on */
     for (i = 0; i < 0x400; i++) /* ~0.5 ms settle at 26 MHz */
@@ -625,13 +669,9 @@ __start__stack:
     __endasm;
 #endif
 
+    led_init();                 /* all off: a normal boot shows nothing */
     flash_apply_calibration();
     CLKCON = 0x00;
-
-    // Start application if application looks valid and button SW5 is _not_ pressed
-    if (PINB & 0x08 && jmp_vector != 0xFFFF) {
-        run_application();
-    }
 
 #if BOOTLDR_CALFRCOSC
     // slave FRC Oscillator to LPX oscillator
@@ -679,10 +719,25 @@ __start__stack:
     DIRA |= 0x01;
 #endif
 
+    /* Apply a pending OTA image *before* booting: the application writes the
+     * magic into SPI flash and resets, so this has to run on every reset - not
+     * only when the boot button (SW5) is held. It used to sit after the
+     * auto-run below, which meant a normal reset jumped straight into the old
+     * application and never looked at the update at all. */
+    ota_power_up();
     if (ota_pending()) {
+        led_pulse(LED_BLUE, 500);   /* a new image is found: flashing it */
         if (ota_program() == 0) {
+            led_pulse(LED_GREEN, 500);
             /* fall through: jmp_vector now points into the new application */
+        } else {
+            led_pulse(LED_RED, 500);
         }
+    }
+
+    /* Start the application if it looks valid and button SW5 is not pressed. */
+    if (PINB & 0x08 && jmp_vector != 0xFFFF) {
+        run_application();
     }
 
     write_banner();

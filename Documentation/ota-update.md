@@ -37,9 +37,22 @@ reset. The first boot therefore erases the header sector (along with the identit
 the reserved sector and the whole image window) before it stores its own identity —
 see [tag-identity.md](tag-identity.md#what-happens-to-a-used-tags-flash).
 
-The flash is on a switched rail (PA5/U4), so the bootloader drives it on before
-reading the header - otherwise a power-up read returns `0xFF` and the update is
-silently skipped. See [tag-identity.md](tag-identity.md#the-flashs-switched-rail).
+The bootloader checks sector 0 on **every reset**, before it does anything else
+(including the auto-run of the application). Three things it needs for that check
+to work, all of which were wrong at first:
+
+1. **Order.** The auto-run used to come first, so a normal reset jumped into the
+   old application and the update was only seen when the boot button (SW5/PB3) was
+   held. The OTA check now runs before the auto-run.
+2. **The flash rail** (PA5/U4) must be driven on, or the header reads back `0xFF`
+   and looks like "no update". The bootloader drives it on and clears `ANALOGA`
+   bit 5, since the vendor startup configures PA5 as an analog pin.
+3. **The hardware SPI must be off.** The application resets with `ljmp 0x0000`,
+   which does not reset peripherals, and it leaves the SPI master enabled
+   (`SPMODE = 0x01`); the bootloader's bit-banged read then fights the SPI
+   controller. `ota_spi_begin()` disables the SPI first.
+
+See [tag-identity.md](tag-identity.md#the-flashs-switched-rail) for the rail.
 
 The header lives in its own 4 KiB sector so erasing it never touches the image,
 and the magic is written **last**, after the CRC of everything received has
@@ -104,6 +117,18 @@ A tag that has no bootloader yet gets one with the merged HEX from
 application's entry in the jump-vector slot — see
 [ShelfKit-Firmware/Bootloader/README.md](../ShelfKit-Firmware/Bootloader/README.md#installing-the-bootloader-and-the-application-at-once).
 
+### Indications
+
+The bootloader shows nothing on a normal boot (the LEDs are driven off before
+anything else, so a stray level from the application cannot leave one lit behind
+the panel). Only an update is indicated, all with 500 ms pulses:
+
+| LED | when |
+|---|---|
+| blue | a committed image was found and is being programmed |
+| green | programming finished, the new application is about to boot |
+| red | programming failed (`OTA ERR crc` / `entry` / `erase`), the old app still boots |
+
 ### Which firmware is on the board
 
 Both boards print a capability marker at the end of their boot banner:
@@ -140,6 +165,18 @@ compiled-in boot logo worth 11,248 bytes — was linked into both radio images w
 nothing referenced it any more (the boot demo it belonged to was replaced by the
 shelf-link main). It was deleted from both targets, which also shrank the hub from
 37,775 to 26,210 bytes.
+
+### Indications
+
+The bootloader shows nothing on a normal boot (the LEDs are driven off before
+anything else, so a stray level from the application cannot leave one lit behind
+the panel). Only an update is indicated, all with 500 ms pulses:
+
+| LED | when |
+|---|---|
+| blue | a committed image was found and is being programmed |
+| green | programming finished, the new application is about to boot |
+| red | programming failed (`OTA ERR crc` / `entry` / `erase`), the old app still boots |
 
 ### Which firmware is on the board
 
