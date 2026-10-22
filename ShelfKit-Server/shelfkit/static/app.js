@@ -543,7 +543,9 @@ function nextFreeId() {
 }
 
 function openDrawer(hex) {
-  drawerHex = hex;
+  // ids are four uppercase hex digits everywhere (hex4); normalise so a
+  // lowercase caller cannot make renderDrawer miss its row
+  drawerHex = String(hex).toUpperCase().padStart(4, "0");
   ui.drawer.hidden = false;
   renderDrawer();
 }
