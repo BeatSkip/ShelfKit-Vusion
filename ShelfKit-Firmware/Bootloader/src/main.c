@@ -377,36 +377,35 @@ static uint8_t __xdata ota_buf[OTA_CHUNK];
 
 static uint8_t ota_spi(uint8_t out)
 {
-    uint8_t i, in = 0;
-
-    for (i = 0; i < 8; i++) {
-        if (out & 0x80)
-            PORTC_2 = 1;
-        else
-            PORTC_2 = 0;
-        out <<= 1;
-        PORTC_1 = 1;                /* mode 0: sample on the rising edge */
-        in <<= 1;
-        if (PORTC_3)
-            in |= 1;
-        PORTC_1 = 0;
-    }
-    return in;
+    /* The hardware SPI master, exactly as the application drives it (its
+     * spi.c): mode 0, MSB first, one byte per SPSHREG write, ready when
+     * SPSTATUS bit 0 sets. A bit-banged version read 0x000000 for the JEDEC
+     * id on hardware while this one reads 0x1F4200, so the bit-bang was the
+     * broken part, not the flash. */
+    SPSHREG = out;
+    while (!(SPSTATUS & 0x01))
+        ;
+    return SPSHREG;
 }
 
 static void ota_spi_begin(void)
 {
-    /* The application resets with `ljmp 0x0000`, which does not reset the
-     * peripherals: it leaves the hardware SPI master enabled (SPMODE = 0x01,
-     * SPCLKSRC = 0xD8). The SPI controller would then keep driving SCK/MOSI and
-     * fight this bit-bang, so the header read came back as 0xFF and the update
-     * was skipped. Hand the pins back to GPIO first. */
-    SPMODE = 0x00;
-    SPCLKSRC = 0x07;
+    /* A soft reset (ljmp 0x0000) does not reset the peripherals, so start from
+     * a known SPI state instead of inheriting the application's. */
+    SPMODE = 0x00;                  /* make sure any previous master is off */
+    SPCLKSRC = 0xD8;                /* FRC-derived, slow: the app's setting */
     DIRC |= 0x07;                   /* CS, SCK, MOSI out ... */
     DIRC &= (uint8_t)~0x08;         /* ... MISO in */
-    PORTC_0 = 1;                    /* CS idle high */
-    PORTC_1 = 0;                    /* clock idles low */
+    PORTC_0 = 1;                    /* flash CS idle high */
+    /* The shared bus has three chips on it. The vendor startup drives PB1 (NFC
+     * CS) LOW, so the NFC chip would answer on MISO while the flash is being
+     * read; PA1 (EPD CS) is left floating. Park both high first. */
+    DIRA |= 0x02;
+    PORTA_1 = 1;
+    DIRB |= 0x02;
+    PORTB_1 = 1;
+    SPMODE = 0x01;                  /* master, mode 0, MSB first */
+    (void)SPSHREG;                  /* clear any pending flag */
 }
 
 static void ota_flash_read(uint32_t addr, uint8_t *buf, uint8_t len)
@@ -544,7 +543,7 @@ static uint8_t ota_pending(void)
         }
         delay(2000);
     }
-    uart0_writestr("OTA none
+    uart0_writestr("OTA none
 ");
     return 0;
 }
@@ -761,8 +760,11 @@ __start__stack:
         }
     }
 
-    /* Start the application if it looks valid and button SW5 is not pressed. */
+    /* Start the application if it looks valid and button SW5 is not pressed.
+     * Wait for the UART to drain first: the application re-initialises it right
+     * away, which would cut the diagnostics off mid-line. */
     if (PINB & 0x08 && jmp_vector != 0xFFFF) {
+        while (0x44 & (uint8_t)~U0STATUS);
         run_application();
     }
 

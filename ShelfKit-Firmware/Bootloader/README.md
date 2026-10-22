@@ -200,5 +200,16 @@ OTA jedec 1F4200
 OTA none                 <- no valid header: nothing to do, boot normally
 ```
 
-If the first line is `OTA jedec FFFFFF`, the bootloader cannot reach the SPI flash
-at all (rail or bus), and no update can ever be seen.
+If the first line is `OTA jedec FFFFFF` or `000000`, the bootloader cannot reach
+the SPI flash (rail or bus), and no update can ever be seen.
+
+Three things had to be right for that read, and each was wrong at first:
+
+1. **The flash rail** (PA5/U4) must be driven on, and `ANALOGA` bit 5 cleared -
+   the vendor startup configures PA5 as analog.
+2. **The other chips on the shared bus must be deselected.** The vendor startup
+   drives PB1 (NFC CS) low and leaves PA1 (EPD CS) floating, so their chips drive
+   MISO while the flash is being read; both are parked high now.
+3. **Use the hardware SPI, not a bit-bang.** A bit-banged read returned
+   `0x000000` on hardware while the application's hardware-SPI read of the same
+   chip returns `0x1F4200`.
