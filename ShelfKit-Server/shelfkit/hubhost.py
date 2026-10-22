@@ -44,7 +44,11 @@ PLANE_BW, PLANE_RED = 0, 1
 CHUNK = 28                  # SM_IMG_CHUNK
 BEGIN_SETTLE_S = 5.0        # the tag resets the panel after acknowledging BEGIN and answers nothing meanwhile
 END_SETTLE_S = 20.0         # ... and refreshes it after acknowledging END
-CMD_TIMEOUT_S = 3.0
+# The hub answers SENT only after all SL_MAX_ATTEMPTS (4) have run out, which
+# takes ~4.5 s when the tag is asleep. Waiting 3 s meant the server gave up in the
+# middle of the hub's attempts and started a new cycle, so one miss turned into a
+# 90 s burst of "SENT ... fail".
+CMD_TIMEOUT_S = 6.0
 CMD_RETRY_WINDOW_S = 90.0   # a tag sleeps between polls (60 s + 3 s window), so a frame may wait a whole cycle
 CMD_RETRY_PAUSE_S = 0.3
 RETRY_COOLDOWN_S = 30.0

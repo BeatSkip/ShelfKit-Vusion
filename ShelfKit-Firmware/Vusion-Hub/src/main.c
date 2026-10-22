@@ -225,8 +225,21 @@ static void on_done(const struct sl_done __xdata *done)
 static void on_rx(const struct sl_rx __xdata *rx)
 {
     if (rx->type == SL_T_POLL) {
+        uint8_t i;
+
         rsp[SM_RSP_CMD] = SM_CMD_NONE;
+        /* The host queued something for this tag: say so in the reply, or the tag
+         * closes its receiver after a 500 ms grace and the first frame of the
+         * push has to win a race it usually loses. */
+        for (i = 0; i < PREARM_SLOTS; i++) {
+            if (prearmed[i] == rx->src) {
+                prearmed[i] = 0;
+                rsp[SM_RSP_CMD] = SM_CMD_DATA;
+                break;
+            }
+        }
         rsp[SM_RSP_RSSI] = (uint8_t)(int8_t)rx->rssi;
+        rsp[SM_RSP_DELAY] = delay_hint;
         sl_reply(rx, SL_T_POLL_RSP, rsp, SM_RSP_LEN);
     }
     log_rx(rx);

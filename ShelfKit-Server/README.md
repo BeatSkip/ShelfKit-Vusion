@@ -260,6 +260,10 @@ POST /api/tags/<hex>/assign  ->  {"ok": true, "queued": 7, ...}     (pending)
 
 - The queue is per tag and in arrival order; a poll for tag A never runs tag B's job.
 - One command runs at a time; a second waits for the next poll (the link is busy).
+- `hubhost.CMD_TIMEOUT_S` is 6 s on purpose: the hub only prints `SENT` after all
+  four transmission attempts (~4.5 s), and waiting 3 s made the server give up in the
+  middle of them and start a retry cycle, turning one miss into a burst of failed
+  `SENT` lines.
 - When a command is queued the server also sends the hub `Q<hex>`, so that tag's
   next poll reply says "data follows" and the tag keeps its receiver open. Without
   it the tag closes the window after a 250 ms grace, which is most of the power it

@@ -110,7 +110,7 @@ The tag polls as above. Between polls:
 
 | block | state | datasheet |
 |---|---|---|
-| radio | `AXRADIO_MODE_DEEPSLEEP` (`SHELF_RADIO_DEEPSLEEP`): the AX5043's own deep sleep, 26 MHz XTAL stopped, woken over SPI by `ax5043_wakeup_deepsleep()` | ~50 uA |
+| radio | `AXRADIO_MODE_DEEPSLEEP` (`SHELF_RADIO_DEEPSLEEP`): the AX5043's own deep sleep, 26 MHz XTAL stopped, woken over SPI by `ax5043_wakeup_deepsleep()`. The wake changes mode **first** and only then settles ~4 ms - waiting first left the first frame after a sleep off-frequency | ~50 uA |
 | MCU | Sleep (`wtimer_idle(WTFLAG_CANSLEEPCONT)`, `SHELF_MCU_SLEEP`), `PCON.XRAMKEEP` keeping both XRAM halves | ~2 uA |
 | wake-up timer | 32.768 kHz crystal, prescaler **7** = **512 Hz** (`SHELF_WAKE_LPXOSC` in `sdcc-project.json`) | 0.7 uA |
 | listening window | 2 s after a poll, but **closed after 500 ms** unless the hub's reply said data is coming (`SM_CMD_DATA`); it re-arms while a transfer or a flash read-back is running | 9.5 mA only while open |
@@ -150,8 +150,8 @@ counted seconds in 30 real ones), which halved every interval and every link tim
 prescaler **7** matches `SHELFHW_TICKS_PER_S` = 512. The crystal itself was never the
 problem: `OSCRUN` shows the LPXOSC running, and the FRC calibration already used it.
 
-The radio deep sleep is the only step still unverified on hardware. To bisect:
-`SHELF_RADIO_DEEPSLEEP 0` falls back to the crystal-on `AXRADIO_MODE_OFF`, and removing
+The radio deep sleep is still the least proven step. If a tag stops making its polls,
+`SHELF_RADIO_DEEPSLEEP 0` falls back to the crystal-on `AXRADIO_MODE_OFF`; removing
 `SHELF_WAKE_LPXOSC` from `Vusion/sdcc-project.json` falls back to the internal RC at
 640 Hz.
 

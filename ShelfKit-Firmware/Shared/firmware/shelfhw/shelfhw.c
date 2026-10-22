@@ -352,14 +352,17 @@ void shelfhw_radio_sleep(void)
 
 void shelfhw_radio_wake(void)
 {
-#if SHELF_XTAL_OFF
-    uint8_t n = 20;
-
-    OSCFORCERUN |= 0x04;            /* crystal on ... */
-    while (n--)                     /* ... and let it settle (~2 ms) */
-        delay(100);
-#endif
+    /* Wake first, then let the PLL lock: waiting *before* the mode change left
+     * the transmitter off-frequency on the first frame after a deep-sleep wake,
+     * which is how the hub heard nothing and every poll failed 4/4. */
     (void)axradio_set_mode(AXRADIO_MODE_ASYNC_RECEIVE);
+#if SHELF_RADIO_DEEPSLEEP
+    {
+        uint8_t n = 40;             /* ~4 ms for the crystal + PLL to be usable */
+        while (n--)
+            delay(100);
+    }
+#endif
 }
 
 void shelfhw_poll(void)

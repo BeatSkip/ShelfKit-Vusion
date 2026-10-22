@@ -22,14 +22,14 @@
  * so a silent log after "sleep" means the chip itself stopped. */
 #define SHELF_RADIO_SLEEP   1
 
-/* 0 = park the radio in PWRSTATE_XTAL_ON + POWERDOWN (`AXRADIO_MODE_OFF`).
+/* 1 = park the radio in the AX5043's own deep sleep (26 MHz crystal off, the
+ * ~260 uA saving between polls). 0 = PWRSTATE_XTAL_ON + POWERDOWN.
  *
- * Was 1 (the AX5043's own deep sleep, the ~260 uA XTAL saving). On hardware the
- * first poll after boot worked and every poll after a radio sleep failed 4/4
- * attempts: the transmitter came back off-frequency, so the hub heard nothing.
- * The MCU sleep was fine in the same build, so this switch is the one to leave
- * off until the wake can be watched on a spectrum analyser. */
-#define SHELF_RADIO_DEEPSLEEP 0
+ * The first attempt failed because the wake waited *before* changing mode, so the
+ * first frame after a sleep went out before the PLL had locked and the hub heard
+ * nothing. shelfhw_radio_wake() now changes mode first and settles afterwards.
+ * Set to 0 if a tag stops making its polls. */
+#define SHELF_RADIO_DEEPSLEEP 1
 
 /* 1 = let the MCU enter Sleep (~2 uA) instead of Standby (85 uA) between
  * wake-ups, using libmf's enter_sleep_cont() so execution resumes rather than
