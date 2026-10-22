@@ -111,7 +111,7 @@ The tag polls as above. Between polls:
 | block | state | datasheet |
 |---|---|---|
 | radio | `AXRADIO_MODE_DEEPSLEEP` (`SHELF_RADIO_DEEPSLEEP`): the AX5043's own deep sleep, 26 MHz XTAL stopped, woken over SPI by `ax5043_wakeup_deepsleep()` | ~50 uA |
-| MCU | **standby** (`wtimer_idle(WTFLAG_CANSTANDBY)`) - the sleep modes cannot be used in this layout, see below | 85 uA |
+| MCU | Sleep (`wtimer_idle(WTFLAG_CANSLEEPCONT)`, `SHELF_MCU_SLEEP`), `PCON.XRAMKEEP` keeping both XRAM halves | ~2 uA |
 | wake-up timer | 32.768 kHz crystal, prescaler **7** = **512 Hz** (`SHELF_WAKE_LPXOSC` in `sdcc-project.json`) | 0.7 uA |
 | listening window | 2 s after a poll, but **closed after 500 ms** unless the hub's reply said data is coming (`SM_CMD_DATA`); it re-arms while a transfer or a flash read-back is running | 9.5 mA only while open |
 | panel, flash rails | off unless a refresh or a flash access needs them | - |
@@ -125,12 +125,25 @@ Estimated average and CR2450 life (datasheet figures, not measurements):
 | **+ the 500 ms grace on idle polls (what is shipped)** | **0.17 mA** | **~150 days** |
 | MCU sleep as well, if the resume worked | 0.09 mA | 300 days |
 
-**Why standby, not sleep.** libmf's `enter_sleep()`, `enter_sleep_cont()` and even
-`reset_cpu()` all end in `ljmp 0xE047`, the chip's ROM sleep handler, whose wake path
-restarts the CPU at `0x0000` - which in this layout is the bootloader. With
-`SHELF_MCU_SLEEP` on, the tag restarted instead of resuming: a boot loop every ~0.9 s,
-seen right after an OTA reset, until it was reset by hand. The ~2 uA sleep modes need a
-ROM-resident resume this bootloader layout cannot reach, so the tag idles in standby.
+**Why the tag can boot-loop, and why it must never write `PCON` per poll.** The first
+low-power build booted, ran one poll and restarted, forever, but only after an OTA - a
+hardware reset was fine. The cause was one line in `shelfhw_measure_vdd()`:
+`PCON = (PCON & ~0x0C) | 0x0C` (to keep the XRAM across sleep). That helper runs on
+*every* poll, and `PCON.SWRESET` (bit 4) **reads back 1 after a software reset**, so
+writing the register back re-armed the reset that had just happened. A hardware reset
+clears the bit, which is why a manual reset "fixed" it. Nothing in the poll path may
+write `PCON`; `OSCFORCERUN |= 0x08` now sits in `shelfhw_init()` where it belongs.
+
+**The switches only work because the driver includes the config.** `shelfhw.c` used
+not to include `shelf_config.h`, so `SHELF_MCU_SLEEP` and `SHELF_RADIO_DEEPSLEEP` were
+invisible to it and both features were dead code for a whole round - every build ran
+standby + `AXRADIO_MODE_OFF` while the config claimed otherwise. They are compiled in
+now, which is why the tag grew by ~50 bytes.
+
+**MCU sleep relies on libmf's resume.** `enter_sleep_cont()` saves SP and a signature
+at the top of IRAM and sleeps; `enter_sleep()`/`enter_sleep_cont()` end in
+`ljmp 0xE047` (the ROM sleep handler). If a tag ever boot-loops after this build, set
+`SHELF_MCU_SLEEP 0` - that is the only switch that changes the resume path.
 
 **The tick base is measured, not assumed.** Prescaler 6 gave ~1024 Hz on hardware (60
 counted seconds in 30 real ones), which halved every interval and every link timeout;

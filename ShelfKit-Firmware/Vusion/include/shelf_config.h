@@ -22,23 +22,27 @@
  * so a silent log after "sleep" means the chip itself stopped. */
 #define SHELF_RADIO_SLEEP   1
 
-/* 1 = park the radio in the AX5043's own deep sleep (XTAL stopped) instead of
- * PWRSTATE_XTAL_ON+POWERDOWN. That is the ~1 mA -> ~50 uA step, and the mode
- * that once left a tag polling once and dying; the wake path is
- * ax5043_wakeup_deepsleep() in the engine. Set 0 to fall back to the
- * crystal-on POWERDOWN that has been reliable. */
-#define SHELF_RADIO_DEEPSLEEP 1
+/* 0 = park the radio in PWRSTATE_XTAL_ON + POWERDOWN (`AXRADIO_MODE_OFF`).
+ *
+ * Was 1 (the AX5043's own deep sleep, the ~260 uA XTAL saving). On hardware the
+ * first poll after boot worked and every poll after a radio sleep failed 4/4
+ * attempts: the transmitter came back off-frequency, so the hub heard nothing.
+ * The MCU sleep was fine in the same build, so this switch is the one to leave
+ * off until the wake can be watched on a spectrum analyser. */
+#define SHELF_RADIO_DEEPSLEEP 0
 
-/* 1 = let the MCU enter Sleep (0.5-1.5 uA) instead of Standby (85 uA) between
+/* 1 = let the MCU enter Sleep (~2 uA) instead of Standby (85 uA) between
  * wake-ups, using libmf's enter_sleep_cont() so execution resumes rather than
  * restarting at 0x0000.
  *
- * OFF: on hardware, after an OTA's PCON.SWRESET the tag restarted instead of
- * resuming - a boot loop every ~0.9 s until it was reset by hand - while a
- * hardware reset resumed normally. The MCU sleep is the only difference between
- * those two, so it stays off until the startup's resume path is understood. */
-#define SHELF_MCU_SLEEP     0
-#define SHELF_XTAL_OFF      1
+ * Set to 0 if the tag ever boot-loops: sleep takes the libmf path that ends in
+ * `ljmp 0xE047` and relies on the startup's resume signature, which has not yet
+ * been proven on this board. */
+#define SHELF_MCU_SLEEP     1
+/* 0 = leave the 26 MHz crystal force alone and let the radio engine manage it.
+ * With RADIO_DEEPSLEEP off there is nothing to stop, and toggling the force was
+ * part of the deep-sleep wake path that left the transmitter off-frequency. */
+#define SHELF_XTAL_OFF      0
 
 /* Seconds between polls. 60 s is the practical ceiling: the wake-up timer counts
  * SHELFHW_TICKS_PER_S (640) per second in 16 bits, so anything above ~102 s

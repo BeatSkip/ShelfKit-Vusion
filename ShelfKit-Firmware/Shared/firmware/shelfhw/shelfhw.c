@@ -16,6 +16,7 @@
 #include <libmfuart.h>
 #include <libmfuart0.h>
 #include "axradio.h"
+#include "shelf_config.h"   /* the per-target power switches live here */
 #include "shelfhw.h"
 
 /* ── interrupt hooks the radio engine calls ──────────────────────────── */
@@ -226,6 +227,12 @@ void shelfhw_init(void)
     FRCOSCREF = 19531;
     FRCOSCKFILT = 2800;
     LPXOSCGM = 0x90;
+    /* Keep both XRAM halves across Sleep, or the tag loses its whole state on the
+     * first sleep. Only the low nibble is kept: PCON.SWRESET reads back 1 after a
+     * software reset, and writing that bit back re-arms the reset (that mistake
+     * boot-looped the tag; never write PCON from the poll path). */
+    PCON = (uint8_t)((PCON & 0x0C) | 0x0C);
+    OSCFORCERUN |= 0x08;            /* force the 32 kHz LPX crystal (wake timer) */
     OSCFORCERUN |= 0x04;
     FRCOSCCONFIG = (6 << 3) | CLKSRC_LPXOSC;
     WTCFGB = (1 << 3) | CLKSRC_LPXOSC;
@@ -303,10 +310,10 @@ uint16_t shelfhw_measure_vdd(void) __reentrant
 {
     uint16_t vdd;
 
-    /* PCON.XRAMKEEP (bits 3:2) = both halves: without this, Sleep mode drops the
-     * 8 KiB XRAM and the tag loses every bit of its state on the first sleep. */
-    PCON = (uint8_t)((PCON & (uint8_t)~0x0C) | 0x0C);
-    OSCFORCERUN |= 0x08;            /* force the 32 kHz LPX crystal (wake timer) */
+    /* Never write PCON here. This runs on every poll, and PCON.SWRESET (bit 4)
+     * reads back 1 after a software reset, so writing the register back re-arms
+     * the reset that just happened: the tag rebooted on the first poll after every
+     * OTA and looked exactly like a boot loop, while a hardware reset was fine. */
 
     ADCCH0CONFIG = 0xD9;        /* all four channels sample VDD */
     ADCCH1CONFIG = 0xD9;
