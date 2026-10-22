@@ -18,9 +18,17 @@
  *   0x13 = 512 kbit, 0x14 = 1 Mbit, 0x15 = 2 Mbit, 0x16 = 4 Mbit ... */
 #define FLASH_SIZE 0x14000UL   /* 128 KiB */
 
-/* Send 0xAB: wakes the chip if a previous firmware left it in deep
+/* Send 0x08 0xAB: wakes the chip if a previous firmware left it in deep
  * power-down. Harmless when the chip is already awake. */
 void extflash_release_powerdown(void);
+
+/* Power the flash's switched rail on/off (see SHELF_FLASH_POWER_ON). Call
+ * around a whole flash sequence, not per read/write. */
+void extflash_power_up(void);
+void extflash_power_down(void);
+
+/* 1 when the chip answers a JEDEC-ID read (not powered off / not on the bus). */
+uint8_t extflash_probe(void);
 
 /* Read the 3-byte JEDEC ID (manufacturer, memory type, capacity). */
 void extflash_read_jedec_id(uint8_t id[3]);

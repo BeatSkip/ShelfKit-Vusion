@@ -184,7 +184,7 @@ that is still polling simply reappears as a fresh row (with no alias) on its nex
 | Drawer → **Forget tag** | deletes that one tag, its stored metadata and its log lines |
 | Fleet → select rows → **Forget** | the same for a selection |
 | Fleet → **Forget silent** | deletes every tag not heard for 10 minutes (a sleeping tag polls once a minute, so it stays) |
-| Fleet **Battery** column | the tag's supply voltage from each poll, red below 2.5 V (older firmware leaves it "—") |
+| Fleet **Battery** column | the tag's supply voltage **and a CR2450 percentage** from each poll, red below 2.5 V (older firmware leaves it "—") |
 | Drawer → **Read flash** | reads the tag's metadata pages back over the radio and offers the `.bin`/`.txt` |
 | Drawer → **Factory reset** | sends the tag a wipe command: it erases its SPI flash, resets and comes back with a **new random id**; the old row is dropped |
 

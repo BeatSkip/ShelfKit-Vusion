@@ -17,6 +17,28 @@ SPI flash sector 1, in the gap the OTA update never touches:
 The record is checked by its own CRC. A torn write, or a flash sector that never
 held a record, is treated as "no identity" rather than trusted.
 
+## The flash's switched rail
+
+The SPI flash is not on plain VDD: it sits on a rail switched by PA5 (transistor
+U4, active low) that only the panel power sequence brings up. Left off, the chip
+reads back as all `0xFF`, which looks exactly like a blank identity and a missing
+OTA header. Both firmwares now power the rail before every flash access:
+
+- the **application** calls `extflash_power_up()`/`_down()` around boot, assign,
+  factory reset, flash read-back and an OTA transfer (`SHELF_FLASH_POWER_ON`);
+- the **bootloader** drives PA5 low before it reads the OTA header, or it would
+  see `0xFF` and skip the update.
+
+Two consequences of getting this wrong, both seen on hardware:
+
+1. every reset regenerates the identity (the record reads blank) and
+2. a pushed OTA never applies (the bootloader reads a blank header).
+
+As a safety net, the boot now probes the flash first (`flash jedec XXYYZZ` on the
+log). If the chip does not answer, the tag does **not** wipe or store anything - a
+dead flash is not an empty one, and wiping here would destroy a pending update -
+it just runs on a volatile id for that session and logs `flash dead`.
+
 ## What happens to a used tag's flash
 
 A tag whose SPI flash still holds someone else's data is not trusted: when no

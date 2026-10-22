@@ -55,6 +55,25 @@ IMAGE_SUFFIXES = frozenset(
 RE_POLL = re.compile(r"^POLL src=([0-9a-fA-F]{4,8})\b")
 # the hub prints the tag's supply voltage as vdd=XXXX (volts*256, 3.00 V -> 0x0300)
 RE_POLL_VDD = re.compile(r"\bvdd=([0-9a-fA-F]{4})\b")
+
+# Average CR2450 (3 V lithium coin cell): voltage is almost flat until the cell
+# is nearly empty, so this is a monotonic estimate, not a coulomb count.
+# (voltage, remaining %), linear in between.
+CR2450_CURVE = ((3.0, 100), (2.9, 88), (2.8, 72), (2.7, 52), (2.6, 32),
+                (2.5, 16), (2.4, 6), (2.3, 0))
+
+
+def battery_percent(volts: float) -> int:
+    """Remaining capacity of an average CR2450, in percent, from its voltage."""
+    if volts >= 3.0:
+        return 100
+    if volts <= 2.3:
+        return 0
+    for (hi_v, hi_p), (lo_v, lo_p) in zip(CR2450_CURVE, CR2450_CURVE[1:]):
+        if lo_v <= volts <= hi_v:
+            frac = (hi_v - volts) / (hi_v - lo_v)
+            return round(hi_p - frac * (hi_p - lo_p))
+    return 0
 RE_PONG = re.compile(r"^PONG\b")
 # What the board says when it comes up. Which one appears after a reset tells us
 # which BOOT-pin level the firmware needs (see App.pulse_reset).
@@ -1141,7 +1160,9 @@ class App:
         if pair is None:
             return None
         raw, seen_at = pair
-        return {"raw": raw, "volts": round(raw / 256.0, 2), "age": round(now - seen_at, 1)}
+        volts = round(raw / 256.0, 2)
+        return {"raw": raw, "volts": volts, "percent": battery_percent(volts),
+                "age": round(now - seen_at, 1)}
 
     def _rename_tag(self, old: int, new: int) -> None:
         """Re-key every in-memory table and the stored row after an assignment."""

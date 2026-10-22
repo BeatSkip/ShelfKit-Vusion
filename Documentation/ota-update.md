@@ -37,6 +37,10 @@ reset. The first boot therefore erases the header sector (along with the identit
 the reserved sector and the whole image window) before it stores its own identity —
 see [tag-identity.md](tag-identity.md#what-happens-to-a-used-tags-flash).
 
+The flash is on a switched rail (PA5/U4), so the bootloader drives it on before
+reading the header - otherwise a power-up read returns `0xFF` and the update is
+silently skipped. See [tag-identity.md](tag-identity.md#the-flashs-switched-rail).
+
 The header lives in its own 4 KiB sector so erasing it never touches the image,
 and the magic is written **last**, after the CRC of everything received has
 matched. An interrupted transfer therefore leaves no magic and the bootloader

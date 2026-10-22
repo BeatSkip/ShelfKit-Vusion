@@ -111,7 +111,7 @@ lever and is left unflipped until it can be watched on a meter.
 **Battery.** Each poll carries the supply voltage, measured with the AXSEM bootloader's
 ADC recipe (`shelfhw_measure_vdd`, volts*256, e.g. 3.00 V -> 0x0300). The hub prints
 it as `vdd=0300` and the server shows it in the Fleet **Battery** column and the
-drawer, red below 2.5 V. The AX8052 GP ADC has missing codes around mid-scale
+drawer as both volts and an **average-CR2450 percentage**, red below 2.5 V. The AX8052 GP ADC has missing codes around mid-scale
 (erratum, all revisions), so treat the last digit as a hint, not a measurement.
 
 Other consequences:

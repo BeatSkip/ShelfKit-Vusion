@@ -3,7 +3,11 @@
  * @brief Minimal SPI NOR flash driver (25-series command set)
  */
 
+#include <libmf.h>
+
 #include "flash.h"
+#include "pwr.h"
+#include "shelf_config.h"
 #include "spi.h"
 
 #define CMD_READ        0x03    /* read data, 3-byte address */
@@ -16,6 +20,32 @@
 
 #define FLASH_PAGE      256     /* page-program granularity */
 #define FLASH_SECTOR    4096    /* sector-erase granularity */
+
+void extflash_power_up(void)
+{
+#if SHELF_FLASH_POWER_ON
+    pwr_init();
+    pwr_on();
+    delay(5000);                /* the switched rail and the flash need a moment */
+#endif
+}
+
+void extflash_power_down(void)
+{
+#if SHELF_FLASH_POWER_ON
+    pwr_off();
+#endif
+}
+
+uint8_t extflash_probe(void)
+{
+    uint8_t id[3];
+
+    extflash_read_jedec_id(id);
+    /* a chip that is not powered, or not on the bus, reads back all 0xFF or 0x00 */
+    return (id[0] != 0xFF || id[1] != 0xFF || id[2] != 0xFF) &&
+           (id[0] != 0x00 || id[1] != 0x00 || id[2] != 0x00);
+}
 
 void extflash_release_powerdown(void)
 {

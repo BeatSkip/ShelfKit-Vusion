@@ -446,11 +446,26 @@ static void ota_flash_erase_header(void)
 static uint16_t __xdata ota_len;
 static uint16_t __xdata ota_crc;
 
+/* Power the SPI flash's switched rail (PA5, transistor U4, active low) before
+ * the first read. At power-up the rail is off, and an unpowered flash reads back
+ * as all 0xFF - which the bootloader would take for "no update pending" and the
+ * application would take for a blank identity. */
+static void ota_power_up(void)
+{
+    uint16_t i;
+
+    DIRA |= 0x20;               /* PA5 becomes an output */
+    PORTA_5 = 0;                /* U4 active low: rail on */
+    for (i = 0; i < 0x400; i++) /* ~0.5 ms settle at 26 MHz */
+        ;
+}
+
 /* 1 when the SPI flash holds a committed image whose header checks out. */
 static uint8_t ota_pending(void)
 {
     uint8_t header[OTA_HDR_BYTES];
 
+    ota_power_up();
     ota_spi_begin();
     ota_flash_read(OTA_HDR_ADDR, header, OTA_HDR_BYTES);
     if (!ota_header_parse(header, &ota_len, &ota_crc))

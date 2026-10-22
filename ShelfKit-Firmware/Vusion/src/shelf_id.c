@@ -89,12 +89,27 @@ static uint8_t store(uint16_t node_id, uint8_t set_flags) __reentrant
 
 uint16_t shelf_id_boot(void) __reentrant
 {
+    uint8_t flash_alive;
+
+    extflash_power_up();
     spi_init();
     extflash_release_powerdown();
     delay(2000);                    /* tPUW / tRES1: the first read after power-up
                                      * or release-from-power-down can come back bad */
-    extflash_read(SHELFID_ADDR, rec, SHELFID_BYTES);
 
+    {
+        uint8_t jid[3];
+        extflash_read_jedec_id(jid);
+        flash_alive = (jid[0] != 0xFF || jid[1] != 0xFF || jid[2] != 0xFF) &&
+                      (jid[0] != 0x00 || jid[1] != 0x00 || jid[2] != 0x00);
+        log_puts("flash jedec ");
+        log_hex8(jid[0]);
+        log_hex8(jid[1]);
+        log_hex8(jid[2]);
+        log_nl();
+    }
+
+    extflash_read(SHELFID_ADDR, rec, SHELFID_BYTES);
     if (!shelfid_parse(rec, &id, &flags)) {
         delay(2000);                /* a single bad read must not cost the id */
         extflash_read(SHELFID_ADDR, rec, SHELFID_BYTES);
@@ -104,6 +119,19 @@ uint16_t shelf_id_boot(void) __reentrant
         log_puts(flags & SHELFID_FLAG_ASSIGNED ? "id " : "id? ");
         log_hex16(id);
         log_nl();
+        extflash_power_down();
+        return id;
+    }
+
+    if (!flash_alive) {
+        /* The chip is not answering. It is not "blank": a wipe or a store here
+         * would either no-op or, worse, erase a pending OTA image. Keep the flash
+         * untouched and run on a volatile id until the next reset. */
+        id = fresh_id();
+        log_puts("flash dead, id? ");
+        log_hex16(id);
+        log_puts(" new (volatile)\r\n");
+        extflash_power_down();
         return id;
     }
 
@@ -126,14 +154,17 @@ uint16_t shelf_id_boot(void) __reentrant
     log_puts("id? ");
     log_hex16(id);
     log_puts(" new\r\n");
+    extflash_power_down();
     return id;
 }
 
 uint8_t shelf_id_factory_reset(void) __reentrant
 {
+    extflash_power_up();
     spi_init();
     extflash_release_powerdown();
     wipe_owned_sectors();
+    extflash_power_down();
     return 1;
 }
 
@@ -142,8 +173,13 @@ uint8_t shelf_id_assign(uint16_t node_id) __reentrant
     if (node_id < 2 || node_id == SL_NODE_HUB)
         return 0;
 
+    extflash_power_up();
+    spi_init();
+    extflash_release_powerdown();
+
     if (!store(node_id, SHELFID_FLAG_ASSIGNED)) {
         log_puts("id set FAILED, flash busy\r\n");
+        extflash_power_down();
         return 0;
     }
 
@@ -157,10 +193,12 @@ uint8_t shelf_id_assign(uint16_t node_id) __reentrant
         log_hex8(rec[0]);
         log_hex8(rec[1]);
         log_nl();
+        extflash_power_down();
         return 0;
     }
 
     /* the record is on flash and verified: point the radio at it */
     sl_set_local(id, SHELF_NET_ID);
+    extflash_power_down();
     return 1;
 }

@@ -544,7 +544,8 @@ button.chip.on { color: var(--btn-on-text); background: var(--accent); border-co
   border-radius: var(--radius);
 }
 
-.actions { display: flex; align-items: center; gap: 8px; }
+/* a plain cell: flex here would break the row's vertical alignment */
+.actions { white-space: nowrap; }
 
 .library {
   background: var(--panel);

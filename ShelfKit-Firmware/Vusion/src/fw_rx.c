@@ -65,6 +65,7 @@ static void cpu_reset(void)
 static void abort_transfer(void)
 {
     active = 0;
+    extflash_power_down();
 }
 
 static uint16_t __xdata sectors;
@@ -84,6 +85,7 @@ static void on_begin(void)
         return;
     }
 
+    extflash_power_up();
     log_puts("fw begin len=");
     log_dec(total);
     log_puts(" crc=");
@@ -201,6 +203,7 @@ uint8_t fw_rx_data(const uint8_t __xdata *payload, uint8_t len)
             log_puts("dump bad len\r\n");
             break;
         }
+        extflash_power_up();
         spi_init();
         extflash_release_powerdown();
         dump_fail = 0;
@@ -267,6 +270,7 @@ uint8_t fw_dump_done(uint8_t result)
     if (result != SL_OK) {
         if (++dump_fail >= 3) {
             dump_active = 3;
+            extflash_power_down();
             log_puts("dump aborted\r\n");
             return 1;
         }
@@ -278,6 +282,7 @@ uint8_t fw_dump_done(uint8_t result)
     dump_left -= dump_frame[4];
     if (!dump_left) {
         dump_active = 0;
+        extflash_power_down();
         log_puts("dump done\r\n");
     } else {
         dump_active = 1;

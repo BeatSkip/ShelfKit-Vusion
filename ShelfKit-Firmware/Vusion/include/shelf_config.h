@@ -37,6 +37,13 @@
 /* Print the link statistics every this many polls */
 #define SHELF_STATS_EVERY       10
 
+/* 1 = power the SPI flash's switched rail (PA5, transistor U4, active low) before
+ * every flash access and drop it again after. The rail is only brought up by the
+ * panel power sequence, so without this the flash reads back all 0xFF at boot:
+ * the identity looks blank (regenerated every reset) and the bootloader sees no
+ * OTA header. Set 0 only if a board turns out to power the flash from VDD. */
+#define SHELF_FLASH_POWER_ON   1
+
 /* 1 = on the very first boot (no identity record yet) wipe every SPI flash sector
  * the firmware owns before generating the random id. That clears leftovers from a
  * used tag - most importantly a stale OTA marker, which would otherwise make the

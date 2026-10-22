@@ -389,6 +389,7 @@ function tagRows() {
       col: detail.col ?? null,
       status,
       battery: detail.vdd ? detail.vdd.volts : null,
+      batteryPct: detail.vdd ? detail.vdd.percent : null,
       seen: detail.seen,
       count: detail.count ?? count,
       push: detail.push || null,
@@ -478,10 +479,11 @@ function renderFleet() {
     if (row.battery != null) {
       const low = row.battery < LOW_BATTERY_V;
       const volts = row.battery.toFixed(2);
-      batteryCell.append(el("span", low ? "bad" : null, `${volts} V`));
+      const pct = row.batteryPct ?? 0;
+      batteryCell.append(el("span", low ? "bad" : null, `${volts} V · ${pct}%`));
       batteryCell.title = low
-        ? `supply ${volts} V - low`
-        : `supply ${volts} V`;
+        ? `supply ${volts} V, ${pct}% of a CR2450 - low`
+        : `supply ${volts} V, ${pct}% of a CR2450`;
     } else {
       batteryCell.append(el("span", "dim", "—"));
       batteryCell.title = "no voltage reported yet (older firmware)";
