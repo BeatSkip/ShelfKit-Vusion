@@ -83,7 +83,7 @@ blocks. `color-scheme` is set per theme too, which keeps scrollbars and native c
 |---|---|---|
 | **Fleet** | Tag table from every `POLL src=<id>` the hub prints: 4-char hex id, **alias**, status dot (online if heard in the last 30 s, pending while an image is in flight, else offline), last-push age **with a thumbnail of the frame that was pushed**, search, status chips, column sort, row selection with bulk actions (push, **forget**), tag drilldown drawer that edits the alias and notes, **assigns the tag's wireless id** and **forgets the tag** | battery, reflash/clear, map view (hidden until a grid is configured) |
 | **Editor** | Browse this machine's folders, pick the image and the target tag, **fit mode** (cover/contain/stretch), **dither** (threshold/Floyd-Steinberg/Bayer 4×4), the **three previews** — colour original, 1:1 on-device frame, and a 4× zoom that follows a drag — a midtone warning, and Push / Cancel with live frame progress. Push is only enabled once a preview has been rendered | templates, plain text, QR, multi-target push, the content library, the render → confirm → queue split |
-| **Queue** | The transfer in flight (image or firmware) as a single `sending` row, with its frame progress, and Cancel | job history, attempts, retry, per-tag replacement |
+| **Queue** | Every outbound command — image, firmware, id, factory reset, service label, flash read — waits here until its tag polls, then runs. Live state per command (`pending` / `running` / `done` / `failed` / `cancelled`), the running frame progress, and **Cancel all** | attempts/retry, reordering, scheduling |
 | **Logs** | Event table recorded by the server (`sync`, `push`, `ok`, `fail`, `error`, `boot`, `bootloader`, `open`), consecutive duplicates collapsed into `×N`, filtered by tag or event, **kept across restarts** | the firmware's own event stream (low batt / err) and the per-tag log |
 | **Stats** | — | all three charts (needs the stats rollup and battery reporting) |
 | **Hub** | Serial link facts (port, state, baud, line count, DTR/RTS) and a read-only tail of the hub's console | firmware version, uptime, EPD mirror, OTA upload, restart |
@@ -243,6 +243,25 @@ you see in the Editor when you reload is what the tag got. A one-off note does n
 change the stored one: `POST /api/tags/<hex>/service {"note": "cable 12"}` labels a
 single push. The editor's own image is not replaced by this (`send()` takes the path
 explicitly).
+
+### The command queue
+
+Nothing is sent to a tag at the moment you click. The tag listens for only
+`SHELF_LISTEN_WINDOW_S` (3 s) after each poll, so a command fired at an arbitrary
+moment would usually be lost and would have to be retried by hand. Instead every
+outbound command is **queued for its tag**, and the server delivers the next pending
+one the moment that tag announces itself:
+
+```
+POST /api/tags/<hex>/assign  ->  {"ok": true, "queued": 7, ...}     (pending)
+        ... the tag polls ...
+                                     (running -> done / failed)
+```
+
+- The queue is per tag and in arrival order; a poll for tag A never runs tag B's job.
+- One command runs at a time; a second waits for the next poll (the link is busy).
+- `POST /api/queue/cancel` drops every pending command and stops the one in flight.
+- The Queue screen shows each command with its kind, target, state, detail and age.
 
 ### Reading a tag's flash
 

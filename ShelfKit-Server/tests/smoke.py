@@ -165,6 +165,22 @@ def main() -> int:
             headers={"Content-Type": "application/json"}, method="POST")
         return json.loads(urllib.request.urlopen(request, timeout=60).read())
 
+    def job_state(job_id):
+        for job in get("/api/state")["queue"]:
+            if job["id"] == job_id:
+                return job["state"]
+        return None
+
+    def wait_job(job_id, target: str = "done", timeout: float = 60.0) -> bool:
+        """A queued command runs when its tag polls, so the test polls for it."""
+        end = time.time() + timeout
+        while time.time() < end:
+            if job_state(job_id) == target:
+                return True
+            PORTS["SMOKE1"].feed("POLL src=0100 seq=02 rssi=-30 up=13s att=1 hubrssi=-33 vdd=0300\r\n")
+            time.sleep(0.2)
+        return False
+
     def wait_idle(timeout: float = 40.0) -> bool:
         end = time.time() + timeout
         while time.time() < end:
@@ -195,10 +211,8 @@ def main() -> int:
         # a service label: drawn, rendered, pushed wirelessly
         post("/api/tags/0100", {"alias": "S03-P4", "notes": "dev note"})
         label = post("/api/tags/0100/service", {})["result"]
-        check("service label accepted", label.get("ok") is True, label)
-        check("the label uses the alias", label.get("alias") == "S03-P4", label)
-        check("the label file exists", Path(label.get("image", "")).is_file(), label.get("image"))
-        check("the push finished", wait_idle())
+        check("service label queued", label.get("ok") is True and label.get("queued"), label)
+        check("the queue delivered it on the poll", wait_job(label["queued"]), label)
         frames = [w for w in PORTS["SMOKE1"].written if w.startswith("S")]
         check(f"the label went out as {IMAGE_FRAMES} image frames", len(frames) == IMAGE_FRAMES,
               len(frames))
@@ -212,7 +226,8 @@ def main() -> int:
 
         # the flash read-back: request, collect from the pane log, save, serve
         result = post("/api/tags/0100/read", {})["result"]
-        check("flash read accepted", result.get("ok") is True, result)
+        check("flash read queued", result.get("ok") is True and result.get("queued"), result)
+        check("the queue delivered the read", wait_job(result["queued"]), result)
         end = time.time() + 60
         while time.time() < end and get("/api/state")["dump"].get("active"):
             time.sleep(0.05)

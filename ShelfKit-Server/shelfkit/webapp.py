@@ -28,6 +28,7 @@ long-lived poll connection per browser tab. The API is small and boring:
     POST /api/tags/<hex>/wipe      wipe the tag's flash and reset it into a new id
     POST /api/tags/<hex>/service   draw this tag's service label and push it
     POST /api/tags/<hex>/read      {"start": 0, "length": 12288} SPI flash read-back
+    POST /api/queue/cancel         cancel every queued command
     GET  /api/dump.bin /api/dump.txt   the last read-back
     POST /api/tags/forget          {"addrs": [...]} or {"not_seen_for": 600}
 
@@ -172,12 +173,19 @@ class Handler(BaseHTTPRequestHandler):
                     addr = int(body.get("addr"))
                 except (TypeError, ValueError):
                     return self._error("addr must be a node id")
-                if not self.app.send(addr):
+                image = self.app.image
+                if image is None:
                     return self._json(self.app.state(), HTTPStatus.CONFLICT)
-                return self._json(self.app.state())
+                result = self.app.enqueue(
+                    "image", addr, image.name, path=str(image),
+                    fit=self.app.fit, dither=self.app.dither)
+                return self._json({"result": result, "state": self.app.state()})
             if parts == ["api", "cancel"]:
                 self.app.cancel()
                 return self._json(self.app.state())
+            if parts == ["api", "queue", "cancel"]:
+                result = self.app.cancel_queue()
+                return self._json({"result": result, "state": self.app.state()})
             if parts == ["api", "tags", "forget"]:
                 # batch: {"addrs": [...]} or {"not_seen_for": 600}
                 result = self.app.forget_tags(
@@ -200,22 +208,23 @@ class Handler(BaseHTTPRequestHandler):
                     length = int(str(body.get("length") or hex(0x3000)), 0)
                 except ValueError:
                     return self._error("start/length must be numbers")
-                result = self.app.read_flash(addr, start, length)
+                result = self.app.enqueue("read", addr, "read flash",
+                                          start=start, length=length)
                 return self._json({"result": result, "state": self.app.state()})
             if len(parts) == 4 and parts[1] == "tags" and parts[3] == "service":
                 try:
                     addr = int(parts[2], 16)
                 except ValueError:
                     return self._error(f"bad tag id {parts[2]}")
-                result = self.app.service_image(
-                    addr, body.get("note"), body.get("alias"))
+                result = self.app.enqueue("service", addr, "service label",
+                                          note=body.get("note"), alias=body.get("alias"))
                 return self._json({"result": result, "state": self.app.state()})
             if len(parts) == 4 and parts[1] == "tags" and parts[3] == "wipe":
                 try:
                     addr = int(parts[2], 16)
                 except ValueError:
                     return self._error(f"bad tag id {parts[2]}")
-                result = self.app.factory_reset(addr)
+                result = self.app.enqueue("wipe", addr, "factory reset")
                 return self._json({"result": result, "state": self.app.state()})
             if len(parts) == 4 and parts[1] == "tags" and parts[3] == "forget":
                 try:
@@ -229,14 +238,17 @@ class Handler(BaseHTTPRequestHandler):
                     addr = int(parts[2], 16)
                 except ValueError:
                     return self._error(f"bad tag id {parts[2]}")
-                result = self.app.flash_firmware(addr, str(body.get("path") or ""))
+                path = str(body.get("path") or "")
+                result = self.app.enqueue("firmware", addr,
+                                          Path(path).name or "firmware", path=path)
                 return self._json({"result": result, "state": self.app.state()})
             if len(parts) == 4 and parts[1] == "tags" and parts[3] == "assign":
                 try:
                     addr = int(parts[2], 16)
                 except ValueError:
                     return self._error(f"bad tag id {parts[2]}")
-                result = self.app.assign_id(addr, body.get("id"))
+                wanted = str(body.get("id") or "")
+                result = self.app.enqueue("id", addr, f"set id {wanted}", id=wanted)
                 return self._json({"result": result, "state": self.app.state()})
             if len(parts) == 4 and parts[1] == "pane":
                 return self._pane_command(parts[2], parts[3], body)

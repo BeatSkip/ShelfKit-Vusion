@@ -217,18 +217,18 @@
       <div class="screen-head">
         <h1>Queue</h1>
         <span class="grow"></span>
-        <button disabled title="Not implemented yet">Retry failed</button>
-        <button id="queue-cancel" disabled>Cancel pending</button>
+        <button id="queue-cancel" disabled title="Cancel every command that has not started">Cancel all</button>
       </div>
       <table class="grid">
         <thead>
-          <tr><th>Job</th><th>Hex ID</th><th>Content</th><th>State</th><th>Attempts</th><th>Age</th></tr>
+          <tr><th>Kind</th><th>Hex ID</th><th>Content</th><th>State</th><th>Detail</th><th>Age</th></tr>
         </thead>
         <tbody id="queue-rows"></tbody>
       </table>
       <p class="empty" id="queue-empty">
-        Job history is not implemented yet — the server streams an image to the hub and forgets it.
-        A transfer that is running right now shows up here as a single <code>sending</code> row.
+        Nothing queued. Every command — image, firmware, id, factory reset, service label or
+        flash read — lands here first and is sent when its tag next polls, because a tag only
+        listens for a few seconds after each poll.
       </p>
     </section>
 

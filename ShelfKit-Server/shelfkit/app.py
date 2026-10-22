@@ -200,6 +200,10 @@ class App:
         self.last_answer: str | None = None   # the hub's last SENT/ERR answer
         self._ports = (0.0, [])               # (fetched_at, [(device, description)])
         self.dump: dict = {"active": False}    # the last flash read-back
+        # Outbound commands wait here until their tag polls (see enqueue())
+        self.queue: list[dict] = []
+        self._jobs = itertools.count(1)
+        self.transfer_result: bool | None = None
         # The DTR (BOOT) level that makes the board run its firmware rather than
         # the serial bootloader. The documented mapping is "released", but the
         # only authority is the board itself: pulse_reset() watches what comes up
@@ -371,6 +375,9 @@ class App:
         if counted is not None and self.store is not None:
             # The store owns the counter, so a restart continues the same number.
             self.tags[counted] = self.store.touch_tag(f"{counted:04X}")
+        if counted is not None:
+            # the tag is listening right now: hand it its next queued command
+            self._pump_queue(counted)
         if event is not None:
             self._event(*event)
         if learn:
@@ -463,6 +470,7 @@ class App:
                 "max_lines": MAX_LOG_LINES,
                 "firmware": self.firmware_candidates(),
                 "dump": self.dump,
+                "queue": self.queue_jobs(),
                 "hub_caps": self.hub_capabilities(),
                 "editor": {
                     "fit": self.fit,
@@ -888,6 +896,7 @@ class App:
             self._event("error", f"{addr:04X}", str(exc)[:120])
         finally:
             with self.lock:
+                self.transfer_result = ok
                 self.sending = False
                 self.send_to = None
                 self.progress = ""
@@ -1078,6 +1087,7 @@ class App:
                 except OSError as exc:
                     result["error"] = f"saved in memory only: {exc}"
             with self.lock:
+                self.transfer_result = error is None
                 self.dump = result
                 self.status = (f"read 0x{start:04X}+{length} from {addr:04X}" if error is None
                                else f"read failed: {error}")
@@ -1302,6 +1312,126 @@ class App:
             time.sleep(hubhost.CMD_RETRY_PAUSE_S)
         return False
 
+    # ── the command queue ──────────────────────────────────────────────────
+    # A tag listens for 3 s after each poll, so a command fired at an arbitrary
+    # moment would usually be lost. Everything outbound is therefore queued and
+    # delivered when its tag next announces itself.
+
+    def enqueue(self, kind: str, addr: int, label: str, **params) -> dict:
+        with self.lock:
+            job = {"id": next(self._jobs), "kind": kind, "addr": addr,
+                   "label": label, "params": params, "created": time.time(),
+                   "state": "pending", "error": None}
+            self.queue.append(job)
+            self.status = f"queued: {label} for {addr:04X}"
+        self._event("queue", f"{addr:04X}", label)
+        return {"ok": True, "queued": job["id"], "addr": f"{addr:04X}",
+                "label": label, "state": "pending"}
+
+    def queue_jobs(self) -> list[dict]:
+        with self.lock:
+            now = time.time()
+            return [{"id": job["id"], "kind": job["kind"],
+                     "addr": f"{job['addr']:04X}", "label": job["label"],
+                     "state": job["state"], "age": round(now - job["created"], 1),
+                     "error": job["error"]} for job in self.queue]
+
+    def cancel_queue(self) -> dict:
+        """Drop everything still pending, and stop the one that is running."""
+        with self.lock:
+            cancelled = 0
+            for job in self.queue:
+                if job["state"] == "pending":
+                    job["state"] = "cancelled"
+                    cancelled += 1
+            if self.sending and self._cancel is not None:
+                self._cancel.set()
+            if self.dump.get("active") and getattr(self, "_dump_cancel", None):
+                self._dump_cancel.set()
+            self.status = (f"cancelled {cancelled} queued command(s)" if cancelled
+                           else "nothing was queued")
+        if cancelled:
+            self._event("cancel", None, f"{cancelled} queued command(s)")
+        return {"ok": True, "cancelled": cancelled}
+
+    def _pump_queue(self, addr: int) -> None:
+        """The tag at addr just polled: start its next pending command."""
+        with self.lock:
+            if self.sending or self.dump.get("active"):
+                return
+            job = next((j for j in self.queue
+                        if j["state"] == "pending" and j["addr"] == addr), None)
+            if job is None:
+                return
+            job["state"] = "running"
+        threading.Thread(target=self._run_job, args=(job,),
+                         name=f"job-{job['id']}", daemon=True).start()
+
+    def _wait_transfer(self, timeout: float = 300.0) -> bool | None:
+        """Wait for a threaded action to finish; None when it never did."""
+        end = time.time() + timeout
+        while time.time() < end:
+            with self.lock:
+                busy = self.sending or self.dump.get("active")
+                result = self.transfer_result
+            if not busy:
+                return result
+            time.sleep(0.05)
+        return None
+
+    def _run_job(self, job: dict) -> None:
+        kind, addr, params = job["kind"], job["addr"], job["params"]
+        ok, error, outcome = False, None, None
+        try:
+            with self.lock:
+                self.transfer_result = None
+            if kind == "image":
+                if not self.send(addr, image_path=params.get("path"),
+                                 fit=params.get("fit"), dither=params.get("dither")):
+                    error = self.status
+                else:
+                    outcome = self._wait_transfer()
+            elif kind == "firmware":
+                started = self.flash_firmware(addr, str(params.get("path") or ""))
+                if started.get("ok"):
+                    outcome = self._wait_transfer()
+                else:
+                    error = started.get("error")
+            elif kind == "service":
+                started = self.service_image(addr, params.get("note"),
+                                             params.get("alias"))
+                if started.get("ok"):
+                    outcome = self._wait_transfer()
+                else:
+                    error = started.get("error")
+            elif kind == "read":
+                started = self.read_flash(addr, params.get("start", 0),
+                                          params.get("length", 0x3000))
+                if started.get("ok"):
+                    outcome = self._wait_transfer()
+                else:
+                    error = started.get("error")
+            elif kind == "id":
+                finished = self.assign_id(addr, params.get("id"))
+                ok, error = bool(finished.get("ok")), finished.get("error")
+            elif kind == "wipe":
+                finished = self.factory_reset(addr)
+                ok, error = bool(finished.get("ok")), finished.get("error")
+            else:
+                error = f"unknown queued command {kind!r}"
+        except Exception as exc:  # noqa: BLE001 - one job must not kill the queue
+            error = f"{type(exc).__name__}: {exc}"
+        if outcome is not None:
+            ok = bool(outcome)
+        if not ok and error is None:
+            error = "did not complete"
+        with self.lock:
+            job["state"] = "done" if ok else "failed"
+            job["error"] = None if ok else error
+            self.status = (f"{job['label']} delivered to {addr:04X}" if ok
+                           else f"{job['label']} failed: {error}")
+        self._event("ok" if ok else "fail", f"{addr:04X}", job["label"])
+
     def send(self, addr: int, fit: str | None = None, dither: str | None = None,
              image_path: str | None = None) -> bool:
         with self.lock:
@@ -1425,6 +1555,7 @@ class App:
             with self.lock:
                 if ok:
                     self.tag_push[addr] = (path.name, time.time(), rendered.key)
+                self.transfer_result = ok
                 self.sending = False
                 self.send_to = None
                 self.progress = ""

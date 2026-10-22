@@ -717,8 +717,10 @@ async function readFlash() {
     render(payload.state);
     const result = payload.result || {};
     if (!result.ok) {
-      toast(result.error || "the read did not start", "bad");
+      toast(result.error || "the read was not queued", "bad");
       ui.drawerRead.disabled = false;
+    } else {
+      toast(`flash read queued for ${result.addr} - sent on the next poll`, "ok");
     }
   } catch (err) {
     toast(`cannot read the flash: ${err.message}`, "bad");
@@ -733,8 +735,8 @@ async function serviceImage() {
     const payload = await postJSON(`/api/tags/${drawerHex}/service`, {});
     render(payload.state);
     const result = payload.result || {};
-    if (result.ok) toast(`service label for ${result.id} is on its way`, "ok");
-    else toast(result.error || "the label was not sent", "bad");
+    if (result.ok) toast(`service label queued for ${result.addr}`, "ok");
+    else toast(result.error || "the label was not queued", "bad");
   } catch (err) {
     toast(`cannot send the service image: ${err.message}`, "bad");
   } finally {
@@ -755,11 +757,11 @@ async function flashFirmware() {
     render(payload.state);
     const result = payload.result || {};
     if (!result.ok) {
-      toast(result.error || "the firmware was not sent", "bad");
+      toast(result.error || "the firmware was not queued", "bad");
       ui.drawerFlash.disabled = false;
       return;
     }
-    toast(`${result.bytes} bytes -> ${drawerHex}, entry ${result.entry}`, "ok");
+    toast(`firmware queued for ${result.addr || drawerHex} - sent on the next poll`, "ok");
   } catch (err) {
     toast(`cannot flash: ${err.message}`, "bad");
     ui.drawerFlash.disabled = false;
@@ -775,9 +777,8 @@ async function assignId() {
     render(payload.state);
     const result = payload.result || {};
     if (result.ok) {
-      toast(`${drawerHex} is now ${result.id}`, "ok");
+      toast(`id change queued for ${result.addr}`, "ok");
       ui.drawerNewId.value = "";
-      drawerHex = result.id;          // the row moved; keep following this tag
       renderDrawer();
     } else {
       toast(result.error || "assignment failed", "bad");
@@ -871,40 +872,54 @@ function renderEditor() {
 }
 
 // ── queue ──────────────────────────────────────────────────────────────────
+const QUEUE_DOT = {
+  pending: "s-pending",
+  running: "s-pending",
+  done: "s-online",
+  failed: "s-alert",
+  cancelled: "s-offline",
+};
+
 function renderQueue() {
-  const signature = JSON.stringify([state?.sending, state?.progress, state?.send_to, state?.image]);
+  const jobs = state?.queue || [];
+  const signature = JSON.stringify([jobs, state?.sending, state?.progress]);
   if (signatures.queue === signature) return;
   signatures.queue = signature;
 
   ui.queueRows.innerHTML = "";
-  ui.queueEmpty.hidden = !!state?.sending;
-  ui.queueCancel.disabled = !state?.sending;
+  ui.queueEmpty.hidden = jobs.length > 0;
+  ui.queueCancel.disabled = jobs.length === 0 && !state?.sending;
 
-  if (!state?.sending) return;
-  const tr = el("tr");
-  const cells = [
-    "—",
-    hex4(state.send_to),
-    state.image ? state.image.name : "—",
-    "sending",
-    state.progress || "0",
-    "now",
-  ];
-  cells.forEach((value, index) => {
-    const td = el("td");
-    if (index === 3) {
-      const wrap = el("span", "status-cell");
-      wrap.append(el("span", "status-dot s-pending"), el("span", null, value));
-      td.append(wrap);
-    } else if (index === 1) {
-      td.className = "hex";
-      td.textContent = value;
-    } else {
-      td.textContent = value;
-    }
-    tr.append(td);
-  });
-  ui.queueRows.append(tr);
+  for (const job of jobs) {
+    const tr = el("tr");
+    const detail = job.state === "running"
+      ? (state?.progress || "sending")
+      : (job.error || "");
+    const cells = [
+      job.kind,
+      job.addr,
+      job.label,
+      job.state,
+      detail,
+      `${ageText(job.age)} ago`,
+    ];
+    cells.forEach((value, index) => {
+      const td = el("td");
+      if (index === 3) {
+        const wrap = el("span", "status-cell");
+        wrap.append(el("span", `status-dot ${QUEUE_DOT[job.state] || "s-offline"}`),
+          el("span", null, value));
+        td.append(wrap);
+      } else if (index === 1) {
+        td.className = "hex";
+        td.textContent = value;
+      } else {
+        td.textContent = value;
+      }
+      tr.append(td);
+    });
+    ui.queueRows.append(tr);
+  }
 }
 
 // ── logs ───────────────────────────────────────────────────────────────────
@@ -1121,8 +1136,9 @@ async function sendOrCancel() {
   const target = editorTarget();
   if (!target) return toast("wait for a tag to announce itself", "bad");
   try {
-    render(await postJSON("/api/send", { addr: target }));
-    toast(`pushing to ${hex4(target)} …`);
+    const payload = await postJSON("/api/send", { addr: target });
+    render(payload.state);
+    toast(`queued for ${hex4(target)} - it goes out when the tag next polls`, "ok");
   } catch (err) {
     toast(`send failed: ${err.message}`, "bad");
   }
@@ -1432,7 +1448,17 @@ ui.bulkPush.addEventListener("click", () => {
   if (first) openEditorFor(first);
 });
 
-ui.queueCancel.addEventListener("click", () => sendOrCancel());
+ui.queueCancel.addEventListener("click", async () => {
+  try {
+    const payload = await postJSON("/api/queue/cancel", {});
+    render(payload.state);
+    const count = (payload.result || {}).cancelled || 0;
+    toast(count ? `cancelled ${count} queued command(s)` : "nothing was queued",
+      count ? "ok" : null);
+  } catch (err) {
+    toast(`cancel failed: ${err.message}`, "bad");
+  }
+});
 ui.logsTag.addEventListener("change", () => {
   signatures.logs = null;
   renderLogs();
@@ -1471,7 +1497,7 @@ ui.drawerWipe.addEventListener("click", () => {
       render(payload.state);
       const result = payload.result || {};
       if (result.ok) {
-        toast(`${hex} wiped, it comes back with a new id`, "ok");
+        toast(`factory reset queued for ${hex}`, "ok");
         closeDrawer();
       } else {
         toast(result.error || "the tag was not reset", "bad");
