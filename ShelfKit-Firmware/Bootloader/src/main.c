@@ -500,26 +500,53 @@ static void ota_power_up(void)
                                  * sets ANALOGA = 0x3F, i.e. PA0..PA5 analog) */
     DIRA |= 0x20;               /* PA5 becomes an output */
     PORTA_5 = 0;                /* U4 active low: rail on */
-    for (i = 0; i < 0x400; i++) /* ~0.5 ms settle at 26 MHz */
+    for (i = 0; i < 0x2000; i++) /* ~4 ms settle: the app uses 5 ms and works */
         ;
 }
 
-/* 1 when the SPI flash holds a committed image whose header checks out. */
+/* 1 when the SPI flash holds a committed image whose header checks out.
+ * Logs the JEDEC id and the four header bytes it actually read, so a tag that
+ * "does not see the update" can be told apart from one that cannot read the
+ * flash at all. */
 static uint8_t ota_pending(void)
 {
     uint8_t header[OTA_HDR_BYTES];
+    uint8_t id[3];
+    uint8_t tries;
 
     ota_power_up();
     ota_spi_begin();
-    ota_flash_read(OTA_HDR_ADDR, header, OTA_HDR_BYTES);
-    if (!ota_header_parse(header, &ota_len, &ota_crc))
-        return 0;
-    uart0_writestr("OTA image len=");
-    uart0_writenum16(ota_len, 1, 0);
-    uart0_writestr(" crc=");
-    uart0_writehex16(ota_crc, 4, WRNUM_PADZERO);
+
+    PORTC_0 = 0;
+    ota_spi(0x9F);                       /* JEDEC id */
+    id[0] = ota_spi(0x00);
+    id[1] = ota_spi(0x00);
+    id[2] = ota_spi(0x00);
+    PORTC_0 = 1;
+    uart0_writestr("OTA jedec ");
+    uart0_writehex16(((uint16_t)id[0] << 8) | id[1], 4, WRNUM_PADZERO);
+    uart0_writehex16((uint16_t)id[2], 2, WRNUM_PADZERO);
     uart0_writestr("\r\n");
-    return 1;
+
+    for (tries = 0; tries < 3; tries++) {
+        ota_flash_read(OTA_HDR_ADDR, header, OTA_HDR_BYTES);
+        uart0_writestr("OTA hdr ");
+        uart0_writehex16(((uint16_t)header[0] << 8) | header[1], 4, WRNUM_PADZERO);
+        uart0_writehex16(((uint16_t)header[2] << 8) | header[3], 4, WRNUM_PADZERO);
+        uart0_writestr("\r\n");
+        if (ota_header_parse(header, &ota_len, &ota_crc)) {
+            uart0_writestr("OTA image len=");
+            uart0_writenum16(ota_len, 1, 0);
+            uart0_writestr(" crc=");
+            uart0_writehex16(ota_crc, 4, WRNUM_PADZERO);
+            uart0_writestr("\r\n");
+            return 1;
+        }
+        delay(2000);
+    }
+    uart0_writestr("OTA none
+");
+    return 0;
 }
 
 /* Verify, erase, program, clear the magic. 0 = the application was replaced. */
@@ -724,7 +751,6 @@ __start__stack:
      * only when the boot button (SW5) is held. It used to sit after the
      * auto-run below, which meant a normal reset jumped straight into the old
      * application and never looked at the update at all. */
-    ota_power_up();
     if (ota_pending()) {
         led_pulse(LED_BLUE, 500);   /* a new image is found: flashing it */
         if (ota_program() == 0) {

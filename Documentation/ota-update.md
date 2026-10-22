@@ -117,6 +117,15 @@ A tag that has no bootloader yet gets one with the merged HEX from
 application's entry in the jump-vector slot — see
 [ShelfKit-Firmware/Bootloader/README.md](../ShelfKit-Firmware/Bootloader/README.md#installing-the-bootloader-and-the-application-at-once).
 
+### The reset vector is part of the bootloader
+
+The bootloader only runs if `0x0000` holds `ljmp 0xD838`. That is what
+`Release/vusion-full-*.hex` writes, together with the application entry at
+`0xD7FE`. Flashing the application hex on its own puts `ljmp 0x021B` at `0x0000`,
+which starts the application directly: the OTA image is stored in SPI flash and
+never applied, because nothing ever looks at it. The build script's "Tag:" line
+always names the full image.
+
 ### Indications
 
 The bootloader shows nothing on a normal boot (the LEDs are driven off before
@@ -165,6 +174,15 @@ compiled-in boot logo worth 11,248 bytes — was linked into both radio images w
 nothing referenced it any more (the boot demo it belonged to was replaced by the
 shelf-link main). It was deleted from both targets, which also shrank the hub from
 37,775 to 26,210 bytes.
+
+### The reset vector is part of the bootloader
+
+The bootloader only runs if `0x0000` holds `ljmp 0xD838`. That is what
+`Release/vusion-full-*.hex` writes, together with the application entry at
+`0xD7FE`. Flashing the application hex on its own puts `ljmp 0x021B` at `0x0000`,
+which starts the application directly: the OTA image is stored in SPI flash and
+never applied, because nothing ever looks at it. The build script's "Tag:" line
+always names the full image.
 
 ### Indications
 

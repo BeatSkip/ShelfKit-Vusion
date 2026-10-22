@@ -167,3 +167,38 @@ bad entry vector or a failed erase), in which case the old application still run
 
 The first 500 ms after power-on are deliberately dark: the LED latches are cleared
 while the pins are still inputs, so a level left by the application cannot flash.
+
+## How it gets installed
+
+Flash **`Release/vusion-full-*.hex`** for a tag. That image contains the bootloader,
+the application, *and* the reset vector:
+
+| address | contents |
+|---|---|
+| `0x0000` | `ljmp 0xD838` — the bootloader's entry |
+| `0xD7FE` | the application's entry (read by `run_application()`) |
+| `0xD800`+ | the bootloader |
+
+Flashing `vusion-*.hex` (the application alone) writes `ljmp 0x021B` at `0x0000`
+instead: the chip then starts the application directly and the bootloader never
+runs, so an OTA image can be written to the flash and still never be applied.
+The build script now prints the full image as the command to use for a tag.
+
+## What it logs
+
+On every reset it checks sector 0 before it decides to boot, and says what it saw:
+
+```
+OTA jedec 1F4200
+OTA hdr 534B 4657        <- "SKFW": a committed image, programming it
+OTA image len=33345 crc=0x....
+OTA ok, booting
+```
+
+```
+OTA jedec 1F4200
+OTA none                 <- no valid header: nothing to do, boot normally
+```
+
+If the first line is `OTA jedec FFFFFF`, the bootloader cannot reach the SPI flash
+at all (rail or bus), and no update can ever be seen.

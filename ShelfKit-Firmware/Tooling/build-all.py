@@ -429,7 +429,8 @@ def main(argv: list[str] | None = None) -> int:
     if not args.no_bundle and "Vusion" in chosen and "Bootloader" in chosen:
         by_target = {row["target"]: row["hex"] for row in results}
         try:
-            bundle(by_target["Vusion"], by_target["Bootloader"], out_dir, args.version)
+            full_hex = bundle(by_target["Vusion"], by_target["Bootloader"],
+                              out_dir, args.version)
         except SystemExit as exc:
             print(f"\n!!! could not bundle: {exc}")
 
@@ -442,7 +443,16 @@ def main(argv: list[str] | None = None) -> int:
     print("\n=== ready to flash ===")
     for row in results:
         print(f"  {row['hex'].name:<44} {row['bytes']:>8} bytes  {row['usage']}")
-    print(f"\nFlash one with: python {HERE / 'axsem-flasher.py'} <hex> -p COM4")
+    full = locals().get("full_hex")
+    hub = next((row["hex"] for row in results if row["target"] == "Vusion-Hub"), None)
+    if full is not None:
+        print(f"\nTag:  python {HERE / 'axsem-flasher.py'} {full} -p COM4")
+        print("      (the full image: bootloader + application + the reset vector that")
+        print("       points at the bootloader. Flashing vusion-*.hex alone overwrites")
+        print("       0x0000 with an ljmp to the application and BYPASSES the bootloader,")
+        print("       so OTA updates can never be applied.)")
+    if hub is not None:
+        print(f"Hub:  python {HERE / 'axsem-flasher.py'} {hub} -p COM4")
     return 0
 
 
