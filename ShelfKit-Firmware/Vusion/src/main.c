@@ -59,10 +59,10 @@ static void listen_cb(struct wtimer_desc __xdata *desc)
 {
     (void)desc;
 #if SHELF_RADIO_SLEEP
-    if (img_rx_active() || fw_rx_active()) {
-        /* a transfer is running: stay awake, and check again once it should be
-         * over - the window re-arms itself instead of leaving the radio on until
-         * the next poll */
+    if (img_rx_active() || fw_rx_active() || fw_dump_active()) {
+        /* a transfer or a read-back is running: stay awake, and check again once
+         * it should be over - the window re-arms itself instead of leaving the
+         * radio on until the next poll (and never sleeps mid-read) */
         desc->time += (uint32_t)SHELF_LISTEN_WINDOW_S * SHELFHW_TICKS_PER_S;
         wtimer0_addabsolute(desc);
         return;
@@ -132,7 +132,8 @@ static void poll_cb(struct wtimer_desc __xdata *desc)
     desc->time += (uint32_t)SHELF_POLL_INTERVAL_S * SHELFHW_TICKS_PER_S;
     wtimer0_addabsolute(desc);
 
-    if (img_rx_active() || fw_rx_active())
+    /* a flash read-back owns the link: don't poll into the middle of it */
+    if (img_rx_active() || fw_rx_active() || fw_dump_active())
         return;
 
 #if SHELF_RADIO_SLEEP

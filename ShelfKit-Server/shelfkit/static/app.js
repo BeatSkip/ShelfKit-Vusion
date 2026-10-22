@@ -428,7 +428,16 @@ function closedPanes() {
 
 function renderFleet() {
   const rows = visibleRows();
-  const signature = JSON.stringify([rows, fleetSort, [...picked].sort(), closedPanes()]);
+  // The ages ("30s", "2m") move every poll. Signing them would rebuild the whole
+  // table - and recreate every thumbnail, which reads as a flicker - several
+  // times a second, so the time-derived fields go into the signature rounded to
+  // the minute. Status (online/offline) changes on its own window and still signs.
+  const signed = rows.map((row) => ({
+    ...row,
+    seen: row.seen == null ? null : Math.floor(row.seen / 60),
+    push: row.push ? { ...row.push, age: Math.floor(row.push.age / 60) } : null,
+  }));
+  const signature = JSON.stringify([signed, fleetSort, [...picked].sort(), closedPanes()]);
   if (signatures.fleet === signature) return;
   signatures.fleet = signature;
 

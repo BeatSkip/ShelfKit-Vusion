@@ -213,7 +213,7 @@ The transfer is the same reliable DATA path images use, with the firmware opcode
    clears the magic; the tag comes back with the **same id** and its aliases intact.
 
 Progress and Cancel are shared with image pushes, so the Queue screen shows either. The tag
-only listens for `SHELF_LISTEN_WINDOW_S` (8 s) after each poll, so a transfer started at a
+only listens for `SHELF_LISTEN_WINDOW_S` (3 s) after each poll, so a transfer started at a
 random moment may wait up to a minute for the next window; the frames are retried for 90 s,
 which covers it.
 

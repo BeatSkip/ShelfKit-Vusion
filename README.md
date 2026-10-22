@@ -59,7 +59,7 @@ choice is remembered, or `?theme=light` / `?theme=dark` forces one for a link or
 | Image push | Reliable frame-by-frame transfer over the port the console already has open, with cancel and progress |
 | **Storage** | Everything the server must remember across a restart, in one SQLite file: tag aliases/notes/positions, announcement counts and ages, the last frame per tag, the rendered bitmaps, the editor's image and options, the port each pane used, and the event history behind Logs |
 | Service labels | The server draws a panel-sized label with the tag's wireless id, alias and a note, and pushes it over the air — the quickest way to match a tag in hand to a Fleet row |
-| Tag power | Polls every 60 s and sleeps between: radio in deep sleep, 26 MHz crystal off, panel rail off, MCU in standby - woken by the LPOSC timer ([details](ShelfKit-Firmware/Vusion/README.md#power)) |
+| Tag power | Polls every 60 s and sleeps between: radio parked in `AXRADIO_MODE_OFF` (receiver down, XTAL kept for the MCU clock), panel rail off, MCU in standby - woken by the LPOSC timer ([details](ShelfKit-Firmware/Vusion/README.md#power)) |
 | OTA update | A tag receives a new application over the air into its SPI flash and the bootloader programs it on the next reset — **implemented, not yet tested on hardware** ([design](Documentation/ota-update.md)) |
 | Tag identity | Random 16-bit node id on a brand new tag, stored in SPI flash; assignable over the air from the server's Fleet drawer (or `Tooling/set-id.py`); survives firmware updates ([design](Documentation/tag-identity.md)) |
 | Honest gaps | No job history, battery reporting, templates, stats history, OTA, map view, or auth |

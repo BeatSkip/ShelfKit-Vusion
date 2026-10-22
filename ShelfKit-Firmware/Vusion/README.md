@@ -83,7 +83,7 @@ reset — before it generates its random id. `SHELF_WIPE_FIRST_BOOT 0` in
 
 ## Power
 
-The tag polls every `SHELF_POLL_INTERVAL_S` (30 s). Between polls the MCU is in
+The tag polls every `SHELF_POLL_INTERVAL_S` (60 s). Between polls the MCU is in
 standby and the radio is parked in `AXRADIO_MODE_OFF`:
 
 | block | between polls |
@@ -94,7 +94,8 @@ standby and the radio is parked in `AXRADIO_MODE_OFF`:
 | panel | rail off after a refresh, image held without power |
 
 For `SHELF_LISTEN_WINDOW_S` (3 s) after each poll the radio is back in receive so
-the hub can start a push; the window re-arms while a transfer is running.
+the hub can start a push; the window re-arms while a transfer *or a flash read-back*
+is running, so neither is ever cut off by the sleep.
 
 **Why `OFF` and not `DEEPSLEEP`.** The first low-power attempt used
 `AXRADIO_MODE_DEEPSLEEP`, and the tag polled once and then died: `radio_enter_deepsleep()`
@@ -117,7 +118,7 @@ drawer as both volts and an **average-CR2450 percentage**, red below 2.5 V. The 
 Other consequences:
 
 - **The wake-up timer caps the interval at ~102 s** (`SHELFHW_TICKS_PER_S` = 640 ticks
-  per second compared in 16 bits). 30 s is the default, 60 s works, 100 s is the edge.
+  per second compared in 16 bits). 60 s is the default, 30 s or 100 s are equally valid.
 - **Pushes wait for a window.** The server retries a frame for 90 s
   (`hubhost.CMD_RETRY_WINDOW_S`), so a push started at any moment lands within one
   poll cycle.
