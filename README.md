@@ -36,33 +36,41 @@ choice is remembered, or `?theme=light` / `?theme=dark` forces one for a link or
  └────────────────┘   ───────► ACK                 └──────────────┘   SENT …     └──────────────┘
 ```
 
-- **Tags** wake every few seconds, send a tiny `POLL`, and treat the hub's answer as the
+- **Tags** wake once a minute, send a tiny `POLL`, and treat the hub's answer as the
   acknowledgement. The hub can then push an image to any tag that has just spoken; the tag streams the
   chunks straight into the panel controller (there is no RAM for a frame buffer) and refreshes.
+- **The check-in adapts.** A tag stretches its own interval when the link is weak (up to 10 minutes),
+  and collapses to hourly, then two-hourly, then daily when there is no hub at all, so a tag out of
+  range cannot drain itself retrying. The hub can also ask it to wait longer. Between polls the radio,
+  the MCU and the panel rail are all off - see [tag power](ShelfKit-Firmware/Vusion/README.md#adaptive-check-in).
 - **The link** is reliable: sequence numbers, retries with jittered back-off, per-source duplicate
   filtering, and a 3-byte on-air address so several tags and networks can share the band. Details and
   the frame format are in [Documentation/wireless-link.md](Documentation/wireless-link.md).
 - **The server** owns two serial ports (hub and, while developing, the tag itself), renders images for
   the panel, and serves the web UI. Everything is local: the page is plain HTML/JS on the standard
   library's HTTP server, so the only Python dependencies are `pyserial` and `pillow`.
+- **Everything outbound is queued.** Nothing is fired at a tag when you click: a command waits for that
+  tag's next poll, because a tag only listens for seconds after one. The Queue screen shows the queue,
+  per command, with **Cancel all**.
 
 ## What works today
 
 | Area | State |
 |---|---|
 | Firmware — hub | Polls answered, images relayed to tags, serial command channel, LED pulses, 868 MHz link |
-| Firmware — tag | Polls with retry/back-off, image reception straight to the panel, BWR refresh, deep sleep |
+| Firmware — tag | Polls with retry/back-off and an adaptive check-in, image reception straight to the panel, BWR refresh, identity in SPI flash, OTA receiver, deep-sleep radio + sleeping MCU between polls |
 | E-paper driver | IL0373 init, 152×296 rotated portrait, black/white/red planes, BUSY-bounded waits |
-| Build | SDCC 3.6.0 + the SDCC-MDF VS Code extension, two targets over one shared vendor tree |
-| Server UI | Fleet (with per-tag and bulk **forget**, wireless **id assignment** and **firmware update**), Editor (with real previews), Queue, Logs, Stats, Hub, Console, Settings — light and dark |
+| Build | SDCC 3.6.0 + the SDCC-MDF VS Code extension, three targets (tag, hub, bootloader) over one shared vendor tree |
+| Server UI | Fleet (with per-tag and bulk **forget**, wireless **id assignment**, **firmware update**, **flash read-back** and **service labels**), Editor (with real previews), **Queue** (every command, its state, **Cancel all**), Logs, Stats, Hub, Console, Settings — light and dark |
 | Image pipeline | Fit (cover/contain/stretch), threshold / Floyd-Steinberg / Bayer 4×4 dither, server-rendered previews, midtone warning |
 | Image push | Reliable frame-by-frame transfer over the port the console already has open, with cancel and progress |
 | **Storage** | Everything the server must remember across a restart, in one SQLite file: tag aliases/notes/positions, announcement counts and ages, the last frame per tag, the rendered bitmaps, the editor's image and options, the port each pane used, and the event history behind Logs |
 | Service labels | The server draws a panel-sized label with the tag's wireless id, alias and a note, and pushes it over the air — the quickest way to match a tag in hand to a Fleet row |
-| Tag power | Polls every 60 s and sleeps between: radio parked in `AXRADIO_MODE_OFF` (receiver down, XTAL kept for the MCU clock), panel rail off, MCU in standby - woken by the LPOSC timer ([details](ShelfKit-Firmware/Vusion/README.md#power)) |
-| OTA update | A tag receives a new application over the air into its SPI flash and the bootloader programs it on the next reset — **implemented, not yet tested on hardware** ([design](Documentation/ota-update.md)) |
+| Tag power | The radio sits in the AX5043's own deep sleep (26 MHz crystal off), the MCU sleeps (`WTFLAG_CANSLEEPCONT`, XRAM kept), the panel rail is off, and the wake-up timer runs from the 32 kHz crystal. The listening window after a poll closes after 250 ms unless the hub said data is coming, so an idle tag is idle for almost the whole minute - estimated ~0.05 mA average, **~1.5 years on a CR2450** ([details](ShelfKit-Firmware/Vusion/README.md#what-the-tag-does-between-polls-all-implemented)) |
+| OTA update | **Working on hardware.** The tag receives a new application into its SPI flash, verifies the CRC, does a real chip reset (`PCON.SWRESET`) and the bootloader programs it on that reset, with a blue/green/red LED pulse ([design](Documentation/ota-update.md)) |
 | Tag identity | Random 16-bit node id on a brand new tag, stored in SPI flash; assignable over the air from the server's Fleet drawer (or `Tooling/set-id.py`); survives firmware updates ([design](Documentation/tag-identity.md)) |
-| Honest gaps | No job history, battery reporting, templates, stats history, OTA, map view, or auth |
+| Tag health | Every poll carries the supply voltage; the Fleet shows volts and a CR2450 percentage, red below 2.5 V |
+| Honest gaps | No templates or plain-text content, no stats history, no map view (hidden until a grid is configured), no auth, no partial refresh, and the three newest power modes still need metering |
 
 Nothing above is a mockup: the screenshots are the running app, taken against simulated serial data
 because a screenshot cannot include a physical tag.
@@ -74,7 +82,7 @@ because a screenshot cannot include a physical tag.
 | `ShelfKit-Firmware/` | One SDCC-MDF project per board: `Vusion/` (tag), `Vusion-Hub/` (hub), `Bootloader/` (serial bootloader), and room for the next tag type — see its [README](ShelfKit-Firmware/README.md) |
 | `ShelfKit-Server/` | The host-side app: web UI, image pipeline, image push (see its [README](ShelfKit-Server/README.md)) |
 | `ShelfKit-Firmware/Shared/` | Everything the firmwares use: Axsem SDK, prebuilt libraries, board definition, shared drivers. See [Shared/README.md](ShelfKit-Firmware/Shared/README.md) |
-| `ShelfKit-Firmware/Tooling/` | Firmware-side host scripts: the two-board flasher, the multi-target build script, the flash-dump capture |
+| `ShelfKit-Firmware/Tooling/` | Firmware-side host scripts: the flasher, the multi-target build script (`*-latest.hex`), the over-the-air sender, `set-id.py` and `flash-read.py` |
 | `Documentation/` | Protocol notes, panel init research, pin map, datasheets, screenshots |
 
 `Release/` (generated, git-ignored) holds the ready-to-flash HEX files.
@@ -107,11 +115,14 @@ bootloader), with the HEX files collected and named for you:
 python ShelfKit-Firmware/Tooling/build-all.py
 ```
 
-It writes `Release/vusion-<version>-<date>.hex`, `vusion-hub-…hex` and `bootloader-…hex` — see
+It writes `Release/vusion-latest.hex`, `vusion-hub-latest.hex`, `bootloader-latest.hex` and the
+combined `vusion-full-latest.hex` — `--version 1.2.0` names them `-1.2.0` instead, and the folder is
+cleared of old HEX/MAP files on every run. See
 [ShelfKit-Firmware/Tooling/README.md](ShelfKit-Firmware/Tooling/README.md).
 
-Verified build: ~37 KB of code, ~1 KB XRAM, ~150 B of stack left (SDCC has no spare internal RAM —
-keep buffers in `__xdata`).
+Verified build: tag 34 KB, hub 27 KB, bootloader 9 KB of code; ~1 KB of the 8 KB XRAM; SDCC has no
+spare internal RAM, so keep buffers in `__xdata`. The tag's OTA image window is 43 KB, of which the
+application uses 34 KB.
 
 ### 2. Host app
 
@@ -164,10 +175,10 @@ ShelfKit is a **skeleton on purpose** — the point is to grow it. The direction
 
 ### A real API
 
-- **A bitmap store** (SHA-256 deduped, with the render cached) so previews, thumbnails, history and
-  "last content" survive a restart instead of living in the render cache.
-- **A job queue**: content chosen → queued → sent → acknowledged → rendered, with retries, per-tag
-  attempts and a history you can look at. The Queue screen already has the shape for it.
+- **Content history**: the store already keeps each tag's last frame and its bitmap across restarts,
+  but only the last one, and nothing is deduplicated across tags.
+- **A real job history**: the queue delivers and reports, but it is in memory — a restart forgets it,
+  and there is no attempt count or retry history yet.
 - **Live updates** over SSE/WebSocket instead of 200 ms polling, and an OpenAPI schema for the whole
   surface so other tools can generate clients.
 - **Batch operations**: push to a selection, reflash a group, rotate content across slots.
@@ -204,6 +215,9 @@ accounts, no per-tag latency graphs, no mobile app (the web UI is responsive, th
 | Document | Contents |
 |---|---|
 | [Documentation/wireless-link.md](Documentation/wireless-link.md) | The radio protocol, frame format, retries, hub command channel, image transfer |
+| [Documentation/ota-update.md](Documentation/ota-update.md) | How an over-the-air update is stored, verified and applied, and the LED indications |
+| [Documentation/tag-identity.md](Documentation/tag-identity.md) | The identity record, the flash sector map, the switched flash rail |
+| [Documentation/ax8052-errata.md](Documentation/ax8052-errata.md) | Which AX8052 silicon erratas this firmware works around, and how |
 | [Documentation/GDEW026Z39-init-reference.md](Documentation/GDEW026Z39-init-reference.md) | Where every panel init byte came from |
 | [Documentation/signal-list.md](Documentation/signal-list.md) | Pin map of the Vusion board |
 | [ShelfKit-Server/README.md](ShelfKit-Server/README.md) | The web app: screens, image pipeline, HTTP API |

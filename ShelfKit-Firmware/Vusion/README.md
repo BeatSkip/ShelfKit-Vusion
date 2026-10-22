@@ -81,9 +81,32 @@ reset — before it generates its random id. `SHELF_WIPE_FIRST_BOOT 0` in
 `shelf_config.h` skips that. The same wipe is available on demand: the server's
 **Factory reset** button sends `SM_OP_WIPE`.
 
+## Adaptive check-in
+
+The configured interval is only a starting point (openepaperlink-style backoff). Each
+result picks the next gap, and gaps longer than one wake-up-timer arm (~100 s) are
+walked down by waking to step a counter, so the CPU stays asleep the whole time:
+
+| last result | next check-in |
+|---|---|
+| answered | `SHELF_POLL_INTERVAL_S` (16 s as configured) |
+| answered, but the hub heard us below `SHELF_WEAK_RSSI_DBM` (-95) | 10 min |
+| 1, 2, 3, 4, 5 misses | 32 s, 64 s, 2 min, 4 min, 8 min |
+| 6–13 misses | 10 min (`SHELF_POLL_MAX_S`) |
+| 14+ misses | 1 h, then 2 h after a day without a hub, then 24 h from the day after |
+| hub asks via the reply (`SM_RSP_DELAY`, 10 s units) | at least that long |
+
+The reasoning is the same as openepaperlink's: a failed transmission costs far more
+than waiting, and a tag out of range must not spend its battery retrying. The hub can
+also park tags itself — `L<hh>` on its console makes every reply carry a delay hint of
+`hh*10` seconds.
+
+Counters reset on the first answered poll, and the day-based steps use uptime, so a
+tag that comes back into range returns to the base interval immediately.
+
 ## Power
 
-The tag polls every `SHELF_POLL_INTERVAL_S` (60 s). Between polls the MCU is in
+The tag polls as above. Between polls the MCU is in standby and the radio is parked Between polls the MCU is in
 standby and the radio is parked in `AXRADIO_MODE_OFF`:
 
 | block | between polls |
@@ -104,10 +127,34 @@ takes its clock from that domain, so the CPU clock stopped. `AXRADIO_MODE_OFF` p
 down the receiver *without* that pin-mux dance, leaving `PWRSTATE_XTAL_ON` +
 `POWERDOWN`, so SYSCLK keeps running and the wake-up timer keeps ticking.
 
-The 26 MHz XTAL oscillator is the remaining idle drain (of order 1 mA, versus the
-~10 mA receiver it replaces). Stopping it too would need the MCU switched onto the
-internal FRC first (`CLKCON`), because SYSCLK is the radio XTAL; that is the next
-lever and is left unflipped until it can be watched on a meter.
+### What the tag does between polls (all implemented)
+
+| block | state | datasheet |
+|---|---|---|
+| radio | `AXRADIO_MODE_DEEPSLEEP` (`SHELF_RADIO_DEEPSLEEP`) - the AX5043's own deep sleep, 26 MHz XTAL stopped | ~50 uA |
+| MCU | Sleep via `wtimer_idle(WTFLAG_CANSLEEPCONT)` (`SHELF_MCU_SLEEP`), with `PCON.XRAMKEEP` = both halves so the 8 KiB XRAM survives | 2.2 uA |
+| wake-up timer | 32.768 kHz crystal / 64 = **512 Hz** (`SHELF_WAKE_LPXOSC` in `sdcc-project.json`) | 0.7 uA |
+| listening window | 2 s after a poll, but **closed after 250 ms** unless the hub's reply said data is coming (`SM_CMD_DATA`) | 9.5 mA only while open |
+| panel rail, flash rail | off unless a refresh / a flash access needs them | - |
+
+Estimated average and CR2450 life (datasheet figures, not measurements):
+
+| configuration | average | CR2450 |
+|---|---|---|
+| 60 s poll, 2 s window, cryastal on, standby (before this round) | 0.72 mA | 36 days |
+| + radio deep sleep + MCU sleep | 0.32 mA | 80 days |
+| + the 250 ms grace window on idle polls | **0.046 mA** | **~570 days** |
+| + backoff parked at 10 min (hub absent/weak) | 0.007 mA | years |
+
+Three of those four steps are *unverified on hardware* - radio deep sleep, MCU
+sleep-cont and the crystal tick base. If a tag misbehaves, bisect with one switch
+each, in this order:
+
+1. `SHELF_WAKE_LPXOSC` - remove it from `Vusion/sdcc-project.json` `defines`. This
+   is the one that would leave a tag unable to wake at all; it changes the tick base
+   to 512 Hz.
+2. `SHELF_MCU_SLEEP 0` in `shelf_config.h` - back to standby.
+3. `SHELF_RADIO_DEEPSLEEP 0` - back to the crystal-on `AXRADIO_MODE_OFF`.
 
 **Battery.** Each poll carries the supply voltage, measured with the AXSEM bootloader's
 ADC recipe (`shelfhw_measure_vdd`, volts*256, e.g. 3.00 V -> 0x0300). The hub prints

@@ -19,7 +19,9 @@
     "../Shared/firmware/shelfota/inc",
     "../Shared/firmware/shelfid/inc"
   ],
-  "defines": [],
+  "defines": [
+    "SHELF_WAKE_LPXOSC=1"
+  ],
   "libraries": [
     "../Shared/lib"
   ],

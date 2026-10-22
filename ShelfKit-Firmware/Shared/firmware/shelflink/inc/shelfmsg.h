@@ -24,11 +24,18 @@
 #define SM_POLL_VDD_LO      4
 #define SM_POLL_VDD_HI      5
 
-#define SM_RSP_LEN          2
+#define SM_RSP_LEN          3
 #define SM_RSP_CMD          0
 #define SM_RSP_RSSI         1
+/* The hub may ask for a longer gap before the next check-in, in 10 s units
+ * (0 = none). This is the "AP instruction" half of the adaptive backoff. */
+#define SM_RSP_DELAY        2
 
 #define SM_CMD_NONE         0
+/* The hub has something for this tag: keep the receiver open. Without it the
+ * tag closes its listening window after a short grace, which is most of the
+ * power saving on an idle fleet. */
+#define SM_CMD_DATA         0x01
 
 /*
  * Image transfer (hub -> tag), carried in DATA frames. The tag streams the

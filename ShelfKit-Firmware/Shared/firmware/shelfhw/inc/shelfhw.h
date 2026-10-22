@@ -22,8 +22,20 @@
 
 /* wtimer0 runs from the LPOSC at 640 Hz; this is the engine's time base and
  * the one shelflink uses for its timeouts. */
+#ifndef SHELF_WAKE_LPXOSC
+#define SHELF_WAKE_LPXOSC       0
+#endif
+#if SHELF_WAKE_LPXOSC
+/* 32.768 kHz crystal / 64 = exactly 512 Hz */
+#define SHELFHW_TICKS_PER_S     512u
+#else
 #define SHELFHW_TICKS_PER_S     640u
-#define SHELFHW_MS_TO_TICKS(ms) ((uint16_t)(((uint32_t)(ms) * 64u + 50u) / 100u))
+#endif
+#define SHELFHW_MS_TO_TICKS(ms) \
+    ((uint16_t)(((uint32_t)(ms) * (uint32_t)SHELFHW_TICKS_PER_S + 500u) / 1000u))
+#if SHELF_WAKE_LPXOSC && (SHELFHW_TICKS_PER_S != 512u)
+#error "SHELF_WAKE_LPXOSC needs the 32.768 kHz / 64 = 512 Hz tick base"
+#endif
 
 /* LED polarity. 1 = driving the pin high lights the LED. The boot demo
  * assumes this; if the LEDs turn out to be inverted, define it as 0 for the

@@ -260,6 +260,10 @@ POST /api/tags/<hex>/assign  ->  {"ok": true, "queued": 7, ...}     (pending)
 
 - The queue is per tag and in arrival order; a poll for tag A never runs tag B's job.
 - One command runs at a time; a second waits for the next poll (the link is busy).
+- When a command is queued the server also sends the hub `Q<hex>`, so that tag's
+  next poll reply says "data follows" and the tag keeps its receiver open. Without
+  it the tag closes the window after a 250 ms grace, which is most of the power it
+  saves.
 - `POST /api/queue/cancel` drops every pending command and stops the one in flight.
 - The Queue screen shows each command with its kind, target, state, detail and age.
 

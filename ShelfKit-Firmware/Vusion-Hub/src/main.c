@@ -26,6 +26,11 @@
 #include "pwr.h"
 
 static uint8_t __xdata rsp[SM_RSP_LEN];
+static uint8_t __xdata delay_hint;      /* 10 s units, 0 = no request */
+/* Tags the host has data queued for: their next poll reply carries SM_CMD_DATA
+ * so the tag keeps listening instead of closing its window after the grace. */
+#define PREARM_SLOTS 4
+static uint16_t __xdata prearmed[PREARM_SLOTS];
 
 static void log_rx(const struct sl_rx __xdata *rx)
 {
@@ -71,6 +76,8 @@ static void log_rx(const struct sl_rx __xdata *rx)
  *
  * One command per line, hex only, '\n' terminated ('\r' ignored):
  *   P                          -> "PONG"
+ *   Q<hhhh>                    -> data is queued for tag hhhh: flag its next poll
+ *   L<hh>                      -> ask every tag to wait hh*10 s before the next poll
  *   S<addr:4><payload...><chk:2>   reliable DATA frame to node addr
  *                              -> "SENT <addr> ok|fail att=N" when finished
  * chk makes the sum of all decoded bytes (addr, payload, chk) 0 mod 256. A bad
@@ -150,6 +157,37 @@ static void host_line(void)
     } else if (line_len) {
         if (line[0] == 'P')
             log_puts("PONG\r\n");
+        else if (line[0] == 'Q') {
+            /* Q<hhhh>: the host has data for that tag; flag its next poll */
+            int8_t a0 = (line_len >= 5) ? hexval(line[1]) : -1;
+            int8_t a1 = (line_len >= 5) ? hexval(line[2]) : -1;
+            int8_t a2 = (line_len >= 5) ? hexval(line[3]) : -1;
+            int8_t a3 = (line_len >= 5) ? hexval(line[4]) : -1;
+            if (a0 >= 0 && a1 >= 0 && a2 >= 0 && a3 >= 0) {
+                uint16_t who = (uint16_t)((a0 << 12) | (a1 << 8) | (a2 << 4) | a3);
+                uint8_t i;
+                for (i = 0; i < PREARM_SLOTS; i++) {
+                    if (prearmed[i] == 0 || prearmed[i] == who) {
+                        prearmed[i] = who;
+                        break;
+                    }
+                }
+                log_puts("OK data\r\n");
+            } else {
+                log_puts("ERR hex\r\n");
+            }
+        }
+        else if (line[0] == 'L') {
+            /* L<hh>: ask every tag to wait hh*10 s longer before its next poll */
+            int8_t hi = (line_len >= 3) ? hexval(line[1]) : -1;
+            int8_t lo = (line_len >= 3) ? hexval(line[2]) : -1;
+            if (hi >= 0 && lo >= 0) {
+                delay_hint = (uint8_t)((hi << 4) | lo);
+                log_puts("OK delay\r\n");
+            } else {
+                log_puts("ERR hex\r\n");
+            }
+        }
         else if (line[0] == 'S')
             cmd_send();
         else

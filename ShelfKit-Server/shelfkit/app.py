@@ -1324,9 +1324,19 @@ class App:
                    "state": "pending", "error": None}
             self.queue.append(job)
             self.status = f"queued: {label} for {addr:04X}"
+        self._prearm(addr)
         self._event("queue", f"{addr:04X}", label)
         return {"ok": True, "queued": job["id"], "addr": f"{addr:04X}",
                 "label": label, "state": "pending"}
+
+    def _prearm(self, addr: int) -> None:
+        """Tell the hub that data is queued for addr, so its next poll reply says
+        "stay listening". Best effort: an older hub just answers ERR cmd."""
+        with self.lock:
+            pane = self.panes.get(self.hub_key())
+            ok = pane is not None and pane.worker.is_open
+        if ok:
+            pane.worker.write(f"Q{addr:04x}\n".encode("ascii"))
 
     def queue_jobs(self) -> list[dict]:
         with self.lock:

@@ -21,7 +21,20 @@
  * The tag logs "sleep" when it parks the radio and "wake" when it brings it back,
  * so a silent log after "sleep" means the chip itself stopped. */
 #define SHELF_RADIO_SLEEP   1
-#define SHELF_XTAL_OFF      0
+
+/* 1 = park the radio in the AX5043's own deep sleep (XTAL stopped) instead of
+ * PWRSTATE_XTAL_ON+POWERDOWN. That is the ~1 mA -> ~50 uA step, and the mode
+ * that once left a tag polling once and dying; the wake path is
+ * ax5043_wakeup_deepsleep() in the engine. Set 0 to fall back to the
+ * crystal-on POWERDOWN that has been reliable. */
+#define SHELF_RADIO_DEEPSLEEP 1
+
+/* 1 = let the MCU enter Sleep (0.5-1.5 uA) instead of Standby (85 uA) between
+ * wake-ups, using libmf's enter_sleep_cont() so execution resumes rather than
+ * restarting at 0x0000. wtimer_cansleep() falls back to standby when a radio
+ * event is due soon. */
+#define SHELF_MCU_SLEEP     1
+#define SHELF_XTAL_OFF      1
 
 /* Seconds between polls. 60 s is the practical ceiling: the wake-up timer counts
  * SHELFHW_TICKS_PER_S (640) per second in 16 bits, so anything above ~102 s
@@ -32,7 +45,22 @@
 /* How long the tag listens after each poll, in seconds. Everything the hub sends
  * (images, firmware, a new identity) follows a POLL, so this window is the only
  * time the tag can be reached. Longer = easier pushes, shorter = less RX time. */
-#define SHELF_LISTEN_WINDOW_S   3
+#define SHELF_LISTEN_WINDOW_S   2
+/* How long to keep listening after a reply that did *not* say data is coming:
+ * long enough for a late frame, short enough not to hold the receiver open. */
+#define SHELF_LISTEN_GRACE_MS   250
+
+/* ── adaptive check-in (openepaperlink-style backoff) ─────────────────────
+ * The base interval above is only a starting point. It stretches when the link
+ * is weak, and collapses to hourly/daily when there is no hub at all, because a
+ * tag out of range must not spend its battery retrying. */
+#define SHELF_POLL_MAX_S        600      /* weak link: at most 10 min between polls */
+#define SHELF_POLL_ARM_MAX_S    100      /* one wake-up-timer arm (16 bits @ 640 Hz) */
+#define SHELF_WEAK_RSSI_DBM     (-95)    /* the hub hearing us below this = weak */
+#define SHELF_FAIL_TO_HOUR      14       /* consecutive misses before the hourly step */
+#define SHELF_LOST_HOUR_S       3600UL   /* no hub: once an hour ... */
+#define SHELF_LOST_DAY_S        7200UL   /* ... every two hours after a day ... */
+#define SHELF_LOST_2DAY_S       86400UL  /* ... once a day from the day after */
 
 /* Print the link statistics every this many polls */
 #define SHELF_STATS_EVERY       10

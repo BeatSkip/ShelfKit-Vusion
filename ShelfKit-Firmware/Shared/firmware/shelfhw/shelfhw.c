@@ -242,7 +242,11 @@ void shelfhw_init(void)
 
     /* Wake-up timers as the radio engine expects them */
     LPOSCCONFIG = 0x09;
-    wtimer0_setclksrc(CLKSRC_LPOSC, 0x01);
+#if SHELF_WAKE_LPXOSC
+    wtimer0_setclksrc(CLKSRC_LPXOSC, 6);   /* 32.768 kHz / 64 = 512 Hz */
+#else
+    wtimer0_setclksrc(CLKSRC_LPOSC, 0x01); /* internal RC at 640 Hz */
+#endif
     wtimer1_setclksrc(CLKSRC_FRCOSC, 7);
     wtimer_init();
 
@@ -295,6 +299,11 @@ uint16_t shelfhw_measure_vdd(void) __reentrant
 {
     uint16_t vdd;
 
+    /* PCON.XRAMKEEP (bits 3:2) = both halves: without this, Sleep mode drops the
+     * 8 KiB XRAM and the tag loses every bit of its state on the first sleep. */
+    PCON = (uint8_t)((PCON & (uint8_t)~0x0C) | 0x0C);
+    OSCFORCERUN |= 0x08;            /* force the 32 kHz LPX crystal (wake timer) */
+
     ADCCH0CONFIG = 0xD9;        /* all four channels sample VDD */
     ADCCH1CONFIG = 0xD9;
     ADCCH2CONFIG = 0xD9;
@@ -314,11 +323,17 @@ uint16_t shelfhw_measure_vdd(void) __reentrant
 
 void shelfhw_radio_sleep(void)
 {
-    /* AXRADIO_MODE_OFF = ax5043_off(): receiver, synth and baseband powered down,
-     * XTAL kept running (PWRSTATE_XTAL_ON + POWERDOWN) so the MCU's SYSCLK stays
-     * up and the wake-up timer keeps ticking. DEEPSLEEP would stop SYSCLK and kill
-     * the MCU clock, which is exactly why the first attempt polled once and died. */
+#if SHELF_RADIO_DEEPSLEEP
+    /* The AX5043's own deep sleep: the 26 MHz XTAL stops, which is the ~1 mA
+     * saving. The MCU runs from the internal FRC (CLKCON = 0 = FRCOSC), so it
+     * keeps executing; the engine wakes the transceiver with the 0xAB wake
+     * protocol from axradio_set_mode(ASYNC_RECEIVE) -- see shelfhw_radio_wake(). */
+    (void)axradio_set_mode(AXRADIO_MODE_DEEPSLEEP);
+#else
+    /* AXRADIO_MODE_OFF = ax5043_off(): receiver, synth and baseband down, XTAL
+     * kept running (PWRSTATE_XTAL_ON + POWERDOWN). Reliable, but pays ~1 mA. */
     (void)axradio_set_mode(AXRADIO_MODE_OFF);
+#endif
 #if SHELF_XTAL_OFF
     OSCFORCERUN &= (uint8_t)~0x04;  /* stop forcing the 26 MHz crystal */
 #endif
@@ -340,8 +355,16 @@ void shelfhw_poll(void)
 {
     wtimer_runcallbacks();
     EA = 0;
-    IE_1 = 1;                       /* wake-up timer (vector 1) ends the standby; no ISR runs, EA is off */
+    IE_1 = 1;                       /* wake-up timer (vector 1) ends the idle; no ISR runs, EA is off */
+#if SHELF_MCU_SLEEP
+    /* Sleep is 85 uA -> ~1.5 uA. CANSLEEPCONT makes libmf save SP + a signature so
+     * the startup returns here instead of restarting at 0x0000; CANSLEEP is the
+     * plain restarting sleep as a fallback, and CANSTANDBY is the last resort
+     * when wtimer_cansleep() says a wake-up is too close. */
+    wtimer_idle(WTFLAG_CANSLEEPCONT | WTFLAG_CANSLEEP | WTFLAG_CANSTANDBY);
+#else
     wtimer_idle(WTFLAG_CANSTANDBY);
+#endif
     IE_1 = 0;
     EA = 1;
 }
