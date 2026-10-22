@@ -106,69 +106,56 @@ tag that comes back into range returns to the base interval immediately.
 
 ## Power
 
-The tag polls as above. Between polls the MCU is in standby and the radio is parked Between polls the MCU is in
-standby and the radio is parked in `AXRADIO_MODE_OFF`:
-
-| block | between polls |
-|---|---|
-| MCU | standby (`wtimer_idle(WTFLAG_CANSTANDBY)`), woken by the low-power timer |
-| radio | `AXRADIO_MODE_OFF` = `ax5043_off()`: receiver, synth and baseband down, 26 MHz XTAL kept on so the MCU's SYSCLK stays up |
-| 26 MHz crystal | kept on (see below for the off option) |
-| panel | rail off after a refresh, image held without power |
-
-For `SHELF_LISTEN_WINDOW_S` (3 s) after each poll the radio is back in receive so
-the hub can start a push; the window re-arms while a transfer *or a flash read-back*
-is running, so neither is ever cut off by the sleep.
-
-**Why `OFF` and not `DEEPSLEEP`.** The first low-power attempt used
-`AXRADIO_MODE_DEEPSLEEP`, and the tag polled once and then died: `radio_enter_deepsleep()`
-rewrites `RADIOMUX`/`PORTR` and drives the AX5043's SYSCLK pin, and the AX8052F143
-takes its clock from that domain, so the CPU clock stopped. `AXRADIO_MODE_OFF` powers
-down the receiver *without* that pin-mux dance, leaving `PWRSTATE_XTAL_ON` +
-`POWERDOWN`, so SYSCLK keeps running and the wake-up timer keeps ticking.
-
-### What the tag does between polls (all implemented)
+The tag polls as above. Between polls:
 
 | block | state | datasheet |
 |---|---|---|
-| radio | `AXRADIO_MODE_DEEPSLEEP` (`SHELF_RADIO_DEEPSLEEP`) - the AX5043's own deep sleep, 26 MHz XTAL stopped | ~50 uA |
-| MCU | Sleep via `wtimer_idle(WTFLAG_CANSLEEPCONT)` (`SHELF_MCU_SLEEP`), with `PCON.XRAMKEEP` = both halves so the 8 KiB XRAM survives | 2.2 uA |
-| wake-up timer | 32.768 kHz crystal / 64 = **512 Hz** (`SHELF_WAKE_LPXOSC` in `sdcc-project.json`) | 0.7 uA |
-| listening window | 2 s after a poll, but **closed after 250 ms** unless the hub's reply said data is coming (`SM_CMD_DATA`) | 9.5 mA only while open |
-| panel rail, flash rail | off unless a refresh / a flash access needs them | - |
+| radio | `AXRADIO_MODE_DEEPSLEEP` (`SHELF_RADIO_DEEPSLEEP`): the AX5043's own deep sleep, 26 MHz XTAL stopped, woken over SPI by `ax5043_wakeup_deepsleep()` | ~50 uA |
+| MCU | **standby** (`wtimer_idle(WTFLAG_CANSTANDBY)`) - the sleep modes cannot be used in this layout, see below | 85 uA |
+| wake-up timer | 32.768 kHz crystal, prescaler **7** = **512 Hz** (`SHELF_WAKE_LPXOSC` in `sdcc-project.json`) | 0.7 uA |
+| listening window | 2 s after a poll, but **closed after 500 ms** unless the hub's reply said data is coming (`SM_CMD_DATA`); it re-arms while a transfer or a flash read-back is running | 9.5 mA only while open |
+| panel, flash rails | off unless a refresh or a flash access needs them | - |
 
 Estimated average and CR2450 life (datasheet figures, not measurements):
 
 | configuration | average | CR2450 |
 |---|---|---|
-| 60 s poll, 2 s window, cryastal on, standby (before this round) | 0.72 mA | 36 days |
-| + radio deep sleep + MCU sleep | 0.32 mA | 80 days |
-| + the 250 ms grace window on idle polls | **0.046 mA** | **~570 days** |
-| + backoff parked at 10 min (hub absent/weak) | 0.007 mA | years |
+| 60 s poll, 2 s window, crystal-on radio, standby (before this round) | 0.65 mA | 40 days |
+| + radio deep sleep | 0.40 mA | 64 days |
+| **+ the 500 ms grace on idle polls (what is shipped)** | **0.17 mA** | **~150 days** |
+| MCU sleep as well, if the resume worked | 0.09 mA | 300 days |
 
-Three of those four steps are *unverified on hardware* - radio deep sleep, MCU
-sleep-cont and the crystal tick base. If a tag misbehaves, bisect with one switch
-each, in this order:
+**Why standby, not sleep.** libmf's `enter_sleep()`, `enter_sleep_cont()` and even
+`reset_cpu()` all end in `ljmp 0xE047`, the chip's ROM sleep handler, whose wake path
+restarts the CPU at `0x0000` - which in this layout is the bootloader. With
+`SHELF_MCU_SLEEP` on, the tag restarted instead of resuming: a boot loop every ~0.9 s,
+seen right after an OTA reset, until it was reset by hand. The ~2 uA sleep modes need a
+ROM-resident resume this bootloader layout cannot reach, so the tag idles in standby.
 
-1. `SHELF_WAKE_LPXOSC` - remove it from `Vusion/sdcc-project.json` `defines`. This
-   is the one that would leave a tag unable to wake at all; it changes the tick base
-   to 512 Hz.
-2. `SHELF_MCU_SLEEP 0` in `shelf_config.h` - back to standby.
-3. `SHELF_RADIO_DEEPSLEEP 0` - back to the crystal-on `AXRADIO_MODE_OFF`.
+**The tick base is measured, not assumed.** Prescaler 6 gave ~1024 Hz on hardware (60
+counted seconds in 30 real ones), which halved every interval and every link timeout;
+prescaler **7** matches `SHELFHW_TICKS_PER_S` = 512. The crystal itself was never the
+problem: `OSCRUN` shows the LPXOSC running, and the FRC calibration already used it.
+
+The radio deep sleep is the only step still unverified on hardware. To bisect:
+`SHELF_RADIO_DEEPSLEEP 0` falls back to the crystal-on `AXRADIO_MODE_OFF`, and removing
+`SHELF_WAKE_LPXOSC` from `Vusion/sdcc-project.json` falls back to the internal RC at
+640 Hz.
 
 **Battery.** Each poll carries the supply voltage, measured with the AXSEM bootloader's
 ADC recipe (`shelfhw_measure_vdd`, volts*256, e.g. 3.00 V -> 0x0300). The hub prints
 it as `vdd=0300` and the server shows it in the Fleet **Battery** column and the
-drawer as both volts and an **average-CR2450 percentage**, red below 2.5 V. The AX8052 GP ADC has missing codes around mid-scale
-(erratum, all revisions), so treat the last digit as a hint, not a measurement.
+drawer as both volts and an **average-CR2450 percentage**, red below 2.5 V. The AX8052
+GP ADC has missing codes around mid-scale (erratum, all revisions), so treat the last
+digit as a hint, not a measurement.
 
 Other consequences:
 
-- **The wake-up timer caps the interval at ~102 s** (`SHELFHW_TICKS_PER_S` = 640 ticks
-  per second compared in 16 bits). 60 s is the default, 30 s or 100 s are equally valid.
+- **One wake-up-timer arm caps at 128 s** (16 bits at 512 ticks/s); longer backoff gaps
+  are walked down by waking to step a counter.
 - **Pushes wait for a window.** The server retries a frame for 90 s
-  (`hubhost.CMD_RETRY_WINDOW_S`), so a push started at any moment lands within one
-  poll cycle.
+  (`hubhost.CMD_RETRY_WINDOW_S`), and pre-arms the hub (`Q<hex>`) when it queues, so the
+  tag keeps its full window open for that poll.
 
 ## Hardware notes that cost real time
 

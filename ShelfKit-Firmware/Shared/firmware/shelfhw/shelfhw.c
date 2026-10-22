@@ -243,7 +243,11 @@ void shelfhw_init(void)
     /* Wake-up timers as the radio engine expects them */
     LPOSCCONFIG = 0x09;
 #if SHELF_WAKE_LPXOSC
-    wtimer0_setclksrc(CLKSRC_LPXOSC, 6);   /* 32.768 kHz / 64 = 512 Hz */
+    /* 32.768 kHz / 64 = 512 Hz. Prescaler 6 measured ~1024 Hz on hardware
+     * (60 counted seconds in 30 real ones), i.e. one divider step lower, which
+     * halved every interval and timeout; 7 is the step that matches
+     * SHELFHW_TICKS_PER_S. */
+    wtimer0_setclksrc(CLKSRC_LPXOSC, 7);
 #else
     wtimer0_setclksrc(CLKSRC_LPOSC, 0x01); /* internal RC at 640 Hz */
 #endif

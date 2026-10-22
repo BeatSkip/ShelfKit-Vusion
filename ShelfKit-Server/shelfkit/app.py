@@ -131,12 +131,14 @@ class Pane:
         # (seq, arrival, stamp, text); arrival orders lines across both panes.
         self.log: deque[tuple[int, int, str, str]] = deque(maxlen=MAX_LOG_LINES)
         self.seq = 0
+        self.last_at = 0.0
         self.epoch = 0
         # Wakes anything waiting for a line (the image push waits for SENT/PONG).
         self.cond = threading.Condition()
 
     def add(self, arrival: int, text: str) -> None:
         self.seq += 1
+        self.last_at = time.time()      # wall clock: "did the hub just speak?"
         self.log.append((self.seq, arrival, _stamp(), text))
         with self.cond:
             self.cond.notify_all()
@@ -1273,8 +1275,16 @@ class App:
                 pane.cond.wait(min(remaining, 0.05))
 
     def _ping_hub(self, key: str, cancel) -> bool:
-        """'P' must answer 'PONG' - the cheap check that the right port is open."""
+        """'P' must answer 'PONG' - the cheap check that the right port is open.
+
+        Skipped when the hub produced a line within the last couple of seconds:
+        right after a poll that is exactly the case, and spending a 3 s ping
+        there is what made a queued command land after the tag had gone back to
+        sleep.
+        """
         pane = self.panes[key]
+        if pane.last_at and time.time() - pane.last_at < 2.0:
+            return True
         for _attempt in range(3):
             if cancel.is_set():
                 return False

@@ -31,9 +31,13 @@
 
 /* 1 = let the MCU enter Sleep (0.5-1.5 uA) instead of Standby (85 uA) between
  * wake-ups, using libmf's enter_sleep_cont() so execution resumes rather than
- * restarting at 0x0000. wtimer_cansleep() falls back to standby when a radio
- * event is due soon. */
-#define SHELF_MCU_SLEEP     1
+ * restarting at 0x0000.
+ *
+ * OFF: on hardware, after an OTA's PCON.SWRESET the tag restarted instead of
+ * resuming - a boot loop every ~0.9 s until it was reset by hand - while a
+ * hardware reset resumed normally. The MCU sleep is the only difference between
+ * those two, so it stays off until the startup's resume path is understood. */
+#define SHELF_MCU_SLEEP     0
 #define SHELF_XTAL_OFF      1
 
 /* Seconds between polls. 60 s is the practical ceiling: the wake-up timer counts
@@ -48,7 +52,7 @@
 #define SHELF_LISTEN_WINDOW_S   2
 /* How long to keep listening after a reply that did *not* say data is coming:
  * long enough for a late frame, short enough not to hold the receiver open. */
-#define SHELF_LISTEN_GRACE_MS   250
+#define SHELF_LISTEN_GRACE_MS   500
 
 /* ── adaptive check-in (openepaperlink-style backoff) ─────────────────────
  * The base interval above is only a starting point. It stretches when the link
