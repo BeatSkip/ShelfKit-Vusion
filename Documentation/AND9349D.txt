@@ -1,0 +1,4838 @@
+
+
+########## PAGE 1 ##########
+©  Semiconductor Components Industries, LLC, 2016
+September, 2016 − Rev. 3
+1 Publication Order Number:
+AND9349/D
+AND9349/D
+AX8052 
+Programming Manual
+DEVICE OVERVIEW
+AX8052 is a fully integrated embedded microcontroller
+optimized for short range radio applications, designed to be
+paired with Axsem RF technology.
+Features
+• AX8052
+♦ Industry Standard 8052 Instruction Set
+♦ High Performance Core, Most Instructions Require
+Only 1 Clock per Instruction Byte
+♦ 20 MIPS
+♦ Dual DPTR for High Speed External Memory
+Copies
+♦ 22 Interrupt Vectors
+• Debugger
+♦ 3 Wire (1 Dedicated, 2 Shared with GPIO Pins)
+Debugger Interface
+♦ True Hardware Debugger with Breakpoints and
+Single Stepping Support
+♦ User Programmable 64 bit Key to Restrict
+Debugging to Authorized Personnel
+♦ DebugLink interface Allows “printf” Style
+Debugging Without Utilizing a UART or GPIO Pins
+• Memory
+♦ In-Circuit Programmable FLASH
+♦ Large RAM
+♦ High Performance Memory Crossbar
+♦ 4 Word × 16 Bits Fully Associative Cache and
+Prefetch Unit to Hide FLASH Access Latency
+• Clocking
+♦ Flexible Clocking Options Thanks to an On-Chip
+20 MHz Fast RC Oscillator, 10 kHz/640 Hz Low
+Power RC Oscillator, Fast Crystal Oscillator, Low
+Power Tuning Fork Crystal Oscillator
+♦ Fully Automatic Calibration of On-Chip RC
+Oscillators to a Reference Clock
+♦ Clock Monitor Can Detect Failures of the Main
+Clock and Switch to the On-Chip Fast RC Oscillator
+♦ Watchdog
+• Power Modes
+♦ Standby, Sleep and Deep Sleep Power Modes for
+Very Low Idle Power Consumption
+♦ On-Chip Power-On Reset and Brown Out Detection
+• 16 Bit Wakeup Timer
+♦ 2 Counting Registers
+♦ 4 Event Registers Allow Flexible Wakeup and
+Software Schedules
+• Dedicated Interface to Axsem Transceiver IC
+♦ Easy Access to Transceiver Registers by Mapping
+Transceiver Registers Into X Address Space
+♦ Transceiver Crystal May Clock MCU
+• GPIO
+♦ Up to 24 GPIO Pins, Depending on Package
+♦ PB0−PB7 and PC0−PC7 5 V Tolerant Inputs
+♦ All GPIO Pins Support Individually Programmable
+Pull-Ups and Interrupt on Change
+♦ Flexible Allocation of GPIO Pins to Peripherals
+• 16 Bit General Purpose Timer (3x)
+♦ Sawtooth and Triangle Modes
+♦ Sigma-Delta Mode Converts Timer into a DAC
+♦ Optional Double Buffering of the PERIOD Register
+Allows Controlled Frequency Changes
+♦ Optional High-Byte Buffering Allows Atomic 16 bit
+Accesses
+♦ Flexible Clocking Options, Can Use Any Internal or
+an External Clock Source, Prescaler Included
+• 16 Bit Output Compare Unit (2x)
+♦ Used Together With a General Purpose Timer to
+Create PWM Waveforms
+♦ Optional Double Buffering
+♦ 16 Bit Input Capture Unit (2x)
+♦ Used Together with a General Purpose Timer to
+Time Events on an External or Internal Signal
+• UART (2x)
+♦ 5-9 bit Word Length, 1-2 Stop Bits
+♦ Uses One of the General Purpose Timers as Baud
+Rate Generator
+• Master/Slave SPI
+♦ 4 or 3 Line Mode 
+(With or Without Slave Select Line)
+♦ Programmable Clock Phases
+• ADC
+♦ 10 Bit 500k Samples/s ADC
+♦ Up to 8 Channels
+♦ Single Ended and Differential Sampling
+♦ x0.1, x1 and x10 Gain Amplifier
+♦ Internal 1 V Reference
+www.onsemi.com
+APPLICATION NOTE
+
+########## PAGE 2 ##########
+AND9349/D
+www.onsemi.com
+2
+♦ Flexibly Programmable Conversion Schedule
+♦ Built-In Temperature Sensor
+• Analog Comparators
+♦ Internal or External Reference
+♦ Output Signal May be Routed to GPIO, Read by
+Software, or Used as Input Capture Trigger
+• DMA Controller
+♦ 2 Independent DMA Channels
+♦ Moves Data Between X-RAM and Most On-Chip
+Peripherals
+♦ Cycle-Steal and Round-Robin Memory Arbitration
+Ensure Minimal Impact on the AX8052 Core
+♦ Chained Buffer Descriptors Allow Arbitrarily
+Elaborate Buffering Schemes and Flexible Interrupt
+Generation
+• Advanced Encryption Standard (AES)1
+♦ Dedicated AES Crypto Controller
+♦ Dedicated DMA Engine to Fetch Input Data and
+Keystream From X RAM and Store Output Data
+Into X
+♦ Multi Megabit/s Data RatesRAM
+♦ Supports AES−128, AES−192 and AES−256
+International Standards
+♦ Programmable Round Number and Software Key
+Schedule Generation Allow Longer Key Lengths for
+Higher Security Applications
+♦ ECB, CFB and OFB Chaining Modes
+• True Random Number Generator (RNG)1
+♦ Cryptographic Random Numbers
+♦ Passes the NIST Statistical Test Suite for Random
+Number Generators
+Figure 1. Microfoot Block Diagram
+Figure 1 shows the block diagram of the Microfoot
+device. All blocks are interconnected via three busses, the P,
+X and SFR bus.
+1 For further information, contact ON Semiconductor Sales.
+
+########## PAGE 3 ##########
+AND9349/D
+www.onsemi.com
+3
+TABLE OF CONTENTS
+Device Overview 1..................................................................................
+AX8052 4.........................................................................................
+AX8052 Registers 12................................................................................
+Address Space 14...................................................................................
+Flash 25...........................................................................................
+Cache and Prefetch 27...............................................................................
+RAM 27..........................................................................................
+Debug Interface 28..................................................................................
+System controller 29.................................................................................
+DMA Controller 41..................................................................................
+Radio Interface 44...................................................................................
+GPIO 47..........................................................................................
+ADC, Comparator, Temperature Sensor 52...............................................................
+SPI Master/Slave Interface 57.........................................................................
+Time Counter 0/1/2 59...............................................................................
+Output Compare 0/1 62...............................................................................
+Input Capture 0/1 64.................................................................................
+UART 0/1 65.......................................................................................
+Random Number Generator/AES 66....................................................................
+
+########## PAGE 4 ##########
+AND9349/D
+www.onsemi.com
+4
+AX8052
+The AX8052 core is fully compatible with the MCS−51
+instruction set. Standard 803x/805x assembler and
+compilers can be used to develop software. The peripherals
+however are vastly improved and therefore not compatible
+with other 8051/8052 implementations.
+Performance
+The AX8052 core employs a pipelined architecture that
+greatly increases its instruction throughput over the standard
+8052 architecture. Instead of using 12, 24 or 48 clock cycles
+to execute instructions, AX8052 requires between 1 and 11
+clock cycles depending on instructions. 90% of the
+instructions are executed between 1 and 4 clock cycles.
+Table 1. AX8052 PERFORMANCE
+Blocks to Execute 1 2 2+ 3 3+ 4 4+ 5 6 7 11
+8052 Instructions 21 23 8 21 17 10 2 4 3 1 2
+There is one clock cycle latency when reading data in the
+IRAM. It does not concern internal SFR read and write
+accesses nor IRAM write accesses. Those instructions are
+indicated with an plus (+) in the instruction set summary
+table, indicating that the latency depends on the memory
+space access. Instructions doing read or write accesses to the
+external SFR memory space are also indicated with an plus
+(+) as the latency depends on the peripheral.
+There is as well one clock cycle latency when reading data
+in the XRAM. It is not the case for write accesses.
+The 4 register banks are located in the IRAM. So R0 and
+R1 of the active register bank selected by PSW[4:3] are not
+easily accessible when doing indirect addressing. In order to
+speed up this addressing mode, the core has two internal
+shadow registers to store R0 and R1 images. Doing so, it is
+not necessary to read R0 or R1 each time the core makes an
+indirect access. Nevertheless, instructions that change
+PSW [4:3] flags require 4 clock cycles more in order to read
+the new active R0 and R1.
+The bit addressable locations are also in the IRAM.
+Writing a bit to such memory locations implies a
+Read-Modify-Write operation, and so requires 2 clock
+cycles to read the byte and modify the appropriate bit, and
+one clock cycle to write the new byte in the IRAM.
+Instruction Set
+All the AX8052 instructions are the binary and functional
+equivalent of the 8051 counterparts, including opcodes,
+addressing modes and effects on PSW.
+The next table named “Instruction set summary” provides
+information about the arithmetic, logical, data transfer,
+boolean manipulation and program branching instructions.
+In order to simplify the table, different symbols are used.
+Their meanings are:
+• Rn: Register R0−R7 of the Currently Selected Register
+Bank.
+• @Ri: Data RAM Location Addressed Indirectly
+Through R0 or R1.
+• Rel: 8-bit, signed (2’s Complement) Offset Relative to
+the First Bytes of the Following Instruction.
+• Direct: 8-bit Internal Data Location’s Address. This
+Could be Direct-Access Data RAM Location
+(0x00−0x7F) or an SFR (0x80−0xFF).
+• #data: 8 or 16-bit Constants.
+• Bit: Direct-Accessed bit in Data Ram or SFR.
+• Addr11: 11-bit Destination Address Used by ACALL
+and AJMP. The Destination Must be Within the Same
+2 kbytes Page of Program Memory as the First Byte of
+the Following Instruction.
+• Addr16: 16-bit Destination Address Used by LCALL
+and LJMP. The Destination May be Anywhere Within
+the Program Memory.
+
+########## PAGE 5 ##########
+AND9349/D
+www.onsemi.com
+5
+Table 2. INSTRUCTION SET SUMMARY  
+Instruction Description
+Prgm
+Bytes
+Clock
+Cycles
+ADD A, Rn Add register to Accumulator 1 2
+ARITHMETIC OPERATIONS
+ADD A, direct Add direct byte to Accumulator 2 2+
+ADD A, @Ri Add indirect RAM to Accumulator 1 2
+ADD A, #data Add immediate data to Accumulator 2 2
+ADDC A, Rn Add register to Accumulator with carry 1 2
+ADDC A, direct Add direct byte to Accumulator with carry 2 2+
+ADDC A, @Ri Add indirect RAM to Accumulator with carry 1 2
+ADDC A, #data Add immediate data to ACC with carry 2 2
+SUBB A, Rn Subtract Register from ACC with borrow 1 2
+SUBB A, direct Subtract direct byte from ACC with borrow 2 2+
+SUBB A, @Ri Subtract indirect RAM from ACC with borrow 1 2
+SUBB A, #data Subtract immediate data from ACC with borrow 2 2
+INC A Increment Accumulator 1 1
+INC Rn Increment register 1 3
+INC direct Increment direct byte 2 3+
+INC @Ri Increment indirect RAM 1 3
+INC DPTR Increment Data Pointer 1 1
+DEC A Decrement Accumulator 1 1
+DEC Rn Decrement Register 1 3
+DEC direct Decrement direct byte 2 3+
+DEC @Ri Decrement indirect RAM 1 3
+MUL AB Multiply A and B 1 11
+DIV AB Divide A by B 1 11
+DA A Decimal Adjust Accumulator 1 1
+LOGICAL OPERATIONS
+ANL A, Rn AND Register to Accumulator 1 2
+ANL A, direct AND direct byte to Accumulator 2 2+
+ANL A, @Ri AND indirect RAM to Accumulator 1 2
+ANL A, #data AND immediate data to Accumulator 2 2
+ANL direct, A AND Accumulator to direct byte 2 3+
+ANL direct, #data AND immediate data to direct byte 3 3+
+ORL A, Rn OR register to Accumulator 1 2
+ORL A, direct OR direct byte to Accumulator 2 2+
+ORL A, @Ri OR indirect RAM to Accumulator 1 2
+ORL A, #data OR immediate data to Accumulator 2 2
+ORL direct, A OR Accumulator to direct byte 2 3+
+ORL direct, #data OR immediate data to direct byte 3 3+
+XRL A, Rn Exclusive-OR register to Accumulator 1 2
+XRL A, direct Exclusive-OR direct byte to Accumulator 2 2+
+XRL A, @Ri Exclusive-OR indirect RAM to Accumulator 1 2
+
+########## PAGE 6 ##########
+AND9349/D
+www.onsemi.com
+6
+Table 2. INSTRUCTION SET SUMMARY (continued)
+Instruction
+Clock
+Cycles
+Prgm
+BytesDescription
+XRL A, #data Exclusive-OR immediate data to Accumulator 2 2
+XRL direct, A Exclusive-OR Accumulator to direct byte 2 3+
+XRL direct, #data Exclusive-OR immediate data to direct byte 3 3+
+CLR A Clear Accumulator 1 1
+CPL A Complement Accumulator 1 1
+RL A Rotate Accumulator left 1 1
+RLC A Rotate Accumulator left through the carry 1 1
+RR A Rotate Accumulator right 1 1
+RRC A Rotate Accumulator right through the carry 1 1
+SWAP A Swap nibbles within the Accumulator 1 1
+DATA TRANSFER
+MOV A, Rn Move register to Accumulator 1 1
+MOV A, direct Move direct byte to Accumulator 2 2+
+MOV A, @Ri Move indirect RAM to Accumulator 1 1
+MOV A, #data Move immediate data to Accumulator 2 2
+MOV Rn, A Move Accumulator to register 1 1
+MOV Rn, direct Move direct byte to register 2 3+
+MOV Rn, #data Move immediate data to register 2 2
+MOV direct, A Move Accumulator to direct byte 2 2+
+MOV direct, Rn Move register to direct byte 2 3+
+MOV direct, direct Move direct byte to direct 3 3+
+MOV direct, @Ri Move indirect RAM to direct byte 2 3+
+MOV direct, #data Move immediate data to direct byte 3 3+
+MOV @Ri, A Move Accumulator to indirect RAM 1 1
+MOV @Ri, direct Move direct byte to indirect RAM 2 3+
+MOV @Ri, #data Move immediate data to indirect RAM 2 2
+MOV DPTR, #data Load Data Pointer with a 16-bit constant 3 3
+MOVC A, @A+DPTR Move Code byte relative to DPTR to ACC 1 4
+MOVC A, @A+PC Move Code byte relative to PC to ACC 1 4
+MOVC @DPTR, A Move Accumulator To Program Memory 1 4
+MOVX A, @Ri Move external RAM (8-bit addr) to ACC 1 2
+MOVX A, @DPTR Move external RAM (16-bit addr) to ACC 1 2
+MOVX @Ri, A Move ACC to external RAM (8-bit addr) 1 1
+MOVX @DPTR, A Move ACC to external RAM (16-bit addr) 1 1
+PUSH direct Push direct byte onto stack 2 3+
+POP direct Pop direct byte from stack 2 3+
+XCH A, Rn Exchange register with Accumulator 1 3
+XCH A, direct Exchange direct byte with Accumulator 2 3+
+XCH A, @Ri Exchange indirect RAM with Accumulator 1 3
+XCHD A, @Ri Exchange low-order digit indirect RAM with ACC 1 3
+
+########## PAGE 7 ##########
+AND9349/D
+www.onsemi.com
+7
+Table 2. INSTRUCTION SET SUMMARY (continued)
+Instruction
+Clock
+Cycles
+Prgm
+BytesDescription
+BOOLEAN MANIPULATION
+CLR C Clear carry 1 1
+CLR bit Clear direct bit 2 4
+SETB C Set carry 1 1
+SETB bit Set direct bit 2 4
+CPL C Complement carry 1 1
+CPL bit Complement direct bit 2 6
+ANL C, bit AND direct bit to carry 2 3
+ANL C, /bit AND complement of direct bit to carry 2 3
+ORL C, bit OR direct bit to carry 2 3
+ORL C, /bit OR complement of direct bit to carry 2 3
+MOV C, bit Move direct bit to carry 2 3
+MOV bit, C Move carry to direct bit 2 4
+JC rel Jump if carry is set 2 3
+JNC rel Jump if carry not set 2 3
+JB rel Jump if direct bit is set 3 5
+JNB rel Jump if direct bit is not set 3 5
+JBC bit, rel Jump if direct bit is set and clear bit 3 7
+PROGRAM BRANCHING
+ACALL addr11 Absolute subroutine call 2 3
+LCALL addr16 Long subroutine call 3 4
+RET Return from subroutine 1 6
+RETI Return from interrupt 1 6
+AJMP addr11 Absolute jump 2 3
+LJMP addr16 Long jump 3 4
+SJMP rel Short jump (relative addr) 2 3
+JMP @A+DPTR Jump indirect relative to the DPTR 1 3
+JZ rel Jump if Accumulator is zero 2 3
+JNZ rel Jump if Accumulator is not zero 2 3
+CJNE A, direct, rel Compare direct byte to ACC and jump if not equal 3 4+
+CJNE A, #data, rel Compare immediate to ACC and jump if not equal 3 4
+CJNE Rn, #data, rel Compare immediate to register and jump if not equal 3 5
+CJNE @Ri, #data, rel Compare immediate to indirect and jump if not equal 3 5
+DJNZ Rn, rel Decrement register and jump if not zero 2 4
+DJNZ direct, rel Decrement direct byte and jump if not zero 3 4+
+NOP No Operation 1 1
+
+########## PAGE 8 ##########
+AND9349/D
+www.onsemi.com
+8
+Memory Organization
+Program Memory External Data Memory
+0x0000
+0xFFFF
+0x0000
+0xFFFF
+Data Memory
+DATA
+IRAM
+0x00
+DATA
+IRAM
+0x80
+0xFF
+Indirect addressingIndirect addressing
+Direct/Indirect addressingDirect/Indirect addressing
+BIT ADDRESSABLE
+IRAM
+R0−7, BANK0−3
+IRAM
+Direct addressingDirect addressing
+0x1F
+0x20
+0x2F
+0x30
+0x7F
+SFR
+Special Function Register
+Internal:
+A, B, PSW, IE, IP, SP, DPTR
+External:
+Ports, timers, UARTS...
+R0
+R0
+R0
+R0
+R1
+R1
+R1
+R1
+R2
+R2
+R2
+R2
+R3
+R3
+R3
+R3
+R4
+R4
+R4
+R4
+R5
+R5
+R5
+R5
+R6
+R6
+R6
+R6
+R7
+R7
+R7
+R7
+40
+00
+48
+08
+50
+10
+58
+18
+60
+20
+68
+28
+70
+30
+78
+38
+Figure 2. AX8052 Memory Organization
+
+########## PAGE 9 ##########
+AND9349/D
+www.onsemi.com
+9
+Data Memory
+The AX8052 has 256 bytes of data memory mapping
+called IRAM (internal data) or SFR (Special Function
+Register) depending on the addressing mode used and the
+address space access. The memory space goes from 0x00 to
+0xFF.
+The lower 128 bytes of data memory are used for general
+purpose registers, bits and scratch pad memory. Either direct
+or indirect addressing may be used to access the lower
+128 bytes of data memory:
+• Location 0x00 Through 0x1F are Addressable as Four
+Banks of General Purpose Registers, Each Bank
+Consisting of Eight Byte-Wide Registers.
+• The Next 16 bytes Locations 0x20 Through 0x2F May
+Either be Addressed as Bytes or as 128 bit Locations
+Accessible with the Direct Addressing Mode.
+The upper 128 bytes region represents the upper part of
+internal data memory and the SFR. They are physically
+separated and are accessible through different addressing
+modes:
+• The Upper 128 Bytes of Internal Data Memory is
+Accessible Only with Indirect Addressing.
+• Special Function Registers are Accessible on the Same
+Address Space, Using Direct Addressing.
+Register Banks
+The AX8052 uses 8 “R” registers (locations 0x00 through
+0x1F) which are used in many instructions. These “R”
+registers are numbered from 0 through 7 (R0, R1, R2, R3,
+R4, R5, R6, R7) and are generally used to assist in
+manipulating values and moving data from one memory
+location to another. The microcontroller has 4 distinct
+register banks and only one of these banks may be enabled
+at a time. When the CPU is first booted up, register bank 0
+is used by default. However, your program may instruct the
+CPU to use one of the alternate register banks; i.e., register
+bank 1, 2 or 3. In this case, R4 (for example) will no longer
+be the same as internal RAM address 04h. Two bits in the
+Program Status Word (PSW), RS0 (PSW.3) and RS1
+(PSW.4), select the active register bank.
+Indirect addressing mode uses registers R0 and R1 as
+index registers. The AX8052 has a directly accessible image
+of the active R0 and R1, speeding up indirect accesses.
+Doing so, the core does not need to read R0 or R1 in IRAM
+before doing an indirect access. Each time the active R0 or
+R1 register is changed, or when RS0 and/or RS1 is modified,
+the core updates the R0 and R1 images.
+R0 R1 R2 R3 R4 R5 R6 R7
+R0 R1 R2 R3 R4 R5 R6 R7
+R0 R1 R2 R3 R4 R5 R6 R7
+R0 R1 R2 R3 R4 R5 R6 R70x00
+0x08
+0x10
+0x18
+Register bank 2
+Register bank 1
+Register bank 0
+Register bank 3
+RS0=0  RS1=1
+RS0=1  RS1=0
+RS0=0  RS1=0
+RS0=1  RS1=1
+IRAM 0x00 −> 0x1F
+Figure 3. Register Banks
+BIT ADDRESSABLE LOCATIONS
+The sixteen data memory location at 0x20 through 0x2F
+are also accessible as 128 individually addressable bits.
+Each bit has a bit address from 0x00 to 0x7F. Bit 0 of the byte
+at 0x20 has bit address 0x00 while bit 7 of the byte at 0x20
+has bit address 0x07. Bit 7 of the byte at 0x2F has bit address
+0x7F. A bit access is distinguished from a full byte access by
+the type of instruction used (bit source or destination
+operands as opposed to a byte source or destination).
+40 48 50 58 60 68 70 78
+00 08 10 18 20 28 30 380x20
+0x2F
+IRAM 0x20 −> 0x2F
+Figure 4. Bit Memory
+Stack
+A programmer’s stack can be located anywhere in the
+256-byte data memory. The stack area is designated using
+the Stack Pointer (SP, 0x81) SFR. The SP will point to the
+last location used. The next value pushed on the stack is
+place at SP+1, and then SP is incremented. A reset initializes
+the stack pointer to location 0x07. Therefore, the first value
+pushed on the stack is placed at location 0x08, which is also
+the first register (R0) of register bank 1. Thus, if more than
+one register bank is to be used, the SP should be initialized
+to a location in the data memory not being used for data
+storage. The stack depth can extend up to 256 bytes.
+Special Function Registers (SFR)
+The direct access data memory locations from 0x80 to
+0xFF constitute the Special Function Registers (SFRs).
+The internal SFR are the accumulator (A or ACC), the B
+register (B), the Stack Pointer (SP), the Program Status
+Word (PSW), the Interrupt Enable (IE) and Interrupt priority
+(IP) registers and the external Data Pointer register (DPL
+and DPH, known as DPTR). The word “internal” is used to
+describe those SFR because they are physically located
+inside the AX8052 core.
+
+########## PAGE 10 ##########
+AND9349/D
+www.onsemi.com
+10
+In opposition to “internal” SFR, it exists external SFRs
+that provide control and data exchange with the AX8052 and
+peripherals (like ports, timers, UARTS …). The word
+“external” is used because the peripherals implementing
+those SFR are located outside the core.
+Direct addressing mode is used to access the SFR memory
+location, i.e. from 0x80 to 0xFF. SFRs with addresses ending
+in 0x0 or 0x8 (e.g. ACC, B, PSW, IP, IE …) are
+bit-addressable as well as byte-addressable. All other SFRs
+are byte-addressable only.
+Unoccupied addresses in the SFR space are reserved for
+future use (peripherals…). Accessing these areas will have
+an indeterminate effect and should be avoided.
+Internal SFR Descriptions
+Accumulator − A
+R/W R/W R/W R/W R/W R/W R/W R/W
+ACC.7 ACC.6 ACC.5 ACC.4 ACC.3 ACC.2 ACC.1 ACC.0
+Rest value:0x00
+SFR address: 0xE0
+Bit addressable: Yes
+Bits 7−0 Accumulator (A).
+B Register − B
+R/W R/W R/W R/W R/W R/W R/W R/W
+B.7 B.6 B.5 B.4 B.3 B.2 B.1 B.0
+Rest value:0x00
+SFR address: 0xF0
+Bit addressable: Yes
+Bits 7−0 B register (B).
+This register serves as a second accumulator for some
+arithmetic operations.
+Stack Pointer − SP
+R/W R/W R/W R/W R/W R/W R/W R/W
+SP.7 SP.6 SP.5 SP.4 SP.3 SP.2 SP.1 SP.0
+Rest value:0x07
+SFR address: 0x81
+Bit addressable: No
+Bits 7−0: Stack Pointer (SP).
+The stack pointer holds the top location of the stack. It is
+incremented before every PUSH operations and
+decremented after every POP operations.
+Program Status Word − PSW
+R/W R/W R/W R/W R/W R/W R/W R
+CY AC F0 RS1 RS0 OV F1 P
+Rest value:0x00
+SFR address: 0xD0
+Bit addressable: Yes
+Bit 7: Carry Flag (CY).
+The stack pointer holds the top location of the stack. It is
+incremented before every PUSH operations and
+decremented after every POP operations.
+Bit 6: Auxiliary Carry Flag (AC).
+This bit is set when the last arithmetic operation resulted
+in a carry into (addition) or a borrow (subtraction) from the
+higher order nibble. It is cleared to 0 by all other arithmetic
+operations.
+Bit 5: User Flag 0 (F0).
+This is a bit-addressable, general purpose flag for use
+under software control.
+Bit 4−3: Register Bank Select (RS1−RS0).
+These bits select which register bank is used during
+register access.
+0−0: Register Bank 0 is selected
+0−1: Register Bank 1 is selected
+1−0: Register Bank 2 is selected
+1−1: Register Bank 3 is selected
+Bit 2: Overflow Flag (OV).
+This bit is set to 1 under the following circumstances: An
+ADD, ADDC or SUBB instruction causes a sign-change
+overflow. A MUL instruction results in an overflow (result
+is greater than 255). A DIV instruction causes a
+divide-by-zero condition.
+Bit 1: User Flag 1 (F1).
+This is a bit-addressable, general purpose flag for use
+under software control.
+Bit 0: Parity Flag (P).
+This bit is set to logic 1 if the sum of the eight bits in the
+accumulator is odd and cleared if the sum is even.
+Data Pointer − DPTR
+R/W R/W R/W R/W R/W R/W R/W R/W
+DPL.7 DPL.6 DPL.5 DPL.4 DPL.3 DPL.2 DPL.1 DPL.0
+Rest value:0x00
+SFR address: 0x82
+Bit addressable: No
+Bits 7−0: Data Pointer Low (DPL).
+The DPL register is the low byte of the 16-bit DPTR.
+DPTR is used to access indirectly addressed memory
+R/W R/W R/W R/W R/W R/W R/W R/W
+DPH.7 DPH.6 DPH.5 DPH.4 DPH.3 DPH.2 DPH.1 DPH.0
+Rest value:0x00
+SFR address: 0x83
+Bit addressable: No
+Bits 7−0: Data Pointer High (DPH).
+The DPL register is the high byte of the 16-bit DPTR.
+DPTR is used to access indirectly addressed memory.
+
+########## PAGE 11 ##########
+AND9349/D
+www.onsemi.com
+11
+Interrupts
+AX8052 includes an interrupt system supporting a total of
+22 interrupt sources with 2 priority levels.
+If interrupts are enabled for the source, an interrupt
+request is generated when the interrupt input line is
+triggered. As soon as execution of the current instruction is
+complete, the CPU generates an LCALL to a predetermined
+address to begin execution of an interrupt service routine
+(ISR). Each ISR must end with an RETI instruction which
+returns program execution to the next instruction that would
+have been executed if the interrupt request had not occurred.
+If interrupts are not enabled, the interrupt input line
+activity is ignored by the hardware and program execution
+continues as normal. Each interrupt source can be
+individually enabled or disabled through the use of an
+associated interrupt enable bit in an SFR (IE, EIE, E2IE).
+However, interrupts must first be globally enabled by setting
+the EA bit (IE.7) to logic 1 before the individual interrupt
+enables are recognized. Setting the EA bit to logic 0 disables
+all interrupt sources regardless of the individual
+interrupt-enable settings.
+If an interrupt input line remains set after the CPU
+completes the return-from-interrupt (RETI) instruction,
+a new interrupt request will be generated immediately and
+the CPU will re-enter the ISR after completion of the next
+instruction.
+Interrupt Priority
+Each interrupt source can be individually programmed to
+one of two priority levels: low or high. A low priority
+interrupt service routine can be preempted by a high priority
+interrupt. A high priority interrupt cannot be preempted.
+Each interrupt has an associated interrupt priority bit in an
+SFR (IP, EIP, E2IP) used to configure its priority level. Low
+priority is the default. If two interrupts are recognized
+simultaneously, the interrupt with the higher priority is
+serviced first. If both interrupts have the same priority level,
+a fixed priority order is used to arbitrate.
+Interrupt Latency
+Interrupts response time depends on the state of the CPU
+when the interrupt occurs. Pending interrupts are sampled
+and priority decoded each system clock cycle. Therefore, the
+fastest possible response time is 5 clock cycles: 1 clock cycle
+to detect the interrupt,and 4 clock cycles to complete the
+LCALL to the ISR.
+If the CPU is executing an ISR for an interrupt with equal
+or higher priority, the new interrupt will not be serviced until
+the current ISR completes, including the RETI and
+following instruction.
+Interrupt Vectors
+Table 3. INTERRUPT VECTORS
+Address Vector
+0x0000 Reset
+0x0003 External 0 Interrupt
+0x000B Wakeup Timer Interrupt
+0x0013 External 1 Interrupt
+0x001B GPIO Interrupt
+0x0023 Radio Interrupt
+0x002B Clock Management Interrupt (see OSCCALIB)
+0x0033 Power Management Interrupt
+0x003B Timer 0 Interrupt
+0x0043 Timer 1 Interrupt
+0x004B Timer 2 Interrupt
+0x0053 SPI 0 Interrupt
+0x005B UART 0 Interrupt
+0x0063 UART 1 Interrupt
+0x006B GPADC Interrupt
+0x0073 DMA Interrupt
+0x007B Output Compare 0 Interrupt
+0x0083 Output Compare 1 Interrupt
+0x008B Input Capture 0 Interrupt
+0x0093 Input Capture 1 Interrupt
+0x009B Random Number Generator Interrupt
+0x00A3 AES Interrupt
+0x00AB DebugLink Interrupt
+
+########## PAGE 12 ##########
+AND9349/D
+www.onsemi.com
+12
+AX8052 REGISTERS
+Register: SP
+Table 4. SP
+Name Bits R/W Reset Description
+SP 7:0 RW 0x07 Stack Pointer
+This is the stack pointer. See chapter “Stack Pointer − SP”
+for additional documentation.
+Register: DPH, DPL
+Table 5. DPH, DPL
+Name Bits R/W Reset Description
+DPTR0 15:0 RW 0x0000 Data Pointer
+This is the data pointer register. It used in instructions that
+require a 16-Bit Address. See “Data Pointer − DPTR” for
+additional documentation.
+Register: DPH1, DPL1
+Table 6. DPH1, DPL1
+Name Bits R/W Reset Description
+DPTR1 15:0 RW 0x0000 Second Data Pointer
+This is the alternate data pointer register.
+Register: DPS
+The AX8052 features dual DPTR support to speed up X
+memory operations, such as memory copies. Bit 0 of the
+DPS register selects which DPTR is used during operations
+that reference the DPTR register.
+Table 7. DPS
+Name Bits R/W Reset Description
+DPS 0 RW 0 Data Pointer Select, 
+0 = DPTR0, 1 = DPTR1
+Register: IE
+Table 8. IE
+Name Bits R/W Reset Description
+IE0 0 RW 0 External 0 Interrupt Enable
+IE1 1 RW 0 Wakeup Timer Interrupt
+Enable
+IE2 2 RW 0 External 1 Interrupt Enable
+IE3 3 RW 0 GPIO Interrupt Enable
+IE4 4 RW 0 Radio Interrupt Enable
+IE5 5 RW 0 Clock Management
+Interrupt Enable
+IE6 6 RW 0 Power Management
+Interrupt Enable
+EA 7 RW 0 Global Interrupt Enable
+This register belongs to the interrupt controller. See
+chapter “Interrupts” for additional documentation about the
+interrupt subsystem. Interrupt sources enabled in this
+register may be used to wake up the microcontroller from
+sleep mode. EA dost not need to be set to 1 for wake-up from
+sleep mode; it is sufficient for the interrupt source enable bit
+to be 1.
+Register: IP
+Table 9. IP
+Name Bits R/W Reset Description
+IP0 0 RW 0 External 0 Interrupt Priority
+IP1 1 RW 0 Wake-up Timer Interrupt
+Priority
+IP2 2 RW 0 External 1 Interrupt Priority
+IP3 3 RW 0 GPIO Interrupt Priority
+IP4 4 RW 0 Radio Interrupt Priority
+IP5 5 RW 0 Clock Management
+Interrupt Priority
+IP6 6 RW 0 Power Management
+Interrupt Priority
+This register belongs to the interrupt controller. See
+chapter Interrupts for additional documentation about the
+interrupt subsystem.
+Register: EIE
+Table 10. EIE
+Name Bits R/W Reset Description
+EIE0 0 RW 0 Timer 0 Interrupt Enable
+EIE1 1 RW 0 Timer 1 Interrupt Enable
+EIE2 2 RW 0 Timer 2 Interrupt Enable
+EIE3 3 RW 0 SPI 0 Interrupt Enable
+EIE4 4 RW 0 UART 0 Interrupt Enable
+EIE5 5 RW 0 UART 1 Interrupt Enable
+EIE6 6 RW 0 GPADC Interrupt Enable
+EIE7 7 RW 0 DMA Interrupt Enable
+This register belongs to the interrupt controller. See
+chapter Interrupts for additional documentation about the
+interrupt subsystem.
+
+########## PAGE 13 ##########
+AND9349/D
+www.onsemi.com
+13
+Register: EIP
+Table 11. EIP
+Name Bits R/W Reset Description
+EIP0 0 RW 0 Timer 0 Interrupt Priority
+EIP1 1 RW 0 Timer 1 Interrupt Priority
+EIP2 2 RW 0 Timer 2 Interrupt Priority
+EIP3 3 RW 0 SPI 0 Interrupt Priority
+EIP4 4 RW 0 UART 0 Interrupt Priority
+EIP5 5 RW 0 UART 1 Interrupt Priority
+EIP6 6 RW 0 GPADC Interrupt Priority
+EIP7 7 RW 0 DMA Interrupt Priority
+This register belongs to the interrupt controller. See
+chapter Interrupts for additional documentation about the
+interrupt subsystem.
+Register: E2IE
+Table 12. E2IE
+Name Bits R/W Reset Description
+E2IE0 0 RW 0 Output Compare 0 Interrupt
+Enable
+E2IE1 1 RW 0 Output Compare 1 Interrupt
+Enable
+E2IE2 2 RW 0 Input Capture 0 Interrupt
+Enable
+E2IE3 3 RW 0 Input Capture 1 Interrupt
+Enable
+E2IE4 4 RW 0 Random Number Generator
+Interrupt Enable
+E2IE5 5 RW 0 AES Interrupt Enable
+E2IE6 6 RW 0 DebugLink Interrupt Enable
+This register belongs to the interrupt controller. See
+chapter Interrupts for additional documentation about the
+interrupt subsystem.
+Register: E2IP
+Table 13. E2IE
+Name Bits R/W Reset Description
+E2IP0 0 RW 0 Output Compare 0 Interrupt
+Priority
+E2IP1 1 RW 0 Output Compare 1 Interrupt
+Priority
+E2IP2 2 RW 0 Input Capture 0 Interrupt
+Priority
+E2IP3 3 RW 0 Input Capture 1 Interrupt
+Priority
+E2IP4 4 RW 0 Random Number Generator
+Interrupt Priority
+E2IP5 5 RW 0 AES Interrupt Priority
+E2IP6 6 RW 0 DebugLink Interrupt Priority
+This register belongs to the interrupt controller. See
+chapter “Interrupts” for additional documentation about the
+interrupt subsystem.
+Register: PSW
+Table 14. PSW
+Name Bits R/W Reset Description
+PARITY 0 RW 0 Accumulator Parity
+E2IP1 1 RW 0 User Flag 1
+E2IP2 2 RW 0 Overflow Flag
+E2IP3 4:3 RW 00 Register Bank Select
+E2IP4 5 RW 0 User Flag 0
+E2IP5 6 RW 0 Auxiliary Carry Flag
+E2IP6 7 RW 0 Carry Flag
+This is the program status word. See chapter “Program
+Status Word” for additional documentation.
+Register: ACC
+Table 15. ACC
+Name Bits R/W Reset Description
+ACC 7:0 RW 0x00 Accumulator
+This is the accumulator register. It is used as an operand
+in many instructions. See chapter Accumulator − A for
+additional documentation.
+Register: B
+Table 16. B
+Name Bits R/W Reset Description
+B 7:0 RW 0x00 B Register
+This is the B register. It is used to supply the second
+operand to the multiplication instruction. See chapter
+B Register-B for additional documentation.
+Register: XPAGE
+Table 17. XPAGE
+Name Bits R/W Reset Description
+XPAGE 7:0 RW 0x00 XPAGE Register
+The XPAGE register supplies the high byte of the X
+address for MOVX @Rx instructions. For compatibility
+with the SDCC runtime library, this register is also available
+under the name _XPAGE.
+
+########## PAGE 14 ##########
+AND9349/D
+www.onsemi.com
+14
+ADDRESS SPACE
+The AX8052 uses a Harvard architecture with 3.5 address
+spaces. P space is used by instruction fetch and can be
+accessed using MOVC instructions. I space can be accessed
+by direct MOV and indirect MOV @Rx instructions. The
+upper half of it may only be accessed by indirect moves
+MOV @Rx. SFR space can be accessed by direct MOV
+instructions. X space can be accessed by MOVX
+instructions.
+Address P (Code) Space X Space I Space
+Direct Indirect
+0000–007F
+FLASH
+XRAM
+IRAM
+IRAM
+0080–00FF SFR
+0100–1FFF
+2000–207F IRAM
+2080–3F7F
+3F80–3FFF SFR
+4000–4FFF RREG
+5000–5FFF RREG (nb)
+6000–7FFF XREG
+8000–BFFF
+FLASHC000–DFFF
+E000–FBFF
+FC00–FFFF Calibration Calibration
+Figure 5. Address Space
+XREG are the AX8052 registers that do not fit into SFR
+space. The XREG memory map can be found in chapter:
+“Register Address Map“. The SFR memory map can be
+found in chapter: “SFR Address Map”. RREG are the
+registers of the radio chip. RREG (nb) is a mirror of the radio
+chip registers used for non-blocking access. The use of
+RREG and RREG (nb) is documented in chapter: “Direct
+Access via X-Space“
+Some memories can appear in multiple address spaces, for
+example the FLASH and the IRAM. Accessing them
+through different address spaces accesses the same content.
+The FLASH is organized as 64 1 kByte pages. FLASH
+may be erased page-wise and written in 16 Bit words. The
+last FLASH page is reserved for factory calibration data and
+should not be overwritten. It is highly recommended to call
+flash_apply_calibration() from libmf early in the startup
+sequence to ensure calibration data is applied to the
+AX8052.
+The upper half of FLASH may also be accessed in X
+space. This reduces the need for generic pointers 2 by
+allowing to access constant and variable data through X
+space pointers only.
+2 Generic pointers are pointers that contain, besides the address, an address space tag.
+
+########## PAGE 15 ##########
+AND9349/D
+www.onsemi.com
+15
+Memory Switch Architecture
+Arbiter Arbiter Arbiter Arbiter Arbiter Arbiter
+Cache
+Prefetch
+X Bus SFR Bus IRAM Bus Code Bus
+8052AES DMA
+XRAM
+0000−0FFF
+XRAM
+1000−1FFF
+X Registers
+4000−7FFF Registers
+SFR
+80−FF
+IRAM
+00−FF
+FLASH
+0000−FFFF
+ROM
+E000−FFFF
+Figure 6. Memory Switch Architecture
+Figure 6 shows the memory multiplexing and switching
+architecture. As can be seen, the chip contains three bus
+masters: the microcontroller (AX8052), the DMA
+controller, and the AES core. Care has been taken so that
+multiple bus masters can access independent memories
+concurrently.
+SFR Address Map
+Table 18. SFR ADDRESS MAP  
+Address Register
+Hex 0 1 2 3 4 5 6 7
+8 9 A B C D E F
+0x80–
+0x8F
+PORTA SP DPL DPH DPL1 DPH1 DPS PCON
+PORTB DIRA DIRB DIRC PORTR PINR DIRR –
+0x90–
+0x9F
+PORTC NVSTATUS NVADDR0 NVADDR1 NVDATA0 NVDATA1 NVKEY CODECONFIG
+EIE T0MODE T0CLKSRC T0STATUS T0CNT0 T0CNT1 T0PERIOD0 T0PERIOD1
+0xA0–
+0xAF–
+E2IE T1MODE T1CLKSRC T1STATUS T1CNT0 T1CNT1 T1PERIOD0 T1PERIOD1
+EI T2MODE T2CLKSRC T2STATUS T2CNT0 T2CNT1 T2PERIOD0 T2PERIOD1
+0xB0–
+0xBF
+EIP RADIOACC RADIOADDR1 RADIOADDR0 RADIODATA3 RADIODATA2 RADIODATA1 RADIODATA0
+IP OC0MODE OC0PIN OC0STATUS OC0COMP0 OC0COMP1 RADIOSTAT0 RADIOSTAT1
+0xC0–
+0xCF
+E2IP OC1MODE OC1PIN OC1STATUS OC1COMP0 OC1COMP1 CLKCON CLKSTAT
+PINA ADCCONV ADCCH0CONFIG ADCCH1CONFIG IC0MODE IC0STATUS IC0CAPT0 IC0CAPT1
+0xD0–
+0xDF
+PSW ADCCLKSRC ADCCH2CONFIG ADCCH3CONFIG IC1MODE IC1STATUS IC1CAPT0 IC1CAPT1
+– XPAGE WDTCFG WDTRESET SPMODE SPSTATUS SPSHREG SPCLKSRC
+0xE0–
+0xEF
+ACC ANALOGCOMP DBGLNKSTAT DBGLNKBUF U0CTRL U0STATUS U0SHREG U0MODE
+PINB WTIRQEN WTSTAT WTCNTR1 U1CTRL U1STATUS U1SHREG U1MODE
+0xF0–
+0xFF
+B WTCFGA WTCNTA0 WTCNTA1 WTEVTA0 WTEVTA1 WTEVTB0 WTEVTB1
+PINC WTCFGB WTCNTB0 WTCNTB1 WTEVTC0 WTEVTC1 WTEVTD0 WTEVTD1
+
+########## PAGE 16 ##########
+AND9349/D
+www.onsemi.com
+16
+X Register Address Map
+Table 19. X REGISTER ADDRESS MAP  
+Address Register
+Hex 0 1 2 3 4 5 6 7
+8 9 A B C D E F
+0x3F80–
+0x3F8F
+PORTA – – – – – – PCON
+PORTB DIRA DIRB DIRC PORTR PINR DIRR –
+0x3F90–
+0x3F9F
+PORTC NVSTATUS NVADDR0 NVADDR1 NVDATA0 NVDATA1 NVKEY CODECONFIG
+– T0MODE T0CLKSRC T0STATUS T0CNT0 T0CNT1 T0PERIOD0 T0PERIOD1
+0x3FA0–
+0x3FAF
+– T1MODE T1CLKSRC T1STATUS T1CNT0 T1CNT1 T1PERIOD0 T1PERIOD1
+IE T2MODE T2CLKSRC T2STATUS T2CNT0 T2CNT1 T2PERIOD0 T2PERIOD1
+0x3FB0–
+0x3FBF
+– RADIOACC RADIOADDR1 RADIOADDR0 RADIODATA3 RADIODATA2 RADIODATA1 RADIODATA0
+IP OC0MODE OC0PIN OC0STATUS OC0COMP0 OC0COMP1 RADIOSTAT0 RADIOSTAT1
+0x3FC0–
+0x3FCF
+– OC1MODE OC1PIN OC1STATUS OC1COMP0 OC1COMP1 CLKCON CLKSTAT
+PINA ADCCONV ADCCH0CONFIG ADCCH1CONFIG IC0MODE IC0STATUS IC0CAPT0 IC0CAPT1
+0x3FD0–
+0x3FDF
+– ADCCLKSRC ADCCH2CONFIG ADCCH3CONFIG IC1MODE IC1STATUS IC1CAPT0 IC1CAPT1
+– – WDTCFG WDTRESET SPMODE SPSTATUS SPSHREG SPCLKSRC
+0x3FE0–
+0x3FEF
+– ANALOGCOMP DBGLNKSTAT DBGLNKBUF U0CTRL U0STATUS U0SHREG U0MODE
+PINB WTIRQEN WTSTAT WTCNTR1 U1CTRL U1STATUS U1SHREG U1MODE
+0x3FF0–
+0x3FFF
+– WTCFGA WTCNTA0 WTCNTA1 WTEVTA0 WTEVTA1 WTEVTB0 WTEVTB1
+PINC WTCFGB WTCNTB0 WTCNTB1 WTEVTC0 WTEVTC1 WTEVTD0 WTEVTD1
+0x7000–
+0x700F
+INTCHGA INTCHGB INTCHGC EXTIRQ PINCHGA PINCHGB PINCHGC ANALOGA
+PALTA PALTB PALTC PINSEL GPIOENABLE – – –
+0x7010–
+0x701F
+DMA0ADDR0 DMA0ADDR1 DMA1ADDR0 DMA1ADDR1 DMA0CONFIG DMA1CONFIG – –
+– – – – – – – –
+0x7020–
+0x702F
+ADCCH0VAL0 ADCCH0VAL1 ADCCH1VAL0 ADCCH1VAL1 ADCCH2VAL0 ADCCH2VAL1 ADCCH3VAL0 ADCCH3VAL1
+ADCTUNE0 ADCTUNE1 ADCTUNE2 – – – – –
+0x7040–
+0x704F
+RADIOF-
+DATAADDR0
+RADIOF-
+DATAADDR1
+RADIOFSTATAD-
+DR0
+RADIOFSTATAD-
+DR1
+RADIOMUX – – –
+– – – – – – – –
+0x7050–
+0x705F
+OSCFORCERUN OSCRUN OSCREADY OSCCALIB LPXOSCGM – – –
+– – – – – – – –
+0x7060–
+0x706F
+LPOSCCONFIG – LPOSCKFILT0 LPOSCKFILT1 LPOSCREF0 LPOSCREF1 LPOSCFREQ0 LPOSCFREQ1
+LPOSCPER0 LPOSCPER1 – – – – – –
+0x7070–
+0x707F
+FRCOSC-
+CONFIG
+– FRCOSCKFILT0 FRCOSCKFILT1 FRCOSCREF0 FRCOSCREF1 FRCOSCFREQ0 FRCOSCFREQ1
+FRCOSCPER0 FRCOSCPER1 – – – – – –
+0x7080–
+0x708F
+– – – – SCRATCH0 SCRATCH1 SCRATCH2 SCRATCH3
+– – – – – – – –
+0x7F00–
+0x7F0F
+SILICONREV MISCCTRL – – – – – –
+– – – – – – – –
+0x7F10–
+0x7F1F
+– – – – – – – –
+XTALOSC XTALAMPL XTALREADY – – – – –
+
+########## PAGE 17 ##########
+AND9349/D
+www.onsemi.com
+17
+Register Overview
+Table 20. REGISTER OVERVIEW  
+Addr Name Dir R Reset Bit Description
+Hex 7 6 5 4 3 2 1 0
+MCU Core
+81 SP R
+W
+R 00000111 SP(7:0) Stack Pointer
+82 DPL R
+W
+R 00000000 DPTR0(7:0) Data Pointer
+83 DPH R
+W
+R 00000000 DPTR0(15:8) Data Pointer
+84 DPL1 R
+W
+R 00000000 DPTR1(7:0) Second Data Pointer
+85 DPH1 R
+W
+R 00000000 DPTR1(15:8) Second Data Pointer
+86 DPS R
+W
+R –––––––0 – – – – – – – DPS Data Pointer Select
+87 PCON R
+W
+R –––00000 BROW
+NOUT
+WAKE
+UP
+WDTR
+ESET
+SWRE
+SET
+XRAMKEEP PWRMODE Power Control
+A8 IE R
+W
+R 00000000 EA IE(6:0) Interrupt Enable
+B8 IP R
+W
+R –0000000 – IP(6:0) Interrupt Priority
+98 EIE R
+W
+R 00000000 EIE(7:0) Extended Interrupt Enable
+B0 EIP R
+W
+R 00000000 EIP(7:0) Extended Interrupt Priority
+A0 E2IE R
+W
+R 00000000 E2IE(7:0) Extended 2 Interrupt Enable
+C0 E2IP R
+W
+R 00000000 E2IP(7:0) Extended 2 Interrupt Priority
+D0 PSW R
+W
+R 00000000 CY AC F0 RS(1:0) OV F1 PARITY Program Status Word
+E0 ACC R
+W
+R 00000000 ACC(7:0) Accumulator
+F0 B R
+W
+R 00000000 B(7:0) B Register
+D9 XPAGE R
+W
+R 00000000 XPAGE(7:0) XPAGE Register
+E2 DBGLNKSTAT R
+W
+R 000––––– DBG
+TXIE
+DBG
+RXIE
+DBGE
+N
+CHGIE
+DBG
+EN
+DBGTX
+UNDE
+R
+DBGTX
+EMPTY
+DBGR
+X
+OVER
+DBGR
+X FULL
+DebugLink Status
+E3 DBGLNKBUF R
+W
+R –––––––– DBGBUF DebugLink Buffer Register
+GPIO
+80 PORTA R
+W
+R 00000000 PORTA(7:0) PORTA Register
+C8 PINA R R –––––––– PINA(7:0) PINA Register
+89 DIRA R
+W
+R 00000000 DIRA(7:0) DIRA Register
+88 PORTB R
+W
+R 00000000 PORTB(7:0) PORTB Register
+E8 PINB R R –––––––– PINB(7:0) PINB Register
+8A DIRB R
+W
+R 00000000 DIRB(7:0) DIRB Register
+
+########## PAGE 18 ##########
+AND9349/D
+www.onsemi.com
+18
+Table 20. REGISTER OVERVIEW (continued)
+Addr DescriptionBitResetRDirName
+Hex 01234567
+90 PORTC R
+W
+R 00000000 PORTC(7:0) PORTC Register
+F8 PINC R R –––––––– PINC(7:0) PINC Register
+8B DIRC R
+W
+R 00000000 DIRC(7:0) DIRC Register
+8C PORTR R
+W
+R 00000000 PORTR(7:0) PORTR Register
+8D PINR R R –––––––– PINR(7:0) PINR Register
+8E DIRR R
+W
+R 00000000 DIRR(7:0) DIRR Register
+7007 ANALOGA R
+W
+R 00000000 ANALOGA(7:0) ANALOGA Register
+7000 INTCHGA R
+W
+R 00000000 INTCHGA(7:0) Port A Interrupt On Change
+Register
+7001 INTCHGB R
+W
+R 00000000 INTCHGB(7:0) Port B Interrupt On Change
+Register
+7002 INTCHGC R
+W
+R 00000000 INTCHGC(7:0) Port C Interrupt On Change
+Register
+7003 EXTIRQ R
+W
+R –000–000 – EXTIR
+Q1 PIN
+EXTIRQ1
+MODE(1:0)
+– EXTIR
+Q0 PIN
+EXTIRQ0
+MODE(1:0)
+External Interrupt Configuration
+7004 PINCHGA R R –––––––– PINCHGA(7:0) Port A Pin Change Register
+7005 PINCHGB R R –––––––– PINCHGB(7:0) Port B Pin Change Register
+7006 PINCHGC R R –––––––– PINCHGC(7:0) Port C Pin Change Register
+7008 PALTA R
+W
+R 00000000 PALTA(7:0) Port A Alternate Function
+Register
+7009 PALTB R
+W
+R ––000000 – – PALTB(5:0) Port B Alternate Function
+Register
+700A PALTC R
+W
+R –––00000 – – – PALTC(4:0) Port C Alternate Function
+Register
+700B PINSEL R
+W
+R 00000000 PINSEL(7:0) Alternate Function Input Pin
+Selection Register
+700C GPIOENABLE R
+W
+R –––––––1 – – – – – – – GPIO
+ENABL
+E
+GPIO Port Enable
+System Controller
+C6 CLKCON R
+W
+R 00001000 CLKMON(1:0) CLKPRE(2:0) CLKSRC(2:0) Clock Control
+C7 CLKSTAT R R –––––––– CLK
+LOSS
+– CLKPREST(2:0) CLKSRCST(2:0) Clock Status
+Wakeup Timer
+F1 WTCFGA R
+W
+R ––001111 – – WTDIVA(2:0) WTSRCA(2:0) Wakeup Timer A Configuration
+F9 WTCFGB R
+W
+R ––001111 – – WTDIVB(2:0) WTSRCB(2:0) Wakeup Timer B Configuration
+E9 WTIRQEN R
+W
+R 00000000 WTIBD WTIBC WTIBB WTIBA WTIAD WTIAC WTIAB WTIAA Wakeup Timer Interrupt Enable
+EA WTSTAT RC R –––––––– WTSB
+D
+WTSB
+C
+WTSB
+B
+WTSB
+A
+WTSA
+D
+WTSA
+C
+WTSA
+B
+WTSA
+A
+Wakeup Timer Status
+F2 WTCNTA0 R R –––––––– WTCNTA(7:0) Wakeup Counter A
+
+########## PAGE 19 ##########
+AND9349/D
+www.onsemi.com
+19
+Table 20. REGISTER OVERVIEW (continued)
+Addr DescriptionBitResetRDirName
+Hex 01234567
+F3 WTCNTA1 R R –––––––– WTCNTA(15:8) Wakeup Counter A
+FA WTCNTB0 R R –––––––– WTCNTB(7:0) Wakeup Counter B
+FB WTCNTB1 R R –––––––– WTCNTB(15:8) Wakeup Counter B
+EB WTCNTR1 R R –––––––– WTCNTR(15:8) Wakeup Counter Register
+F4 WTEVTA0 R R 00000000 WTEVTA(7:0) Wakeup Event A
+F5 WTEVTA1 R R 00000000 WTEVTA(15:8) Wakeup Event A
+F6 WTEVTB0 R R 00000000 WTEVTB(7:0) Wakeup Event B
+F7 WTEVTB1 R R 00000000 WTEVTB(15:8) Wakeup Event B
+FC WTEVTC0 R R 00000000 WTEVTC(7:0) Wakeup Event C
+FD WTEVTC1 R R 00000000 WTEVTC(15:8) Wakeup Event C
+FE WTEVTD0 R R 00000000 WTEVTD(7:0) Wakeup Event D
+FF WTEVTD1 R R 00000000 WTEVTD(15:8) Wakeup Event D
+Watchdog Timer
+DA WDTCFG R
+W
+R ––000000 – – WDT
+LCK
+WDT
+ENA
+WDTDIV(3:0) Watchdog Configuration
+DB WDTRESET W R –––––––– WDTRESET(7:0) Watchdog Reset
+Low Power Oscillator Calibration
+7060 LPOSCCONFIG R
+W
+R –0000001 – LPOSC
+FAST
+LPOSC PRESC(2:0) LPOSC CALSRC(2:0) Low Power Oscillator
+Configuration
+7063 LPOSCKFILT1 R
+W
+R 00100000 LPOSCKFILT(15:8) Low Power Oscillator Calibration
+Filter Constant
+7062 LPOSCKFILT0 R
+W
+R 11000100 LPOSCKFILT(7:0) Low Power Oscillator Calibration
+Filter Constant
+7065 LPOSCREF1 R
+W
+R 01100001 LPOSCREF(15:8) Low Power Oscillator Calibration
+Reference
+7064 LPOSCREF0 R
+W
+R 10101000 LPOSCREF(7:0) Low Power Oscillator Calibration
+Reference
+7067 LPOSCFREQ1 R
+W
+R 00000000 LPOSCFREQ(9:2) Low Power Oscillator Calibration
+Frequency
+7066 LPOSCFREQ0 R
+W
+R 0000–––– LPOSCFREQ(1:−2) – – – – Low Power Oscillator Calibration
+Frequency
+7069 LPOSCPER1 R
+W
+R –––––––– LPOSCPER(15:8) Low Power Oscillator Calibration
+Period
+7068 LPOSCPER0 R
+W
+R –––––––– LPOSCPER(7:0) Low Power Oscillator Calibration
+Period
+Fast RC Oscillator Calibration
+7070 FRCOSCCONFIG R
+W
+R 00000000 FRCOS
+C
+PERGA
+IN
+FRCOSC PRESC(3:0) FRCOSC CALSRC(2:0) Fast RC Oscillator Configuration
+7073 FRCOSCKFILT1 R
+W
+R 00100000 FRCOSCKFILT(15:8) Fast RC Oscillator Calibration
+Filter Constant
+
+########## PAGE 20 ##########
+AND9349/D
+www.onsemi.com
+20
+Table 20. REGISTER OVERVIEW (continued)
+Addr DescriptionBitResetRDirName
+Hex 01234567
+7072 FRCOSCKFILT0 R
+W
+R 11000100 FRCOSCKFILT(7:0) Fast RC Oscillator Calibration
+Filter Constant
+7075 FRCOSCREF1 R
+W
+R 01100001 FRCOSCREF(15:8) Fast RC Oscillator Calibration
+Reference
+7074 FRCOSCREF0 R
+W
+R 10101000 FRCOSCREF(7:0) Fast RC Oscillator Calibration
+Reference
+7077 FRCOSCFREQ1 R
+W
+R 00000000 FRCOSCFREQ(9:2) Fast RC Oscillator Calibration
+Frequency
+7076 FRCOSCFREQ0 R
+W
+R 0000–––– FRCOSCFREQ(1:−2) – – – – Fast RC Oscillator Calibration
+Frequency
+7079 FRCOSCPER1 R
+W
+R –––––––– FRCOSCPER(15:8) Fast RC Oscillator Calibration
+Period
+7078 FRCOSCPER0 R
+W
+R –––––––– FRCOSCPER(7:0) Fast RC Oscillator Calibration
+Period
+Oscillator Control
+7050 OSCFORCERUN R
+W
+R ––––0000 – – – – LPXOS
+C
+FRUN
+XOSC
+FRUN
+LPOSC
+FRUN
+FRCOS
+C
+FRUN
+Oscillator Force Run
+7051 OSCRUN R R –––––––– – – – – LPXOS
+C RUN
+XOSC
+RUN
+LPOSC
+RUN
+FRCOS
+C RUN
+Oscillator Force Run
+7052 OSCREADY R R –––––––– – – – – LPXOS
+C RDY
+XOSC
+RDY
+LPOSC
+RDY
+FRCOS
+C RDY
+Oscillator Force Run
+7053 OSCCALIB R
+W
+R –––––100 LPOSC
+CALIR
+Q
+FRCOS
+C
+CALIR
+Q
+LPOSC
+CALIR
+QM
+FRCOS
+C
+CALIR
+QM
+CLKLO
+SS
+CLKLO
+SS
+IRQE
+LPOSC
+CALIR
+QE
+FRCOS
+C
+CALIR
+QE
+Oscillator Interrupt Status
+7054 LPXOSCGM R
+W
+R 1––01000 LPXOS
+C
+BOOST
+– – LPXOSCGM(4:0) Low Power Crystal Oscillator
+Transconductance
+7F01 MISCCTRL R
+W
+R ––––––00 – – – – – – XOSC
+DIS
+LPXOS
+C DIS
+Miscellaneous Control
+Scratch
+7084 SCRATCH0 R
+W
+R –––––––– SCRATCH(7:0) Scratch Register; State is
+maintained in Deep Sleep
+7085 SCRATCH1 R
+W
+R –––––––– SCRATCH(15:8) Scratch Register; State is
+maintained in Deep Sleep
+7086 SCRATCH2 R
+W
+R –––––––– SCRATCH(23:16) Scratch Register; State is
+maintained in Deep Sleep
+7087 SCRATCH3 R
+W
+R –––––––– SCRATCH(31:24) Scratch Register; State is
+maintained in Deep Sleep
+DMA Controller
+7010 DMA0ADDR0 R
+W
+R 11111111 DMA0ADDR(7:0) DMA Channel 0 Buffer
+Descriptor Address
+7011 DMA0ADDR1 R
+W
+R 11111111 DMA0ADDR(15:8) DMA Channel 0 Buffer
+Descriptor Address
+7012 DMA1ADDR0 R
+W
+R 11111111 DMA1ADDR(7:0) DMA Channel 1 Buffer
+Descriptor Address
+7013 DMA1ADDR1 R
+W
+R 11111111 DMA1ADDR(15:8) DMA Channel 1 Buffer
+Descriptor Address
+7014 DMA0CONFIG R
+W
+R 00–00000 D0RUN D0IRQ – D0SOURCE(4:0) DMA Channel 0 Configuration
+7015 DMA1CONFIG R
+W
+R 00–00000 D1RUN D1IRQ – D1SOURCE(4:0) DMA Channel 1 Configuration
+Radio Controller
+B4 RADIODATA3 R
+W
+R 00000000 RADIODATA(31:24) Radio Chip Register Access
+Data
+
+########## PAGE 21 ##########
+AND9349/D
+www.onsemi.com
+21
+Table 20. REGISTER OVERVIEW (continued)
+Addr DescriptionBitResetRDirName
+Hex 01234567
+B5 RADIODATA2 R
+W
+R 00000000 RADIODATA(23:16) Radio Chip Register Access
+Data
+B6 RADIODATA1 R
+W
+R 00000000 RADIODATA(15:8) Radio Chip Register Access
+Data
+B7 RADIODATA0 R
+W
+R 00000000 RADIODATA(7:0) Radio Chip Register Access
+Data
+B2 RADIOADDR1 R
+W
+R –0000000 – RADIOADDR(14:8) Radio Chip Register Access
+Address
+B3 RADIOADDR0 R
+W
+R 00000000 RADIOADDR(7:0) Radio Chip Register Access
+Address
+BF RADIOSTAT1 R R –––––––– RADIOSTAT(15:8) Radio Chip Status
+BE RADIOSTAT0 R R –––––––– RADIOSTAT(7:0) Radio Chip Status
+B1 RADIOACC R
+W
+R ––––0000 RC
+BUSY
+RC
+WRITE
+– – RADIOADDR-FM
+T(1:0)
+RADIODATA-FMT
+(1:0)
+Radio Chip Access Mode and
+Control
+7040 RADIOFDATAADDR0 R
+W
+R 00000000 RADIOFDATAADDR(7:0) Radio Chip FIFO Data Register
+Address
+7041 RADIOFDATAADDR1 R
+W
+R ––––0000 – – – – RADIOFDATAADDR(11:8) Radio Chip FIFO Data Register
+Address
+7042 RADIOFSTATADDR0 R
+W
+R 00000000 RADIOFSTATADDR(7:0) Radio Chip FIFO Status
+Register Address
+7043 RADIOFSTATADDR1 R
+W
+R ––––0000 – – – – RADIOFSTATADDR(11:8) Radio Chip FIFO Status
+Register Address
+7044 RADIOMUX R
+W
+R –0000111 – RADIO
+SPI
+RADIOCLK(1:0) RADIO
+IRQ
+RADIOSYSCLK(2:0) Radio Controller Pin Multiplexing
+Control
+Timer 0
+9C T0CNT0 R
+W
+R 00000000 T0CNT(7:0) Timer 0 Counter
+9D T0CNT1 R
+W
+R 00000000 T0CNT(15:8) Timer 0 Counter
+9E T0PERIOD0 R
+W
+R 00000000 T0PERIOD(7:0) Timer 0 Period
+9F T0PERIOD1 R
+W
+R 00000000 T0PERIOD(15:8) Timer 0 Period
+9A T0CLKSRC R
+W
+R 00001111 T0 CLK
+SYNC
+T0 CLK
+INV
+T0CLKDIV(2:0) T0CLKSRC(2:0) Timer 0 Clock Source
+99 T0MODE R
+W
+R 00000000 T0
+IRQMU
+T0
+IRQMO
+T0PRBUF(1:0) T0
+LBUF
+T0MODE(2:0) Timer 0 Mode
+9B T0STATUS R R 00–––––– T0
+IRQMP
+U
+T0
+IRQMP
+E
+T0
+IRQPU
+T0
+IRQPE
+T0
+IRQEU
+T0
+IRQEO
+T0
+IRQRU
+T0
+IRQRO
+Timer 0 Status
+Timer 1
+A4 T1CNT1 R
+W
+R 00000000 T1CNT(7:0) Timer 1 Counter
+A5 T1CNT1 R
+W
+R 00000000 T1CNT(15:8) Timer 1 Counter
+A6 T1PERIOD0 R
+W
+R 00000000 T1PERIOD(7:0) Timer 1 Period
+A7 T1PERIOD1 R
+W
+R 00000000 T1PERIOD(15:8) Timer 1 Period
+A2 T1CLKSRC R
+W
+R 00001111 T1 CLK
+SYNC
+T1 CLK
+INV
+T1CLKDIV(2:0) T1CLKSRC(2:0) Timer 1 Clock Source
+A1 T1MODE R
+W
+R 00000000 T1
+IRQMU
+T1
+IRQMO
+T1PRBUF(1:0) T1
+LBUF
+T1MODE(2:0) Timer 1 Mode
+
+########## PAGE 22 ##########
+AND9349/D
+www.onsemi.com
+22
+Table 20. REGISTER OVERVIEW (continued)
+Addr DescriptionBitResetRDirName
+Hex 01234567
+A3 T1STATUS R R 00–––––– T1
+IRQMP
+U
+T1
+IRQMP
+E
+T1
+IRQPU
+T1
+IRQPE
+T1
+IRQEU
+T1
+IRQEO
+T1
+IRQRU
+T1
+IRQRO
+Timer 1 Status
+Timer 2
+AC T2CNT2 R
+W
+R 00000000 T2CNT(7:0) Timer 2 Counter
+AD T2CNT1 R
+W
+R 00000000 T2CNT(15:8) Timer 2 Counter
+AE T2PERIOD0 R
+W
+R 00000000 T2PERIOD(7:0) Timer 2 Period
+AF T2PERIOD1 R
+W
+R 00000000 T2PERIOD(15:8) Timer 2 Period
+AA T2CLKSRC R
+W
+R 00001111 T2 CLK
+SYNC
+T2 CLK
+INV
+T2CLKDIV(2:0) T2CLKSRC(2:0) Timer 2 Clock Source
+A9 T2MODE R
+W
+R 00000000 T2
+IRQMU
+T2
+IRQMO
+T2PRBUF(1:0) T2
+LBUF
+T2MODE(2:0) Timer 2 Mode
+AB T2STATUS R R 00–––––– T2
+IRQMP
+U
+T2
+IRQMP
+E
+T2
+IRQPU
+T2
+IRQPE
+T2
+IRQEU
+T2
+IRQEO
+T2
+IRQRU
+T2
+IRQRO
+Timer 2 Status
+Output Compare 0
+BC OC0COMP0 R
+W
+R 00000000 OC0COMP(7:0) Output Compare 0 Compare
+Value
+BD OC0COMP1 R
+W
+R 00000000 OC0COMP(15:8) Output Compare 0 Compare
+Value
+B9 OC0MODE R
+W
+R 00000–00 OC0
+IRQMU
+OC0
+IRQMO
+OC0CMPBUF(1:0) OC0
+LBUF
+– OC0MODE(1:0) Output Compare 0 Mode
+BA OC0PIN R
+W
+R 00000000 OC0PCU(1:0) OC0PCO(1:0) OC0PCF(1:0) OC0PCR(1:0) Output Compare 0 Output Pin
+Configuration
+BB OC0STATUS R
+W
+R 00–––––– OC0
+IRQMC
+U
+OC0
+IRQMC
+E
+OC0
+CUND
+ER
+OC0
+CEMPT
+Y
+OC0
+IRQEF
+OC0
+IRQER
+OC0
+IRQRF
+OC0
+IRQRR
+Output Compare 0 Status
+Output Compare 1
+C4 OC1COMP0 R
+W
+R 00000000 OC1COMP(7:0) Output Compare 1 Compare
+Value
+C5 OC1COMP1 R
+W
+R 00000000 OC1COMP(15:8) Output Compare 1 Compare
+Value
+C1 OC1MODE R
+W
+R 00000–00 OC1
+IRQMU
+OC1
+IRQMO
+OC1CMPBUF(1:0) OC1
+LBUF
+– OC1MODE(1:0) Output Compare 1 Mode
+C2 OC1PIN R
+W
+R 00000000 OC1PCU(1:0) OC1PCO(1:0) OC1PCF(1:0) OC1PCR(1:0) Output Compare 1 Output Pin
+Configuration
+C3 OC1STATUS R
+W
+R 00–––––– OC1
+IRQMC
+U
+OC1
+IRQMC
+E
+OC1
+CUND
+ER
+OC1
+CEMPT
+Y
+OC1
+IRQEF
+OC1
+IRQER
+OC1
+IRQRF
+OC1
+IRQRR
+Output Compare 1 Status
+Input Capture 0
+F820 IC0CAPT0 R R –––––––– IC0CAPT(7:0) Input Capture 0 Capture Value
+F821 IC0CAPT1 R R –––––––– IC0CAPT(15:8) Input Capture 0 Capture Value
+CC IC0MODE R
+W
+R –0000000 – IC0
+IRQMC
+O
+IC0
+IRQMC
+F
+IC0
+LBUF
+IC0EDGE(1:0) IC0MODE(1:0) Input Capture 0 Mode
+CD IC0STATUS R
+W
+R 0000–––– IC0TRIG(3:0) – – IC0
+IRQE
+IC0
+IRQR
+Input Capture 0 Status
+Input Capture 1
+F820 IC1CAPT0 R R –––––––– IC1CAPT(7:0) Input Capture 1 Capture Value
+
+########## PAGE 23 ##########
+AND9349/D
+www.onsemi.com
+23
+Table 20. REGISTER OVERVIEW (continued)
+Addr DescriptionBitResetRDirName
+Hex 01234567
+F821 IC1CAPT1 R R –––––––– IC1CAPT(15:8) Input Capture 1 Capture Value
+D4 IC1MODE R
+W
+R –0000000 – IC1
+IRQMC
+O
+IC1
+IRQMC
+F
+IC1
+LBUF
+IC1EDGE(1:0) IC1MODE(1:0) Input Capture 1 Mode
+D5 IC1STATUS R
+W
+R 0000–––– IC1TRIG(3:0) – – IC1
+IRQE
+IC1
+IRQR
+Input Capture 1 Status
+SPI
+DE SPSHREG R
+W
+R –––––––– SPSHREG(7:0) SPI Shift Register
+DF SPCLKSRC R
+W
+R 00000111 SP
+SCK
+PH
+SP
+SCK
+INV
+SPSCKDIV(2:0) SPSCKSRC(2:0) SPI Clock Source
+DC SPMODE R
+W
+R ––000000 – – SPSSI
+E
+SPTXI
+E
+SPRXI
+E
+SPDIR SPMODE(1:0) SPI Mode
+DD T0STATUS R R –––––––– – SP
+FIRST
+SPSS
+STAT
+SPSS
+CHG
+SPTX
+UNDE
+R
+SPTX
+EMPTY
+SPRX
+OVER
+SPRX
+FULL
+SPI Status
+UART 0
+E6 U0SHREG R
+W
+R –––––––– U0SHREG(7:0) UART 0 Shift Register
+E7 U0MODE R
+W
+R ––000000 U0TXB
+RK
+U0RXD
+GL
+U0STO
+P
+U0WL(2:0) U0BRG(1:0) UART 0 Mode
+E4 U0CTRL R
+W
+R 00000000 U0 TX8 U0
+MCE
+U0
+BRKIE
+U0
+FEIE
+U0
+TXIE
+U0
+RXIE
+U0
+TXEN
+U0
+RXEN
+UART 0 Control
+E5 U0STATUS R R –––––––– U0 RX8 –U0TX
+IDLE
+U0
+BRKDE
+T
+U0
+FERR
+U0TX
+UNDE
+R
+U0TX
+EMPTY
+U0RX
+OVER
+U0RX
+FULL
+UART 0 Status
+UART 1
+EE U1SHREG R
+W
+R –––––––– U1SHREG(7:0) UART 1 Shift Register
+EF U1MODE R
+W
+R ––000000 U1TXB
+RK
+U1RXD
+GL
+U1STO
+P
+U1WL(2:0) U1BRG(1:0) UART 1 Mode
+EC U1CTRL R
+W
+R 00000000 U1 TX8 U1
+MCE
+U1
+BRKIE
+U1
+FEIE
+U1
+TXIE
+U1
+RXIE
+U1
+TXEN
+U1
+RXEN
+UART 1 Control
+ED U1STATUS R R –––––––– U1 RX8 – U1
+BRKDE
+T
+U1
+FERR
+U1TX
+UNDE
+R
+U1TX
+EMPTY
+U1RX
+OVER
+U1RX
+FULL
+UART 1 Status
+FLASH Controller
+92 NVADDR0 R
+W
+R 00000000 NVADDR(7:0) Flash Address Register
+93 NVADDR1 R
+W
+R 00000000 NVADDR(15:8) Flash Address Register
+94 NVDATA0 R
+W
+R 00000000 NVDATA(7:0) Flash Data Register
+95 NVDATA1 R
+W
+R 00000000 NVDATA(15:8) Flash Data Register
+91 NVSTATUS R R –––––––– – – – – – – NVUN
+LOCK
+NV
+BUSY
+Flash Status Register
+W R –––––––– NVCMD(7:0) Flash Command Register
+96 NVKEY W R –––––––– NVKEY(7:0) Flash Unlock Key Register
+
+########## PAGE 24 ##########
+AND9349/D
+www.onsemi.com
+24
+Table 20. REGISTER OVERVIEW (continued)
+Addr DescriptionBitResetRDirName
+Hex 01234567
+ROM Controller
+97 CODECONFIG R
+W
+R 110–0000 CACHE PRE
+FETCH
+INSN
+PRE
+FETCH
+MOVC
+INVLD XRAML
+8
+0 0 0 Code Address Space
+Configuration
+ADC
+D1 ADCCLKSRC R
+W
+R 00000111 ADC
+ACT
+ADCCLKDIV(3:0) ADCCLKSRC(2:0) ADC Clock Source
+C9 ADCCONV R
+W
+R 00000000 ADC
+IRQ
+ADC
+BUSY
+ADC
+PEND
+– – CONVSRC(2:0) ADC Conversion Control
+7028 ADCTUNE0 R
+W
+R 00000001 ADCTUNE0(7:0) ADC Tuning 0
+7029 ADCTUNE1 R
+W
+00000010 ADCTUNE1(7:0) ADC Tuning 1
+CA ADCCH0CONFIG R
+W
+R 11111111 CH0MODE(1:0) CH0INN(2:0) CH0INP(2:0) ADC Channel 0 Configuration
+CB ADCCH1CONFIG R
+W
+R 11111111 CH1MODE(1:0) CH1INN(2:0) CH1INP(2:0) ADC Channel 1 Configuration
+D2 ADCCH2CONFIG R
+W
+R 11111111 CH2MODE(1:0) CH2INN(2:0) CH2INP(2:0) ADC Channel 2 Configuration
+D3 ADCCH3CONFIG R
+W
+R 11111111 CH3MODE(1:0) CH3INN(2:0) CH3INP(2:0) ADC Channel 3 Configuration
+7020 ADCCH0VAL0 R R –––––––– CH0VAL(7:0) ADC Channel 0 Value
+7021 ADCCH0VAL1 R R –––––––– CH0VAL(15:8) ADC Channel 0 Value
+7022 ADCCH1VAL0 R R –––––––– CH1VAL(7:0) ADC Channel 1 Value
+7023 ADCCH1VAL1 R R –––––––– CH1VAL(15:8) ADC Channel 1 Value
+7024 ADCCH2VAL0 R R –––––––– CH2VAL(7:0) ADC Channel 2 Value
+7025 ADCCH2VAL1 R R –––––––– CH2VAL(15:8) ADC Channel 2 Value
+7026 ADCCH3VAL0 R R –––––––– CH3VAL(7:0) ADC Channel 3 Value
+7027 ADCCH3VAL1 R R –––––––– CH3VAL(15:8) ADC Channel 3 Value
+702A ADCTUNE2 R
+W
+R 11101000 WAKEP(2:0) WAKEC(2:0) PMODE(1:0) ADC Power Saving Modes
+E1 ANALOGCOMP R
+W
+R ––000000 ACOP
+M1 ST
+ACOM
+P0 ST
+ACOM
+P1 INV
+ACOM
+P0 INV
+ACOM
+P1 REF
+ACOM
+P1 IN
+ACOM
+P0 REF
+ACOM
+P0 IN
+Analog Comparators
+Revision
+7F00 SILICONREV R R 1000111X SILICONREV(7:0) Silicon Revision
+Crystal Oscillator
+7F18 XTALOSC R
+W
+R ––––0100 – – – – XTALOSCGM(3:0) GM of Crystal Oscillator
+7F19 XTALAMPL R
+W
+R 1––––000 XTAL
+REG
+ON
+– – – – XTALREGVC(2:0) Crystal Oscillator Critical
+Amplitude
+7F1A XTALREADY R
+W
+R ––––0001 XTAL
+SIG
+DET
+XTAL
+READY
+– – XTAL
+AMP
+DIS
+XTALREADYMODE(2:0) Crystal Oscillator Ready
+Detection Mode
+
+########## PAGE 25 ##########
+AND9349/D
+www.onsemi.com
+25
+FLASH
+The FLASH is the user rewritable non-volatile memory.
+It is organized as 64 1 kByte pages. It may be erased
+page-wise, and written as 16 Bit words. The small sector
+size enables the FLASH to be used for configuration data
+where traditionally E2PROM would have been used,
+obviating the need for additional E2PROM.
+Features
+• The FLASH Size is 64 kBytes
+• Word Size is 16 Bits
+• Erase Sector Size is 1 kByte
+• Secure Erase Ensures That the Main Flash Data is Fully
+Erased Before Erasing the Protect and Key Bits
+Register: NVADDR0, NVADDR1
+Table 21. NVADDR0, NVADDR1
+Name Bits R/W Reset Description
+NVADDR 15:0 RW 0x0000 Flash Address Register
+This register stores the address for FLASH write or page
+erase operations.
+Register: NVDATA0, NVDATA1
+Table 22. NVDATA0, NVDATA1
+Name Bits R/W Reset Description
+NVDATA 15:0 RW 0×0000 Flash Data Register
+This register stores the data for FLASH write operations.
+Register: NVSTATUS
+Table 23. NVSTATUS
+Name Bits R/W Reset Description
+NVBUSY 0 R − Indicates the Flash Controller is Busy. This bit can only be observed when
+executing from memory other than Flash
+NVUNLOCK 1 R − Indicates that the Flash Controller is unlocked, i.e, the unlock sequence has
+been successfully written to the NVKEY register
+NVCMD 7:0 W − Flash Controller Commands
+Command Meaning
+0×00
+0×10
+0×20
+0×30
+0×34
+NOP
+Bulk Erase
+Flash Page Erase
+Flash Word Write
+Flash Protect Bits Write
+The NVSTATUS register reports FLASH controller status
+when read and serves as a command register when written.
+Register: NVKEY
+Table 24. NVKEY
+Name Bits R/W Reset Description
+NVKEY 7:0 W − Unlock Key Register
+Normally, the Flash controller is locked, and commands
+(other than NOP) are not executed. This is indicated by
+NVUNLOCK in register NVSTATUS being zero.
+To unlock the Flash controller, first 0x41, then 0x78, must
+be written to NVKEY within 16 System clock cycles.
+To lock the Flash controller again, write any other value
+to the NVKEY register.
+This mechanism ensures that the FLASH contents are not
+changed inadvertently.
+
+########## PAGE 26 ##########
+AND9349/D
+www.onsemi.com
+26
+FLASH Protect Bits
+The FLASH controller features individual erase and write
+protect bits for each FLASH sector. To protect a sector, write
+the address from the table below into the NVADDR register,
+write all ones except for the bit corresponding to the sector
+to be protected, which should be cleared, to the NVDATA
+register, and then issue the Flash Protect Bits Write
+command.
+Note that Protect bits can only be set by a Bulk Erase
+command, which clears the whole FLASH. So once
+protected, a sector cannot be unprotected except by clearing
+the complete FLASH.
+Address FE D CBA9876543210
+0x0000 ERASEPROTECT (15:0) Erase Protect Bits
+0x0002 ERASEPROTECT (31:16)
+0x0004 ERASEPROTECT (47:32)
+0x0006 ERASEPROTECT (63:48)
+0x0008 WRITEPROTECT (15:0) Write Protect Bits
+0x000A WRITEPROTECT (31:16)
+0x000C WRITEPROTECT (47:32)
+0x000E WRITEPROTECT (63:48)
+Figure 7. Flash Protect Bits
+
+########## PAGE 27 ##########
+AND9349/D
+www.onsemi.com
+27
+CACHE AND PREFETCH
+AX8052 contains a small, 4 Words × 16 Bits fully
+associative write-through cache to hide the FLASH access
+latencies. The cache is consistent with respect to writes over
+the code bus (MOVC), i.e. a write that hits in the cache
+invalidates the respective cache line. The cache is not
+consistent with writes to the code memories over other
+interfaces, especially the FLASH using the NV controller,
+and to XRAM via the XDATA bus. In this case, the cache
+must be manually flushed. The replacement strategy is
+pseudo-LRU.
+The cache also contains the prefetch controller.
+Prefetching hides memory latencies for streaming accesses
+(i.e. program fetching without jumps). Prefetching may be
+separately enabled/disabled for code fetches and MOVC
+reads.
+Register: CODECONFIG
+Table 25. NVKEY
+Name Bits R/W Reset Description
+MBZ 0 RW 0 Must be zero
+MBZ 1 RW 0 Must be zero
+MBZ 2 RW 0 Must be zero
+XRAML8 3 RW 0 Enable XRAM in code address space 0×0000-1×1FFF
+INVLD 4 W − Writing this bit as 1 invalidates the cache
+PREFETCHMOVC 5 RW 0 Enable Code Memory MOVC Prefetching
+PREFETCHINSN 6 RW 1 Enable Code Memory Instruction Prefetching
+CACHE 7 RW 1 Enable Code Memory Caching
+The XRAML8 bit maps, if set, the 8 kBytes XRAM into
+code memory space. This allows code to execute from
+XRAM.
+RAM
+AX8052 contains 256 Bytes of IRAM and 8 kBytes of
+XRAM. The 8 kBytes XRAM are split into two 4 kBytes
+halves. Both halves can be individually preserved or
+switched off during sleep mode (refer to the PCON register).
+The XRAM memory can be accessed in a cyclesteal fashion
+by the DMA controller and the AES crypto engine.
+
+########## PAGE 28 ##########
+AND9349/D
+www.onsemi.com
+28
+DEBUG INTERFACE
+The main purpose of the Debug Interface is to aid
+debugging by allowing the core to be stopped, to examine
+state, and to set breakpoints. It is also used for in-circuit
+system programming and for testing.
+Features
+• 3 Wire (1 Dedicated, 2 Shared) Synchronous Serial
+Interface
+• Code Protection Prevents Unauthorized Access to the
+Firmware, while Still Allowing Full Debug Capability
+to Authorized Users
+• If Code Protection is Enabled, Only Secure Bulk
+FLASH Erase May be Executed by Unauthorized Users
+• Boundary Scan (Proprietary, not 1149.1 Compliant) can
+be Emulated by Injecting Instructions to Read/Write
+GPIO Port Registers
+• Unlimited Number of Break Points
+• Single Stepping Support
+• DebugLink Allows printf Style Debugging into a
+Debugger Window Without the Need for Dedicated
+Pins. DebugLink is Accessed on the Microcontroller
+Side Using the DBGLNKSTAT and DBGLNKBUF
+Registers Documented Below. It is Similar to Using an
+UART.
+Register: DBGLNKSTAT
+Table 26. DBGLNKSTAT
+Name Bits R/W Reset Description
+DBGRXFULL 0 R − Rx Full interrupt request
+DBGRXOVER 1 R − Rx Overrun interrupt request (clears on read)
+DBGTXEMPTY 2 R − Tx Empty interrupt request
+DBGTXUNDER 3 R − TX Underrun interrupt request (clears on read)
+DBGEN 4 R − Status of the DBG_EN input (i.e. 1 if the debug interface is enabled)
+(reading clears the DBG_EN change interrupt)
+DBGENCHGIE 5 RW 0 DBG_EN change interrupt enable
+DBGRXIE 6 RW 0 Receiver interrupt enable
+DBGTXIE 7 RW 0 Transmitter interrupt enable
+Register: DBGLNKBUF
+Table 27. DBGLNKBUF
+Name Bits R/W Reset Description
+DBGLNKBUF 7:0 RW − DebugLink Buffer Register
+
+########## PAGE 29 ##########
+AND9349/D
+www.onsemi.com
+29
+SYSTEM CONTROLLER
+FRCOSC
+XOSC
+LPXOSC
+Prescaler
+÷ 1,2,4,8,...
+Clock
+Monitor
+True RNG
+LPOSC
+LPOSC
+Calib
+FRCOSC
+Calib
+Wakeup
+Timer
+VREG
+Syscon
+VREG
+Logic
+VREG
+Flash
+Reset
+Logic
+Power
+Mana−
+gement
+WDT
+POR
+Brown Out
+RSYSCLK
+Debug IF
+System Clock
+Interrupt
+VDDIO
+SMTEN
+PCON
+Internal Reset
+Debug IF
+RESET_N
+Glitch Free Clock Switch
+Figure 8. System Controller Block Diagram
+The system controller generates the power supplies, reset
+and clock signals. Figure 8 shows the block diagram of the
+System Controller.
+The system controller contains several reset sources,
+namely:
+• RESET_N Pin
+• Power On Reset
+• Brown Out Detector
+• Watchdog Timer
+• Software Reset (SWRESET Bit in PCON)
+The PCON Register allows the software to query the reset
+cause. Since CPU registers are not preserved during sleep
+and deep sleep modes, after waking up from sleep or deep
+sleep the CPU starts executing at the reset vector as well. Bit
+6 of PCON allows the software to distinguish wake up from
+reset events.
+The system controller is also responsible for generating
+the system clock. A glitch free clock multiplexer, controlled
+by the CLKCON register, selects one clock source among
+the following oscillators:
+• Fast RC Oscillator 20 MHz
+• Low Power Oscillator 10 kHz/640 Hz
+• Radio Chip (SYSCLK)
+• Fast Crystal Oscillator
+• Low Power Tuning Fork Crystal Oscillator
+
+########## PAGE 30 ##########
+AND9349/D
+www.onsemi.com
+30
+Because clock switching must be glitch free, switching the
+clock source takes several cycles of the old as well as the new
+clock source. Clock switching status may be queried using
+the CLKSTAT register. An optional clock monitor may
+observe the output of the clock multiplexer and switch back
+to the fast RC oscillator, should the selected clock source
+cease to toggle. The clock multiplexer is followed by a
+prescaler, also controlled by the CLKCON register, which
+allows the CPU execution speed and thus current
+consumption to be closely tuned to the task at hand.
+A wakeup timer with two counter (time) registers and four
+event (match) registers provides flexible timed wakeups.
+Calibration logic for the Low Power oscillator and the
+Fast RC oscillator allows these oscillators to be
+automatically calibrated against a more precise (e.g.
+Crystal) oscillator. Calibration may be programmed to
+automatically run whenever the chosen reference oscillator
+is switched on.
+A programmable watchdog may be used to detect erratic
+firmware behavior and to reset the chip on such an event.
+Power Modes
+AX8052 supports different power modes, that differ in
+current consumption, the amount of state (memory)
+retained, and the possible wakeup sources. Power modes are
+controlled via the PCON register.
+Table 28. POWER MODES
+Name Wakeup Current3 Retention Description
+Deep Sleep One dedicated pin 50 nA 32 bit SCRATCH Register Lowest power, chip
+completely powered down
+except for SCRATCH
+Register
+Sleep Wakeup Timer
+(LPOSC/LPXOSC/
+RSYSCLK), Interrupt on
+Port Change Pxx
+500 nA-1.5 /C0109A 32 bit SCRATCH Register,
+IRAM, XRAM
+(programmable)
+System clock stopped,
+FLASH powered down, all
+peripherals powered down
+Standby Any enabled interrupt 85/C0258/C0109A + running peripherals RAM. all registers System clock running if
+needed, FLASH powered
+down, some peripherals
+depending on user choice
+Running N/A 150/C0109A/MHz N/A Different selectable clock
+sources
+Register: PCON
+Table 29. PCON
+Name Bits R/W Reset Description Inputs
+PWRMODE 1:0 RW 00 Set Power Mode
+Bits Meaning
+00
+01
+10
+11
+Running
+Standby
+Sleep
+Deepsleep
+XRAMKEEP 3:2 RW 00 Specify which of the XRAM halves should be kept during sleep
+SWRESET 4 RW 0 Software Reset; Writing 1 resets the Chip; Reading 1 indicates that the last
+reset was caused by a software reset
+WDTRESET 5 R − Watchdog Reset; Reading 1 indicates that the last reset was caused by a
+watchdog reset
+WAKEUP 6 R − Wakeup Reset; Reading 1 indicates that the last reset was caused by a
+wakeup from sleep or deep sleep
+BROWNOUT 7 RC − Brownout (Interrupt)
+When writing PWRMODE = 01 to enter standby mode,
+the following instruction may be executed before the
+microcontroller is stopped. It is therefore recommended to
+use enter_standby() from libmf, or to add a NOP instruction
+after PWRMODE = 01 writes.
+3 Current Consumption is approximate only, and may be different for different members of the AX8052 family. Please refer to the appropriate
+datasheet for accurate current consumption values
+
+########## PAGE 31 ##########
+AND9349/D
+www.onsemi.com
+31
+When using the debugger, standby mode may be
+terminated by changing the PWRMODE bits of PCON to
+00, using the register window.
+When entering Sleep mode, the microcontroller and most
+peripherals, except the wakeup
+timer and the GPIO logic, are powered down. When entering
+Deep Sleep mode, the microcontroller and all peripherals
+are powered down, and the GPIO pins are frozen
+(GPIOENABLE is reset to zero). When waking up from
+Sleep or Deep Sleep mode, the microcontroller re-starts
+executing at address 0x0000, and the registers of
+powered-down peripherals are reset, similar to power-on
+reset or releasing RESET_N. Wakeup may be distinguished
+from reset by examining the WAKEUP bit of register
+PCON.
+Since the debug interface logic is in the microcontroller
+power domain, a connected debugger prevents the
+microcontroller from being powered down. There are
+therefore some differences between running with debugger
+versus running stand-alone with respect to Sleep and Deep
+Sleep modes. It is therefore recommended to use the
+enter_sleep() and enter_deepsleep() routines from libmf,
+which minimize the differences. Furthermore, power
+consumption in Sleep and Deep Sleep modes are
+considerably higher with the debugger connected.
+Register: CLKCON
+Table 30. CLKCON
+Name Bits R/W Reset Description Inputs
+CLKSRC 2:0 RW 000 Requested System Clock Source
+Bits Meaning
+000
+001
+010
+011
+100
+101
+110
+111
+FRCOSC
+LPOSC
+XOSC
+LPXOSC
+RSYSCLK
+invalid
+invalid
+invalid
+CLKPRE 5:3 RW 001 Requested System Clock Prescaler
+Bits Meaning
+000
+001
+010
+011
+100
+101
+110
+111
+÷ 1
+÷ 2
+÷ 4
+÷ 8
+÷ 16
+÷ 32
+÷ 64
+÷ 128
+CLKMON 7:6 RW 00 Clock Monitor Period
+Bits Meaning
+00
+01
+10
+11
+Off
+4 LPOSC Periods
+16 LPOSC Periods
+64 LPOSC Periods
+Do not select XOSC or LPXOSC unless a crystal is
+connected − see OSCFORCERUN for details.
+
+########## PAGE 32 ##########
+AND9349/D
+www.onsemi.com
+32
+Register: CLKSTAT
+Table 31. CLKSTAT
+Name Bits R/W Reset Description Inputs
+CLKSRCST 2:0 R − Currently selected System Clock Source
+Bits Meaning
+000
+001
+010
+011
+100
+101
+110
+111
+FRCOSC
+LPOSC
+XOSC
+LPXOSC
+RSYSCLK
+invalid
+invalid
+invalid
+CLKPREST 5:3 R − Currently selected System Clock Prescaler
+Bits Meaning
+000
+001
+010
+011
+100
+101
+110
+111
+÷ 1
+÷ 2
+÷ 4
+÷ 8
+÷ 16
+÷ 32
+÷ 64
+÷ 128
+CLKLOSS 7 RC − Clock Loss Detected and Switched Back to Default
+This register reflects the currently active clock settings.
+Normally, it reflects the values of the CLKCON register.
+Since clock switching takes time, however, it will not
+immediately take on new values.
+Register: WTCFGA, WTCFGB
+These two registers select the clock sources for both
+wakeup timer counter registers.
+Table 32. WTCFGA, WTCFGB
+Name Bits R/W Reset Description Inputs
+WTSRCA
+WTSRCB
+2:0 RW 111
+111
+Bits Meaning
+000
+001
+010
+011
+100
+101
+110
+111
+FRCOSC
+LPOSC
+XOSC
+LPXOSC
+RSYSCLK
+invalid
+invalid
+Off
+WTDIVA
+WTDIVB
+5:3 RW 001
+001
+Bits Meaning
+000
+001
+010
+011
+100
+101
+110
+111
+× 2
+× 1
+÷ 2
+÷ 4
+÷ 8
+÷ 16
+÷ 32
+÷ 64
+Do not select XOSC or LPXOSC unless a crystal is
+connected. See OSCFORCERUN for details.
+
+########## PAGE 33 ##########
+AND9349/D
+www.onsemi.com
+33
+Register: WTIRQEN
+Table 33. WTIRQEN
+Name Bits R/W Reset Description
+WTIAA 0 RW 0 Wakeup Timer Interrupt on Event A match with Counter A
+WTIBA 1 RW 0 Wakeup Timer Interrupt on Event B match with Counter A
+WTICA 2 RW 0 Wakeup Timer Interrupt on Event C match with Counter A
+WTIDA 3 RW 0 Wakeup Timer Interrupt on Event D match with Counter A
+WTIAB 4 RW 0 Wakeup Timer Interrupt on Event A match with Counter B
+WTIBB 5 RW 0 Wakeup Timer Interrupt on Event B match with Counter B
+WTICB 6 RW 0 Wakeup Timer Interrupt on Event C match with Counter B
+WTIDB 7 RW 0 Wakeup Timer Interrupt on Event D match with Counter B
+Register: WTSTAT
+Table 34. WTSTAT
+Name Bits R/W Reset Description
+WTSAA 0 RW 0 Wakeup Timer Event A matched with Counter A; cleared on read
+WTSBA 1 RW 0 Wakeup Timer Event B matched with Counter A; cleared on read
+WTSCA 2 RW 0 Wakeup Timer Event C matched with Counter A; cleared on read
+WTSDA 3 RW 0 Wakeup Timer Event D matched with Counter A; cleared on read
+WTSAB 4 RW 0 Wakeup Timer Event A matched with Counter B; cleared on read
+WTSBB 5 RW 0 Wakeup Timer Event B matched with Counter B; cleared on read
+WTSCB 6 RW 0 Wakeup Timer Event C matched with Counter B; cleared on read
+WTSDB 7 RW 0 Wakeup Timer Event D matched with Counter B; cleared on read
+Match flags are cleared on read of this register. Note
+however that the match condition has level triggered
+semantics; if the match condition persists after reading this
+register, the match flag will immediately be set again. So the
+recommended sequence of events upon a wakeup timer
+match are:
+1. Read the WTSTAT register to determine which
+events matched.
+2. Update the corresponding WTEVT registers
+3. Reread WTSTAT to clear the match bits of the
+event registers modified in step 2 above; check if
+any new matches corresponding to other event
+registers happened in the meantime; if so, go back
+to step 2
+WTSTAT bits are set on match regardless of the setting of
+the corresponding WTIRQEN bits. There is no mechanism
+available for atomic WTEVT updates, both halves need to
+be updated separately. This gives rise to the possibility of
+matches to intermediate values. Therefore, the WTSTAT
+bits corresponding to the WTEVT register being updated
+may be set. It is therefore recommended to read WTSTAT
+after updating a WTEVT register to clear the WTSTAT bits
+corresponding to the changed WTEVT register (but do not
+loose WTSTAT bits of other WTEVT registers). Due to the
+level triggered semantics of the WTSTAT bits, if WTEVT
+is still equal to a WTCNT register, the respective WTSTAT
+bit will be re-set to one immediately.
+Registers: WTCNTA0, WTCNTA1, WTCNTB0, WTCNTB1
+Table 35. WTCNTA0, WTCNTA1, WTCNTB0, WTCNTB1
+Name Bits R/W Reset Description
+WTCNTA
+WTCNTB
+15:0 R − Wakeup Counter
+
+########## PAGE 34 ##########
+AND9349/D
+www.onsemi.com
+34
+Registers: WTCNTR1
+Table 36. WTCNTR1
+Name Bits R/W Reset Description
+WTCNTR1 7:0 R − Wakeup Counter Register; when reading WTCNTA0, WTCNTA1 is latched
+into WTCNTR1; when reading WTCNTB0, WTCNTB1 is latched into
+WTCNTR1; this allows reading counter registers atomically
+Registers: WTEVTA0, WTEVTA1, WTEVTB0, WTEVTB1, WTEVTC0, WTEVTC1
+The wakeup timer contains four event registers and two
+counter registers. All event registers are continuously
+compared to all counter registers, and match events are
+generated if any match is detected. These are the four match
+registers.
+Table 37. WTEVTA0, WTEVTA1, WTEVTB0, WTEVTB1, WTEVTC0, WTEVTC1
+Name Bits R/W Reset Description
+WTEVTA
+WTEVTB
+WTEVTC
+WTEVTD
+15:0 RW 0x0000 Wakeup Timer Event Register
+Registers: WDTCFG
+The watchdog timer runs off the low power oscillator.
+Once enabled, the watchdog timer must be periodically reset
+by writing to the WDTRESET (see below), otherwise the
+watchdog resets the CPU.
+Table 38. WDTCFG
+Name Bits R/W Reset Description
+WDTDIV 3:0 RW 0x0000 Watchdog Timer Divider; This field can only be changed if both WDTENA
+and WDTLCK is zero.
+Bits Meaning
+0000
+0001
+0010
+0011
+0100
+0101
+0110
+0111
+1000
+1001
+1010
+1011
+1100
+1101
+1110
+1111
+÷ 2
+÷ 4
+÷ 8
+÷ 16
+÷ 32
+÷ 64
+÷ 128
+÷ 256
+÷ 512
+÷ 1024
+÷ 2048
+÷ 4096
+÷ 8192
+÷ 16384
+÷ 32768
+÷ 65536
+WDTENA 4 RW 0 Watchdog Timer Enable
+WDTLCK 5 RW 0 Watchdog Timer Configuration Lock; when set to 1, this register may no
+longer be changed
+Registers: WDTRESET
+Table 39. WDTRESET
+Name Bits R/W Reset Description
+WDTRESET 7:0 W − If 10101110 is written to this register, the watchdog is reset
+
+########## PAGE 35 ##########
+AND9349/D
+www.onsemi.com
+35
+Registers: LPOSCCONFIG
+Table 40. LPOSCCONFIG
+Name Bits R/W Reset Description
+LPOSC CALSRC 2:0 RW 001 Low Power Oscillator Calibration Source
+Bits Meaning
+000
+001
+010
+011
+100
+101
+110
+111
+FRCOSC
+Off (no Calibration)
+XOSC
+Invalid
+RSYSCLK
+Invalid
+Invalid
+Invalid
+LPOSC PRESC 5:3 RW 000 Bits Meaning
+000
+001
+010
+011
+100
+101
+110
+111
+× 2
+× 1
+÷ 2
+÷ 4
+÷ 8
+÷ 16
+÷ 32
+÷ 64
+LPOSC FAST 6 RW 0 Select the Frequency of the Low Power 
+Oscillator, 0 = 640 Hz, 1 = 10.24 kHz
+Note that the selected reference oscillator is not
+automatically turned on. The purpose of this feature is to
+allow “opportunistic” calibration, i.e. the calibration logic is
+always turned on, but is inactive until the reference oscillator
+is needed for another purpose. The reference oscillator can,
+however, be forced to run using the OSCFORCERUN
+register. The Radio Clock does not feature a ready signal,
+therefore calibration starts immediately if the Radio Clock
+is selected as reference clock. It is the responsibility of the
+user to make sure the Radio Clock is enabled and runs before
+selecting it as reference clock. For Axsem radios, this
+usually means:
+Register: LPOSCKFILT1, LPOSCKFILT0
+Table 41. LPOSCKFILT1, LPOSCKFILT0
+Name Bits R/W Reset Description
+LPOSCKFILT 15:0 RW 0x20C4 KFILT (Low Power Oscillator Calibration Filter Constant)
+The maximum value of k FILT, that results in quickest
+calibration (single cycle), but no jitter suppression, is:
+kFILT /C0043 /C0561PRESCALER /C0064 220fREF /C0064 /C0116base /C0064 kLPOSC/C0563 /C0043 /C0561512000Hz /C0064 PRESCALER /C0064 220fREF /C0563 (eq. 1)
+Smaller values of k FILT result in longer calibration, but
+increased jitter suppression.
+Register: LPOSCREF1, LPOSCREF0
+Table 42. LPOSCREF1, LPOSCREF0
+Name Bits R/W Reset Description
+LPOSCREF 15:0 RW 0x61A8 LP Oscillator Reference Frequency Divider; set to 
+fREF / (640 Hz × PRESCALER)
+
+########## PAGE 36 ##########
+AND9349/D
+www.onsemi.com
+36
+Register: LPOSCFREQ1, LPOSCFREQ0
+Table 43. LPOSCFREQ1, LPOSCFREQ0
+Name Bits R/W Reset Description
+LPOSCFREQ 9:−2 RW 0x000 LP Oscillator Frequency Tune Value; in 1/32 %
+Register: LPOSCPER1, LPOSCPER0
+Table 44. LPOSCPER1, LPOSCPER0
+Name Bits R/W Reset Description
+LPOSCPER 15:0 R − Last Measured LP Oscillator Period
+Registers: FRCOSCCONFIG
+Table 45. FRCOSCCONFIG
+Name Bits R/W Reset Description
+FRCOSC
+CALSRC
+2:0 RW 000 Fast RC Oscillator Calibration Source
+Bits Meaning
+000
+001
+010
+011
+100
+101
+110
+111
+Off (No Calibration)
+LPOSC
+XOSC
+LPXOSC
+RSYSCLK
+Invalid
+Invalid
+Invalid
+LPOSC PRESC 6:3 RW 0000 Bits Meaning
+0000
+0001
+0010
+0011
+0100
+0101
+0110
+0111
+1000
+1001
+1010
+1011
+1100
+1101
+1110
+1111
+× 2
+÷ 1
+÷ 2
+÷ 4
+÷ 8
+÷ 16
+÷ 32
+÷ 64
+÷ 128
+÷ 256
+÷ 512
+÷ 1024
+÷ 2048
+÷ 4096
+÷ 8192
+÷ 16384
+FRCOSC
+PERGAIN
+7 RW 0 Period Gain; if 1, the measured period is multiplied by 16
+Choose a reference clock source, and choose the reference
+clock prescaler such that the resulting reference frequency
+is above 500 Hz. For best frequency measurement precision,
+the resulting reference frequency should be between 500 Hz
+and 1 kHz, but faster reference frequencies are permissible
+for faster acquisition.
+Note that the selected reference oscillator is not
+automatically turned on. The purpose of this feature is to
+allow “opportunistic” calibration, i.e. the calibration logic is
+always turned on, but is inactive until the reference oscillator
+is needed for another purpose. The reference oscillator can,
+however, be forced to run using the OSCFORCERUN
+register.
+The Radio Clock does not feature a ready signal, therefore
+calibration starts immediately if the Radio Clock is selected
+as reference clock. It is the responsibility of the user to make
+sure the Radio Clock is enabled and runs before selecting it
+as reference clock. For Axsem radios, this usually means:
+• Setting the Power Mode Register of the Radio
+Appropriately Such that the Oscillator Circuitry is
+Enabled
+• Configuring SYSCLK
+• Configuring PORTR, DIRR and RADIOMUX
+libmf provides functions to enable and disable the Radio
+Clock for Axsem radios.
+
+########## PAGE 37 ##########
+AND9349/D
+www.onsemi.com
+37
+Register: FRCOSCKFILT1, FRCOSCKFILT0
+Table 46. FRCOSCKFILT1, FRCOSCKFILT0
+Name Bits R/W Reset Description
+FRCOSCKFILT 15:0 RW 0x20C4 KFILT (Fast RC Oscillator Calibration Filter Constant)
+The maximum value of k FILT, that results in quickest
+calibration (single cycle), but no jitter suppression, is:
+For PERGAIN = 0, it is:
+kFILT /C0043 /C0561 220fbase /C0064 /C0116REF /C0064 kFRCOSC/C0563/C0043 /C0561 fREF /C0064 22015kHz /C0064 PRESCALER/C0563
+(eq. 2)
+For PERGAIN = 1, it is:
+kFILT /C0043 /C0561 220fbase /C0064 /C0116REF /C0064 kFRCOSC/C0563/C0043 /C0561 fREF /C0064 21615kHz /C0064 PRESCALER/C0563
+(eq. 3)
+Smaller values of k FILT result in longer calibration, but
+increased jitter suppression.
+Register: FRCOSCREF1, FRCOSCREF0
+Table 47. FRCOSCREF1, FRCOSCREF0
+Name Bits R/W Reset Description
+FRCOSCREF 15:0 RW 0x61A8 Fast RC Oscillator Reference Frequency Divider; set to: 
+(20 MHz ⋅ PRESCALER) / fREF
+Register: FRCOSCFREQ1, FRCOSCFREQ0
+Table 48. FRCOSCFREQ1, FRCOSCFREQ0
+Name Bits R/W Reset Description
+FRCOSCFREQ 9:−2 RW 0x000 Fast RC Oscillator Frequency Tune Value; in 1/32 %
+Register: FRCOSCPER1, FRCOSCPER0
+Table 49. FRCOSCPER1, FRCOSCPER0
+Name Bits R/W Reset Description
+FRCOSCPER 15:0 R − Last Measured Fast RC Oscillator Period
+Register: OSCFORCERUN
+Normally, oscillators are automatically enabled when
+needed, except for oscillator calibration. This register
+allows oscillators to be turned on even if no peripheral needs
+the clock. This can be used to force oscillator calibration, or
+to hide startup latencies of the crystal oscillators when their
+future need is anticipated.
+Table 50. OSCFORCERUN
+Name Bits R/W Reset Description
+FRCOSC FRUN 0 RW 0 If 1, the Fast RC Oscillator is always enabled
+LPOSC FRUN 1 RW 0 If 1, the Low Power Oscillator is always enabled
+XOSC FRUN 2 RW 0 If 1, the Crystal Oscillator is always enabled
+LPXOSC FRUN 3 RW 0 If 1, the Low Power Crystal Oscillator is always enabled
+Do not enable the Crystal Oscillator or the Low Power
+Crystal Oscillator unless an appropriate Crystal is connected
+to the Oscillator pins and the pins are configured as analog
+input. Once enabled, the Crystal Oscillators will not disable
+again until they see two falling edges on their Oscillator
+pins, or until reset is applied. If no crystal is connected, or if
+the pins are not configured as analog inputs, these falling
+edges will not be seen.
+If accidentally enabled, the oscillator may be turned off
+again by calling libmf routines turn_off_xosc or
+turn_off_lpxosc. These routines, however, need to toggle
+pins P A0/PA1 or PA4/PA5, respectively, so they can only be
+used if toggling these pins does not upset the board
+periphery.
+
+########## PAGE 38 ##########
+AND9349/D
+www.onsemi.com
+38
+Register: OSCRUN
+This register indicates which oscillator is turned on.
+Table 51. OSCRUN
+Name Bits R/W Reset Description
+FRCOSC RUN 0 R − 1 indicates the Fast RC Oscillator is enabled
+LPOSC RUN 1 R − 1 indicates the Low Power Oscillator is enabled
+XOSC RUN 2 R − 1 indicates the Crystal Oscillator is enabled
+LPXOSC RUN 3 R − 1 indicates the Low Power Crystal Oscillator is enabled
+Register: OSCREADY
+This register indicates which oscillator is turned on and is
+operating. The crystal oscillators take some time between
+switching on and achieving stable oscillation. On these
+oscillators, RUN reads one and RDY reads zero during the
+startup period.
+Table 52. OSCREADY
+Name Bits R/W Reset Description
+FRCOSC RDY 0 R − 1 indicates the Fast RC Oscillator is running and stable
+LPOSC RDY 1 R − 1 indicates the Low Power Oscillator is running and stable
+XOSC RDY 2 R − 1 indicates the Crystal Oscillator is running and stable
+LPXOSC RDY 3 R − 1 indicates the Low Power Crystal Oscillator is running and stable
+Register: OSCCALIB
+This register selects the events that will generate a clock
+management interrupt.
+Table 53. OSCCALIB
+Name Bits R/W Reset Description
+FRCOSCCALIRQE 0 RW 0 Fast RC Oscillator Calibration Interrupt Enable
+LPOSCCALIRQE 1 RW 0 Low Power Oscillator Calibration Interrupt Enable
+CLKLOSSIRQE 2 RW 1 Clock Loss Interrupt Enable
+CLKLOSS 3 R − Clock Loss Status (same as CLKSTAT)
+FRCOSCCALIRQM 4 R − Fast RC Oscillator Calibration Missed
+LPOSCCALIRQM 5 R − Low Power Oscillator Calibration Missed
+FRCOSCCALIRQ 6 R − Fast RC Oscillator Calibration Updated Interrupt
+LPOSCCALIRQ 7 R − Low Power Oscillator Calibration Updated Interrupt
+Register: LPXOSCGM
+This register configures the low power (tuning fork)
+crystal oscillator.
+
+########## PAGE 39 ##########
+AND9349/D
+www.onsemi.com
+39
+Table 54. LPXOSCGM
+Name Bits R/W Reset Description
+LPXOSCGM 4:0 RW 01000 Load Capacitance Configuration
+Bits (4:0) Meaning
+…
+00110
+…
+01000
+…
+01100
+…
+10000
+…
+…
+3.5/C0109S
+…
+4.6/C0109S
+…
+6.9/C0109S
+…
+9.1/C0109S
+…
+LPXOSCBOOST 7 RW 1 If set, the oscillator is boosted during startup (until the second falling edge is
+seen)
+Register: MISCCTRL
+This register contains miscellaneous control bits.
+Table 55. MISCCTRL
+Name Bits R/W Reset Description
+LPXOSCDIS 0 RW 0 If set, the LPXOSC is permanently disabled. Set this bit if no crystal is
+connected to PA3/PA4.
+XOSCDIS 1 RW 0 If set, the XOSC is permanently disabled. Set this bit if no crystal is
+connected to PA0/PA1
+This register has no function in silicon revision V1.
+Register: XTALOSC
+This register allows the transconductance of the crystal
+oscillator to be configured. Normally, setting this register is
+not necessary, as a servo loop controls the transconductance
+to achieve low amplitude oscillation. This ensures the
+minimum possible current consumption.
+Table 56. XTALOSC
+Name Bits R/W Reset Description
+XTALOSCGM 3:0 RW 0100 Gm (Gain) of the Crystal Oscillator
+Bits Bias Current
+0000
+0001
+0010
+0011
+…
+1110
+1111
+/C0048/C0109S
+25/C0109S
+50/C0109S
+75/C0109S
+…
+350/C0109S
+1000/C0109S
+Register: XTALAMPL
+This register controls the transconductance servo loop.
+This register should be left at the default value.
+
+########## PAGE 40 ##########
+AND9349/D
+www.onsemi.com
+40
+Table 57. XTALAMPL
+Name Bits R/W Reset Description
+XTALREGVC 2:0 RW 000 Crystal Oscillator Amplitude
+Bits Amplitude
+000
+001
+010
+…
+111
+180 mV
+195 mV
+230 mV
+…
+460 mV
+XTALREGON 7 RW 1 Crystal Oscillator Amplitude Regulator Enable
+Register: XTALREADY
+This register controls the generation of the crystal
+oscillator ready signal. It should not normally be changed
+from the default.
+Table 58. XTALREADY
+Name Bits R/W Reset Description
+XTALREADYMODE 2:0 RW 001 Crystal Oscillator Ready Mode
+Bits Meaning
+000
+001
+010
+011
+100
+101
+110
+111
+Always Ready
+Ready when XTAL READY = 1
+Ready when XTAL SIG DET = 1
+Ready when either XTAL READY = 1 or XTAL SIG DET = 1 (or both)
+Never Ready
+Invalid (Never Ready)
+Invalid (Never Ready)
+Ready when both XTAL READY = 1 and XTAL SIG DET = 1
+XTAL AMP DIS 3 RW 0 If set, the crystal oscillator output amplifier is disabled
+XTAL READY 6 R − Crystal Oscillator READY signal
+XTAL SIG DET 7 R − Crystal Oscillator SIG DET signal
+Register: SCRATCH0, SCRATCH1, SCRATCH2, SCRATCH3
+The main purpose of the scratch registers is to provide
+32 bit of state storage during deep sleep mode.
+Table 59. SCRATCH0, SCRATCH1, SCRATCH2, SCRATCH3
+Name Bits R/W Reset Description
+SCRATCH 31:0 RW − Scratch Register; State is maintained in Deep Sleep
+The scratch registers can only be read if GPIOENABLE
+(Register GPIOENABLE) is set to one.
+Register: SILICONREV
+This register returns a silicon revision identification
+number.
+Table 60. SILICONREV
+Name Bits R/W Reset Description
+SILICONREV 7:0 RW 1000111X Silicon Revision
+This register may contain the following values:
+Table 61. 
+SILICONREV Revision Name
+0x8E (10001110) V1
+0x8F (10001111) V1C
+
+########## PAGE 41 ##########
+AND9349/D
+www.onsemi.com
+41
+DMA CONTROLLER
+The DMA controller transfers data between selected
+peripherals and the XRAM memory autonomously in the
+background without microcontroller intervention. This is
+especially useful as transferring radio chip FIFO data
+otherwise uses significant microcontroller cycles.
+Figure 9. DMA Engine Data Structure
+X RAMDMA SFR
+Descriptor
+0xFFxx
+The advanced DMA engine uses buffer descriptors to
+describe one or multiple consecutive buffers in XRAM. The
+buffer descriptor is an 8 byte structure located in XRAM.
+Each buffer descriptor contains a pointer to a buffer
+fragment in XRAM, and its associated length. Once the
+DMA controller fills the buffer, the actual length is written
+back into the buffer descriptor, as well as flag bits, and the
+DMA engine follows another pointer to the next buffer
+descriptor. DMAxADDR points to the buffer descriptor the
+DMA engine is currently working on. It must be set by the
+Microcontroller before enabling the DMA engine. An
+address of 0xFFxx (the high byte set) as next buffer address
+stops the DMA engine. Each buffer descriptor may specify
+whether an interrupt should be signalled at completion of its
+buffer.
+Figure 9 Shows an illustration of the DMA Engine data
+structures. This data structure is very flexible. If it is desired
+to indefinitely repeat the same data (such as in a waveform
+synthesis application), this can easily be achieved by
+pointing BDADDR of the last descriptor to the address of the
+first descriptor. With some care, it is even possible to
+manipulate the buffer descriptor structure while the DMA
+engine is running. When replacing a stop marker (0xFFxx)
+with a buffer descriptor address, always write the low byte
+of the BDADDR field first. When replacing a buffer address
+with a stop marker (0xFFxx) always write the high byte first
+(the low byte may be omitted). Never directly overwrite a
+buffer address with another one; always first write a stop
+marker and then overwrite the stop marker. This way, the
+DMA engine never sees an invalid (half old half new)
+address.
+So to add a new buffer descriptor to the end of a running
+DMA buffer descriptor chain, first write the address of the
+new buffer descriptor into the BDADDR field of the last
+existing buffer descriptor, low byte first. Afterwards, check
+whether the DMAxADDR SFR has 0xFFxx. In this case, the
+DMA engine terminated the (old) chain before the
+microcontroller completed adding the new buffer to the
+chain. In this case, the DMA channel must be restarted at the
+newly inserted buffer descriptor.
+Features
+• Two DMA Controller Channels
+• Operates on a Linked :List of Buffer Descriptors
+• Accesses X-Bus and SFR-Bus Peripherals in a Cycle
+Steal Manner
+• Most On-Chip Peripherals are Supported
+• Both Channels May be Chained to Support Memory to
+Memory Copies
+
+########## PAGE 42 ##########
+AND9349/D
+www.onsemi.com
+42
+Register: DMA0ADDR0, DMA0ADDR1, DMA1ADDR0, DMA1ADDR1
+Table 62. DMA0ADDR0, DMA0ADDR1, DMA1ADDR0, DMA1ADDR1
+Name Bits R/W Reset Description
+DMA0ADDR
+DMA1ADDR
+15:0 RW 0xFFFF
+0xFFFF
+Address of the DMA Buffer Descriptor; if DMAxADDR = 0xFFxx, the channel is
+switched off
+Register: DMA0CONFIG, DMA1CONFIG
+Table 63. DMA0CONFIG, DMA1CONFIG
+Name Bits R/W Reset Description
+DxSOURCE 4:0 RW 00000 Bits Meaning
+00000
+00001
+00010
+00011
+00100
+00101
+00110
+00111
+01000
+01001
+01XXX
+10000
+10001
+10010
+10011
+10100
+10101
+10110
+10111
+11000
+11001
+11XXX
+XRAM → Other DMA Channel (for memory to memory copies)
+SPI Transmit
+UART 0 Transmit
+UART 1 Transmit
+Timer 0 (/C0083/C0068/C0041
+Timer 1 (/C0083/C0068/C0041
+Timer 2 (/C0083/C0068/C0041
+Radio Transmit
+Output Compare 0 (PWM)
+Output Compare 1 (PWM)
+Reserved
+Other DMA Channel → XRAM (for memory to memory copies)
+SPI Receive
+UART 0 Receive
+UART 1 Receive
+ADC
+Reserved
+Reserved
+Radio Receive
+Input Capture 0
+Input Capture 1
+Reserved
+DxIRQ 6 RW 0 1 = Interrupt has occurred; cleared by reading this register
+DxRUN 7 RW 0 1 = DMA channel running; automatically clears when reaching end of buffer chain
+Buffer Descriptor Format
+Table 64. BUFFER DESCRIPTOR FORMAT
+7 6 5 4 3 2 1 0
+BAFADDR (7:0)
+BUFADDR (15:0)
+BUFLEN (7:0)
+IRQEN ERREN FMT BUFLEN (11:8)
+ACTLEN (7:0)
+DONE ERROR 0 0 ACTLEN (11:8)
+BDADDR (7:0)
+BDADDR (15:8)
+BUFADDR points to the actual buffer in XRAM.
+BUFLEN is the maximum (allocated) length of the buffer.
+IRQEN is a flag that enables an interrupt upon completion
+of this buffer. ACTLEN is the actual length of the buffer
+(may be less than BUFLEN). BDADDR is the pointer to the
+next Buffer Descriptor. If BDADDR is 0xFFxx, then this is
+the last buffer descriptor, the DMA engine will stop when
+finishing this buffer.
+
+########## PAGE 43 ##########
+AND9349/D
+www.onsemi.com
+43
+Table 65. 
+DxSOURCE Source FMT Meaning
+00000
+10000
+XRAM → DMA
+DMA → XRAM
+FMT unused (set to 00)
+00001 SPI Transmit FMT unused (set to 00)
+00010
+00011
+UART 0 Transmit
+UART 1 Transmit
+Bits Meaning
+00
+01
+1X
+All bytes sequentially written to UxSHREG
+Bytes alternatively written to UxCTRL and UxSHREG
+Invalid
+10001 SPI Receive Bits Meaning
+00
+01
+1X
+Bytes from UxSHREG/SPSHREG sequentially written to DMA buffer
+Bytes alternatively from UxSHREG/SPSHREG and UxSTATUS/SPSTATUS written to
+DMA Buffer
+Invalid
+10010 UART 0 Receive
+10011 UART 1 Receive
+00100
+00101
+00110
+Timer 0 /C0040/C0083/C0076/C0041
+Timer 1 /C0040/C0083/C0076/C0041
+Timer 2 /C0040/C0083/C0076/C0041
+Bits Meaning
+00
+01
+1X
+8 Bit data written to TxPERIOD1
+16 Bit data (little endian) written to TxPERIOD0/TxPERIOD1
+Invalid
+01000
+01001
+Output Compare 0
+(PWM)
+Output Compare 0
+(PWM)
+Bits Meaning
+00
+01
+1X
+8 Bit data written to OcxCOMP1
+16 Bit data (little endian) written to OCxCOMP0/OcxCOMP1
+Invalid
+11000
+11001
+Input Capture 0
+Input Capture 1
+Bits Meaning
+00
+01
+10
+11
+8 Bit data (ICxCAPT1) written to DMA buffer
+16 Bit data (little endian, ICxCAPT0/ICxCAPT1) written to DMA buffer
+8 Bit data (ICxCAPT1) and status (ICxSTATUS) written to DMA buffer
+16 Bit data (little endian, ICxCAPT0/ICxCAPT1) and status (ICxSTATUS) written to DMA
+buffer
+10100 ADC Bits Meaning
+00
+01
+1X
+8 Bit data (ADCCHxVAL1) written to DMA buffer
+16 Bit data (little endian ADCCHxVAL0/ADCCHxVAL1 written to DMA buffer
+Invalid
+00111 Radio Transmit Bits Meaning
+00
+01
+10
+11
+All bytes sequentially written to FIFODATA
+Bytes alternatively written to FIFOCMD and FIFODATA
+All bytes sequentially written to FIFODATA, except the last, which is written to FIFOCMD
+Register Read/Write; buffer consists of 2 Bytes Address (topmost bit: 1 = write,
+0 = read), followed by 1 byte data
+10111 Radio Receive Bits Meaning
+00
+01
+10
+11
+Bytes from FIFODATA sequentially written to DMA Buffer
+Bytes alternatively from FIFODATA and “quickstatus” bytes written to DMA buffer
+Invalid
+Register Read/Write; buffer consists of 2 Bytes Address (topmost bit: 1 = write,
+0 = read), followed by 1 byte data
+
+########## PAGE 44 ##########
+AND9349/D
+www.onsemi.com
+44
+RADIO INTERFACE
+The Radio Interface is a dedicated interface unit to Axsem
+Radio chips, as well as some other SPI slave devices. It
+features easy microcontroller access by mapping the Radio
+registers into X address space. Normally, 8 bit Register
+accesses are performed. The Radio Interface however may
+perform up to 32 bit Register accesses, needed with some
+Axsem Radio chips to atomically read some tracking
+registers; in this case, the top most byte is returned from the
+X address space access, the other data bytes may afterwards
+be read out from SFR registers.
+Features
+• Directly Maps Radio Chip Registers Into the X Bus
+Address Space
+• Non-blocking Access Mode May be Used to Hide the
+Access Latency
+Direct Access via X-Space
+When direct accesses are performed in the Radio
+Controller dedicated X address space, the controller
+performs the following actions:
+Table 66. DIRECT ACCESS VIA X-SPACE
+RREG
+4000–4FFF
+R 1. Stall CPU core until the Radio Controller is not busy
+2. Copy Address Bits 11:0 into RADIOADDR1,RADIOADDR0 (11:0)
+3. Perform Radio Register Read access
+4. End CPU core access, return contents RADIODATA3
+W 1. Stall CPU core until the Radio Controller is not busy
+2. Copy Address Bits 11:0 into RADIOADDR1,RADIOADDR0 (11:0)
+3. Write CPU data to RADIODATA3
+4. Perform Radio Register Write access
+5. End CPU core access
+RREG (nb)
+5000–5FFF
+R 1. Stall CPU core until the Radio Controller is not busy
+2. Copy Address Bits 11:0 into RADIOADDR1,RADIOADDR0 (1:0)
+3. Start Radio Register Read access
+4. End CPU core access, return data undefined
+W 1. Stall CPU core until the Radio Controller is not busy
+2. Copy Address Bits 11:0 into RADIOADDR1,RADIOADDR0 (11:0)
+3. Write CPU data to RADIODATA3
+4. Start Radio Register Write access
+5. End CPU core access
+The RREG area is blocking; the CPU is stalled until the
+register access is terminated. The RREG (nb) area is
+non-blocking. The register access is only initiated. The
+software is then responsible for polling the RCBUSY bit in
+RADIOACC and potentially retrieving the data from
+RADIODA TA3.
+Register: RADIODATA0, RADIODATA1, RADIODATA2, RADIODATA3
+Table 67. RADIODATA0, RADIODATA1, RADIODATA2, RADIODATA3
+Name Bits R/W Reset Description
+RADIODATA 31:0 RW 0x00000000 Radio Chip Register Read/Write Data
+Register: RADIOADDR0, RADIOADDR1
+Table 68. RADIOADDR0, RADIOADDR1
+Name Bits R/W Reset Description
+RADIOADDR 14:0 RW 0x0000 Radio Chip Register Read/Write Address
+Register: RADIOSTAT0, RADIOSTAT1
+Table 69. RADIOSTAT0, RADIOSTAT1
+Name Bits R/W Reset Description
+RADIOSTAT 15:0 R − Radio Chip “Quick Status” (shifted out during address phase)
+
+########## PAGE 45 ##########
+AND9349/D
+www.onsemi.com
+45
+Register: RADIOACC
+Table 70. RADIOACC
+Name Bits R/W Reset Description
+RADIODATAFMT 1:0 RW 00 Radio Chip Data Access Width
+Bits Meaning
+00
+01
+10
+11
+8 Bit
+16 Bit
+24 Bit
+32 Bit
+RADIOADDRFMT 3:2 RW 00 Radio Chip Address Access Width
+Bits Meaning
+00
+01
+10
+11
+7 Bit
+15 Bit
+12 Bit
+7/12 Bit automatic
+RC WRITE 6 R − Current/Last Access: 0 = Read, 1 = Write
+RC BUSY 7 R − Radio Controller is busy with a transfer if 1
+Register: RADIOFDATAADDR0, RADIOFDATAADDR1
+Table 71. RADIOFDATAADDR0, RADIOFDATAADDR1
+Name Bits R/W Reset Description
+RADIOFDATAADDR 11:0 RW 0×000 Radio Chip FIFO Data Register Address
+Register: RADIOFSTATADDR0, RADIOFSTATADDR1
+Table 72. RADIOFSTATADDR0, RADIOFSTATADDR1
+Name Bits R/W Reset Description
+RADIOFSTATADDR 11:0 RW 0×000 Radio Chip FIFO Status Register Address
+Setup for Axsem Radio Chips
+The following table lists how to set up Radio Interface and
+GPIO registers in order to successfully communicate with
+an Axsem Radio chip. Registers RADIOFDATAADDR and
+RADIOFSTATADDR are only required if DMA access to
+the Radio chip FIFO is desired.
+It is recommended to use the appropriate routines from
+libmf, such as ax5031_reset(), ax5042_reset(),
+ax5043_reset(), or ax5051_reset(). These routines take care
+of setting up the AX8052 as well as the Radio chip registers
+correctly. Furthermore, they also work with the SOC
+AX8052F131, AX8052F142, AX8052F143, and
+AX8052F151.
+Table 73. 
+Register Value
+PORTR 0×CB
+DIRR 0×15
+Table 74. 
+Chip RADIOACC RADIOMUX RADIOFDATAADDR RADIOFSTATADDR
+AX5031 0x00 0x07 0x005 0x004
+AX5042 0x00 0x07 0x005 0x004
+AX5043 0x0C 0x07 0x029 0x028
+AX5051 0x00 0x07 0x005 0x004
+
+########## PAGE 46 ##########
+AND9349/D
+www.onsemi.com
+46
+Access Waveforms
+Figure 10. SPI 8 bit Read/Write Access
+Figure 11. SPI 16 bit Read/Write Access
+Figure 12. SPI 8 bit Long Address Read/Write Access
+Figures 10, 11 and 12 show typical access waveforms. The
+SPI access is divided into three portions: the read/write bit,
+the address, and the data. There are four different addressing
+modes: 7 bit, 15 bit, 12bit, and 7/12 bit automatic. The data
+portion may be 8, 16, 24 or 32 bits wide. During the address
+phase, status bits are returned. Addressing modes are
+summarized in the table below:
+Table 75. 
+Addressing Mode
+Condition First Address Byte Second Address Byte FigureCode Description
+00 7 bit – R/W A6:A0 omitted 10, 11
+01 15 bit – R/W A14:A8 A7:A0 –
+10 12 bit – R/W 111 A11:A8 A7:A0 12
+11 7/12 bit automatic ADDR < 0x70 R/W A6:A0 omitted 10, 11
+ADDR ≥ 0x70 R/W 111 A11:A8 A7:A0 12
+
+########## PAGE 47 ##########
+AND9349/D
+www.onsemi.com
+47
+GPIO
+In order to maximize the number of user assignable pins,
+the AX8052 has only two dedicated pins (besides the supply
+pins), namely RESET_N and DBG_EN.
+The AX8052 has three general purpose 8 bit GPIO Ports,
+Port A, B and C. An additional port, Port R, is dedicated to
+connecting a Radio chip. Most GPIO pins may also be
+connected to peripherals. The registers PALTA, PALTB and
+PALTC configure which GPIO pins serve as dedicated
+peripheral output. Peripheral inputs may be selected using
+the PINSEL register.
+Each GPIO Pin features a programmable pull-up.
+Interrupt on pin change is provided for Ports A, B and C.
+Ports B, C and R are 5V tolerant. Port A pins should not
+exceed VDDIO. All digital inputs feature schmitt trigger
+buffers. Port A may be used as analog input. Digital input
+buffers should be switched off for Port A pins used as analog
+inputs by setting the appropriate bits of ANALOGA, to
+prevent additional current consumption.
+In order to prevent GPIO pin glitches after wakeup from
+deep sleep, GPIO pin state is latched when entering deep
+sleep mode. After wakeup and setup of the GPIO registers,
+the latches must be switched to transparent mode by writing
+1 to GPIOENABLE.
+Depending on package, not all GPIO pins may be
+available, see the appropriate data sheet.
+Figure 13. GPIO Pin Block Diagram
+Figure 13 shows the block diagram of a GPIO pin.
+Features
+• Port, Pin and Direction registers
+• Programmable Pull-up
+• Port A: Pins programmable as Analog Pins (switches
+off the input schmitt trigger to save power)
+• Interrupt on Port Change
+Dedicated Pins
+Table 76. DEDICATED PINS
+Name Dir Pull Purpose
+DBG_EN I PD Debug Serial Interface Enable
+(active high)
+RESET_N I PU Reset Input (active low)
+PD = Pull Down; PU = Pull Up
+
+########## PAGE 48 ##########
+AND9349/D
+www.onsemi.com
+48
+GPIO Pins
+The following table lists alternate functions for all GPIO
+pins.
+Table 77. GPIO PINS
+Name Alternate Functions
+PA0 T0OUT IC1 ANALOG0 XTALP
+PA1 T0CLK OC1 ANALOG1 XTALN
+PA2 OC0 U1RX ANALOG2 COMPI00
+PA3 T1OUT ANALOG3 LPXTALP
+PA4 T1CLK COMPO0 ANALOG4 LPXTALN
+PA5 IC0 U1TX ANALOG5 COMPI10
+PA6 T2OUT ADCTRIG ANALOG6 COMPI01
+PA7 T2CLK COMPO1 ANALOG7 COMPI11
+PB0 U1TX IC1 EXTIRQ0
+PB1 U1RX OC1
+PB2 IC0 T2OUT
+PB3 OC0 T2CLK EXTIRQ1
+PB4 U0TX T1CLK
+PB5 U0RX T1OUT
+PB6 DBG_DATA
+PB7 DBG_CLK
+PC0 SSEL T0OUT EXTIRQ0
+PC1 SCK T0CLK COMPO1
+PC2 SMOSI U0TX
+PC3 SMISO U0RX COMPO0
+PC4 COMPO1 ADCTRIG EXTIRQ1
+PC5
+PC6
+PC7
+PR0 RSEL
+PR1 RSYSCLK
+PR2 RCLK
+PR3 RMISO
+PR4 RMOSI
+PR5 RIRQ
+PR6
+PR7
+Recommended Initialization Sequence
+1. Set the registers DIRA, DIRB, DIRC, PORTA,
+PORTB, PORTC, ANALOGA according to the
+board circuitry. Unconnected pins should either be
+driven or should have their pull-up enabled; this
+prevents floating pins, which can cause elevated
+current consumption of their digital input buffer.
+2. Call flash_apply_calibration(); This routine copies
+manufacturing calibration data from the FLASH
+into the corresponding chip registers.
+3. If an Axsem Radio SoC is used or if an Axsem
+Radio Chip is connected to Port R, the following
+routines should be called:
+• On cold start (PCON bit 6 zero), call
+ax*_reset()
+• On warm start (PCON bit 6 one), call
+ax*_comminit()
+4. Set GPIOENABLE to one
+5. Configure the digital pins of the Radio (such as
+SYSCLK)
+The routines flash_apply_calibration(), ax*_reset() and
+ax*_comminit() can be found in libMF; please refer to the
+libMF documentation. Using these routines ensures that the
+interface between the microcontroller and the radio is set up
+correctly, and that the differences between the SoC and the
+corresponding discrete two-chip solution are handled
+transparently to the user software.
+Register: PORTA, PORTB, PORTC, PORTR
+Table 78. PORTA, PORTB, PORTC, PORTR
+Name Bits R/W Reset Description
+PORTA
+PORTB
+PORTC
+PORTR
+7:0 RW 0x00
+0x00
+0x00
+0x00
+Port Output Control
+Register: PINA, PINB, PINC, PINR
+Table 79. PINA, PINB, PINC, PINR
+Name Bits R/W Reset Description
+PINA
+PINB
+PINC
+PINR
+7:0 R −
+−
+−
+−
+Port Input
+Register: DIRA, DIRB, DIRC, DIRR
+Table 80. DIRA, DIRB, DIRC, DIRR
+Name Bits R/W Reset Description
+DIRA
+DIRB
+DIRC
+DIRR
+7:0 RW 0x00
+0x00
+0x00
+0x00
+Port Direct Control
+
+########## PAGE 49 ##########
+AND9349/D
+www.onsemi.com
+49
+Table 81. 
+DIRx.y PORTx.y Px.y Pin Drive
+0 0 Z
+0 1 Z, Pull-Up
+1 0 0
+1 1 1
+Register: ANALOGA
+Table 82. ANALOGA
+Name Bits R/W Reset Description
+ANALOGA 7:0 RW 0x00 Port A Analog Mode
+Setting a bit in this register disables the digital input buffer
+of the corresponding port. This prevents additional current
+consumption when mid-scale analog voltages are applied to
+the corresponding port, which is used by an analog
+peripheral, such as the ADC, Comparators or Crystal
+Oscillators. Setting a bit causes the corresponding bit in the
+PINA and PINCHGA registers to become undefined.
+Register: INTCHGA, INTCHGB, INTCHGC
+Table 83. INTCHGA, INTCHGB, INTCHGC
+Name Bits R/W Reset Description
+INTCHGA
+INTCHGB
+INTCHGC
+7:0 RW 0x00
+0x00
+0x00
+Port Interrupt on
+Change
+Register: EXTIRQ
+Table 84. EXTIRQ
+Name Bits R/W Reset Description
+EXTIRQ0MODE 1:0 RW 00 External Interrupt 0 Mode
+Bits Meaning
+00
+01
+10
+11
+Level High
+Level Low
+Rising Edge
+Falling Edge
+EXTIRQ0PIN 2 RW 0 0: EXTRIQ0 is Port B.0; 1: EXTIRQ0 is Port C.0
+EXTIRQ1MODE 5:4 RW 00 External Interrupt 1 Mode
+Bits Meaning
+00
+01
+10
+11
+Level High
+Level Low
+Rising Edge
+Falling Edge
+EXTIRQ1PIN 6 RW 0 0: EXTRIQ1 is Port B.3; 1: EXTIRQ1 is Port C.4
+Register: PINCHGA, PINCHGB, PINCHGC
+Table 85. PINCHGA, PINCHGB, PINCHGC
+Name Bits R/W Reset Description
+PINCHGA
+PINCHGB
+PINCHGC
+7:0 R −
+−
+−
+Port Change
+
+########## PAGE 50 ##########
+AND9349/D
+www.onsemi.com
+50
+Register: PALTA
+Table 86. PALTA
+Name Bits R/W Reset Description
+PALTA0 0 RW 0 Port A.0 enable T0OUT
+PALTA1 1 RW 0 Port A.1 enable OC1
+PALTA2 2 RW 0 Port A.2 enable OC0
+PALTA3 3 RW 0 Port A.3 enable T1OUT
+PALTA4 4 RW 0 Port A.4 enable COMPO0
+PALTA5 5 RW 0 Port A.5 enable U1TX
+PALTA6 6 RW 0 Port A.6 enable T2OUT
+PALTA7 7 RW 0 Port A.7 enable COMPO1
+Register: PALTB
+Table 87. PALTB
+Name Bits R/W Reset Description
+PALTB0 0 RW 0 Port B.0 enable U1TX
+PALTB1 1 RW 0 Port B.1 enable OC1
+PALTB2 2 RW 0 Port B.2 enable T2OUT
+PALTB3 3 RW 0 Port B.3 enable OC0
+PALTB4 4 RW 0 Port B.4 enable U0TX
+PALTB5 5 RW 0 Port B.5 enable T1OUT
+Register: PALTC
+Table 88. PALTC
+Name Bits R/W Reset Description
+PALTC0 0 RW 0 Port C.0 enable U0OUT
+PALTC1 1 RW 0 Port C.1 enable COMPO1
+PALTC2 2 RW 0 Port C.2 enable U0TX
+PALTC3 3 RW 0 Port C.3 enable COMPO0
+PALTC4 4 RW 0 Port C.4 enable COMPO1
+Register: PINSEL
+Table 89. PINSEL
+Name Bits R/W Reset Description
+PINSEL0 0 RW 0 0: U0RX is Port B.5; 1: U0RX is Port C.3
+PINSEL1 1 RW 0 0: U1RX is Port B.1; 1: UIRX is Port A.2
+PINSEL2 2 RW 0 0: IC0 is Port B.2; 1: ICO is Port A.5
+PINSEL3 3 RW 0 0: IC1 is Port B.0; 1: IC1 is Port A.0
+PINSEL4 4 RW 0 0: T0CLK is Port C.1; 1: T0CLK is Port A.1
+PINSEL5 5 RW 0 0: T1CLK is Port B.4; 1: T1CLK is Port A.4
+PINSEL6 6 RW 0 0: T2CLK is Port B.3; 1: T2CLK is Port A.7
+PINSEL7 7 RW 0 0: ADCTRIG is Port C.4; 1: ADCTRIG is Port A.6
+
+########## PAGE 51 ##########
+AND9349/D
+www.onsemi.com
+51
+Register: GPIOENABLE
+Table 90. GPIOENABLE
+Name Bits R/W Reset Description
+GPIOENABLE 0 RW 1 0: All Port Pins keep their current state; 
+1: Port Pins normal operation
+This bit is reset to 0 when waking up from deep sleep
+Register: RADIOMUX
+Table 91. RADIOMUX
+Name Bits R/W Reset Description
+RADIOSYSCLK 2:0 RW 111 Port R.1 Pin Function
+Bits Meaning
+000
+001
+010
+011
+100
+101
+110
+111
+FRCOSC
+LPOSC
+XOSC
+LPXOSC
+invalid
+invalid
+System Clock
+Off
+RADIOIRQ 3 RW 0 0: IRQ is Port R.5; 1: IRQ is Port R.6
+RADIOCLK 5:4 RW 00 Radio Clock Source
+Bits Meaning
+00
+01
+10
+11
+Port R.1
+Port B.0
+Port B.7
+Port C.4
+RADIOSPI 6 RW 0 0: Port R.0, R.2, R.3 and R.4 is GPIO; 
+1: Port R.0, R.2, R.3, R.4 is Radio SPI
+
+########## PAGE 52 ##########
+AND9349/D
+www.onsemi.com
+52
+ADC, COMPARATOR, TEMPERATURE SENSOR
+Figure 14. ADC Block Diagram
+
+
+########## PAGE 53 ##########
+AND9349/D
+www.onsemi.com
+53
+The ADC digitizes analog sensor signals. It also contains
+two general purpose comparators, as well as a temperature
+sensor.
+The ADC controller supports up to 4 channels. A channel
+is a combination of multiplexer, single ended/differential,
+and gain settings. Each channel has its own result register.
+When triggered, the ADC converts all configured channels
+in sequence. If more than 4 channels are needed, software
+may first convert a group of 4 channels, read the result,
+reprogram the channel config registers, convert the next
+group of 4 signals, and so on.
+The ADC needs a clock with a frequency of 16 times the
+sampling rate. This clock may be derived from any on-chip
+clock. A prescaler is also provided.
+In order to achieve maximum precision, calibration data,
+stored during factory test in the uppermost 1kByte FLASH
+sector, needs to stored in the ADC core. Therefore,
+flash_apply_calibration() must be called and 0x06 must be
+written to ADCTUNE1 before the ADC is used.
+Features
+• 10 Bit ADC, 500k Samples/s
+• Single Ended and Differential
+• x1, x0.1 and x10 Gain Settings
+• 2 Additional Comparators
+• Temperature Sensor
+• Built-in 1 V Reference
+• Conversion May be Triggered by Software, Timer or
+External Signal
+Register: ADCCLKSRC
+This register selects the clock source which provides the
+timing for the ADC circuitry. The sampling rate of the ADC
+is 116 th of the clock frequency selected by this register.
+Table 92. ADCCLKSRC
+Name Bits R/W Reset Description
+ADCCLKSRC 2:0 RW 111 Clock Source
+Bits Meaning
+000
+001
+010
+011
+100
+101
+110
+111
+FRCOSC
+LPOSC
+XOSC
+LPXOSC
+RSYSCLK
+Invalid
+System Clock
+Off
+ADCCLKDIV 6:3 RW 0000 Clock Prescaler
+Bits Meaning
+0000
+0001
+0010
+0011
+0100
+0101
+0110
+0111
+1000
+1001
+1010
+1011
+1100
+1101
+1110
+1111
+÷ 1
+÷ 2
+÷ 4
+÷ 8
+÷ 16
+÷ 32
+÷ 64
+÷ 128
+÷ 256
+÷ 512
+÷ 1024
+÷ 2048
+÷ 4096
+÷ 8192
+÷ 16384
+÷ 32768
+ADCACT 7 R − ADC Active; the logical
+OR or ADCPEND and
+ADCBUSY in Register
+ADCCONV
+Do not select XOSC or LPXOSC unless a crystal is
+connected – see OSCFORCERUN for details.
+The System Clock may stop if the processor enters
+standby mode. Therefore, if System Clock is selected as
+ADC clock source, care has to be taken not to enter standby
+mode while a conversion is running.
+Register: ADCCH0CONFIG, ADCCH1CONFIG, ADCCH2CONFIG, ADCCH3CONFIG
+Table 93. ADCCH0CONFIG, ADCCH1CONFIG, ADCCH2CONFIG, ADCCH3CONFIG
+Name Bits R/W Reset Description
+CH0CONFIG
+CH1CONFIG
+CH2CONFIG
+CH3CONFIG
+7:0 RW 11111111
+11111111
+11111111
+11111111
+Bits Meaning
+00NNNPPP
+01NNNPPP
+10NNNPPP
+11001PPP
+11011000
+11011001
+11111111
+Differential Mode, Gain x0.1, NNN = negative terminal, PPP = positive terminal
+Differential Mode, Gain x1, NNN = negativeterminal, PPP = positive terminal
+Differential Mode, Gain x10, NNN = negative terminal, PPP = positive terminal
+Single Ended Mode, Gain x1, PPP = positive terminal
+Temperature
+VDDIO
+Channel Off
+PPP and NNN encode the input port to be used for the
+positive and negative input, respectively. For the single
+ended modes, the negative input is connected to the internal
+0.5 V reference voltage, and therefore implicit.
+
+########## PAGE 54 ##########
+AND9349/D
+www.onsemi.com
+54
+Table 94. 
+PPP, NNN Port
+000 A0
+001 A1
+010 A2
+011 A3
+100 A4
+101 A5
+110 A6
+111 A7
+Ports used for analog voltages need their corresponding
+digital input buffer disabled in register ANALOGA. Failure
+to do so results in additional current consumption by the
+digital input buffer when a mid-scale voltage is applied to
+the port.
+Measuring VDDIO
+After conversion of the IO voltage using
+ADCCHxCONFIG = 0xD9, the conversion result can be
+converted into a voltage using the following formula:
+VDDIO /C0043 ADCCHxVAL /C0064 10 V216 /C0042 4.5 V (eq. 1)
+ADCCHxV AL must be treated as an unsigned 16 Bit value.
+In other words, VDDIO is sampled using a full scale range
+of 10 V , with an offset voltage of 4.5 V .
+Register: ADCCH0VAL0, ADCCH0VAL1, ADCCH1VAL0, ADCCH1VAL1, ADCCH2VAL0, ADCCH2VAL1
+Table 95. ADCCH0VAL0, ADCCH0VAL1, ADCCH1VAL0, ADCCH1VAL1, ADCCH2VAL0, ADCCH2VAL1
+Name Bits R/W Reset Description
+CHxVAL 15:0 R − ADC Channel Conversion Result Registers
+Register: ADCTUNE0
+Table 96. ADCTUNE0
+Name Bits R/W Reset Description
+ADCTUNE0 7:0 RW 01 Must be set to 0x01
+Register: ADCTUNE1
+Table 97. ADCTUNE1
+Name Bits R/W Reset Description
+ADCTUNE1 7:0 RW 0 Must be set to 0x06
+
+########## PAGE 55 ##########
+AND9349/D
+www.onsemi.com
+55
+Register: ADCTUNE2
+Table 98. ADCTUNE2
+Name Bits R/W Reset Description
+PMODE 1:0 RW 00 ADC Power Saving Mode
+Bits Meaning
+00
+01
+10
+11
+No Powersave
+Clock Stoop between Bursts
+Power Off between Bursts
+Invalid
+WAKEC 4:2 RW 010 Wakeup conversion cycles after Clock Stop
+Bits Meaning
+000
+001
+010
+011
+100
+101
+110
+111
+0
+1
+2
+3
+4
+6
+8
+12
+WAKEP 7:5 RW 111 Wakeup conversion cycles after Power Up
+Bits Meaning
+000
+001
+010
+011
+100
+101
+110
+111
+0
+1
+2
+3
+4
+6
+8
+12
+Register: ADCCONV
+Table 99. ADCCONV
+Name Bits R/W Reset Description
+CONVSRC 2:0 RW 000 Conversion Control
+Bits Meaning
+000
+001
+010
+011
+100
+101
+110
+111
+Idle
+Start One-Shot Conversion (CONVSRC will read back as 0)
+Pin Rising Edge
+Pin Falling Edge
+Timer 0
+Timer 1
+Timer 2
+Continuous Free Running
+ADCPEND 5 R − ADC Conversion is Pending
+ADCBUSY 6 R − ADC is Busy
+ADCIRQ 7 RC − ADC Conversion Done Interrupt active; this bit clears on read of this
+register
+Whenever a conversion burst is triggered, for example by
+writing 001 to CONVSRC or if the selected event happens,
+the ADCPEND bit is set, and the ADC core starts to wake
+up from power down. When the ADC is ready to perform the
+conversion, ADCBUSY is set and ADCPEND is cleared.
+After the conversion is done, ADCBUSY is cleared and the
+ADC core is powered down again.
+In order to wait for results to be available, software should
+either use the ADC interrupt, poll until the ADCIRQ bit is
+set, or poll for both ADCPEND and ADCBUSY to go low.
+Alternatively, software can also poll until ADCACT in
+register ADCCLKSRC goes low, which preserves the state
+of ADCIRQ.
+
+########## PAGE 56 ##########
+AND9349/D
+www.onsemi.com
+56
+Register: ANALOGCOMP
+Table 100. ANALOGCOMP
+Name Bits R/W Reset Description
+ACOMP0IN 0 RW 0 Comparator 0 Input Select: 0 = PA2; 1 = PA6
+ACOMP0REF 1 RW 0 Comparator 0 Reference Select: 0 = PA0; 1 = internal Reference
+ACOMP1IN 2 RW 0 Comparator 1 Input Select: 0 = PA5; 1 = PA7
+ACOMP1REF 3 RW 0 Comparator 1 Reference Select: 0 = PA3; 1 = internal Reference
+ACOMP0INV 4 RW 0 Comparator 0 Inversion
+ACOMP1INV 5 RW 0 Comparator 1 Inversion
+ACOMP0ST 6 R – Comparator 0 Status
+ACOMP1ST 7 R – Comparator 1 Status
+
+########## PAGE 57 ##########
+AND9349/D
+www.onsemi.com
+57
+SPI MASTER/SLAVE INTERFACE
+Figure 15. SPI Block Diagram
+The SPI interface provides a general purpose SPI master
+or slave. Figure 15 shows the block diagram of the SPI
+interface. Its fully programmable, flexible clocking scheme
+allows it to connect to any SPI compatible peripheral or
+master.
+Features
+• 8-bit
+• Master
+• 3 and 4 wire Slave
+• In Master mode, SCLK Can be the System Clock, any
+of the Oscillators or Divided Versions of it
+• Programmable Clock Phase and Inversion
+Register: SPSHREG
+Table 101. SPSHREG
+Name Bits R/W Reset Description
+SPSHREG 7:0 RW − SPI Shift Register
+Register: SPSCKSRC
+Table 102. SPSCKSRC
+Name Bits R/W Reset Description
+SPSCKSRC 2:0 RW 111 Clock Source
+Bits Meaning
+000
+001
+010
+011
+100
+101
+110
+111
+FRCOSC
+LPOSC
+XOSC
+LPXOSC
+RSYSCLK
+T0OUT
+System Clock
+Off
+SPSCKDIV 5:3 RW 000 Clock Prescaler
+Bits Meaning
+000
+001
+010
+011
+100
+101
+110
+111
+÷ 1
+÷ 2
+÷ 4
+÷ 8
+÷ 16
+÷ 32
+÷ 64
+÷ 128
+SPSCKINV 6 RW 0 SPI Clock Invert
+SPSCKPH 7 RW 0 SPI Clock Phase
+Do not select XOSC or LPXOSC unless a crystal is
+connected – see OSCFORCERUN for details.
+The System Clock may stop if the processor enters
+standby mode. Therefore, if System Clock is selected as SPI
+clock source, an ongoing SPI transaction may be halted
+while the processor is in standby mode.
+
+########## PAGE 58 ##########
+AND9349/D
+www.onsemi.com
+58
+Figure 16. SPI Waveforms
+Figure 16 shows the effect of the clock phase and
+inversion settings.
+Register: SPMODE
+Table 103. SPMODE
+Name Bits R/W Reset Description
+SPMODE 1:0 RW 00 Operating Mode
+Bits Meaning
+00
+01
+10
+11
+Off
+Master
+Slave, always selected
+Slave, selected when SS = 0
+SPDIR 2 RW 0 Shift Direction, 0 = MSB first, 1 = LSB first
+SPRXIE 3 RW 0 SPI Receive Interrupt Enable
+SPTXIE 4 RW 0 SPI Transmit Interrupt Enable
+SPSSIE 5 RW 0 SPI SS Change Interrupt Enable
+When switching to slave mode (SPMODE = 10 or
+SPMODE=11), the SPI bus must be idle and SCK must be
+at its idle state (SCK = 0 when SCKINV = 0, or
+SCK = 1 when SCKINV = 1). Otherwise, bit
+synchronization between master and slave may not be
+achieved. Alternatively, when switching to SPMODE 11,
+SS = 1 will also ensure bit synchronization.
+Register: SPSTATUS
+Table 104. SPSTATUS
+Name Bits R/W Reset Description
+SPRXFULL 0 R – Rx Full interrupt request
+SPRXOVER 1 R – Rx Overrun interrupt request (clears on read)
+SPTXEMPTY 2 R – Tx Empty interrupt request
+SPTXUNDER 3 R – Tx Underrun interrupt request (clears on read)
+SPSSCHG 4 R – SS change interrupt request (clears on read)
+SPSSSTAT 5 R – Current SS status
+SPFIRST 6 R – First Word
+
+########## PAGE 59 ##########
+AND9349/D
+www.onsemi.com
+59
+TIME COUNTER 0/1/2
+Figure 17. Timer Block Diagram
+The 16 bit Timer Counter peripheral provides the
+microcontroller with timing. Figure 17 shows the block
+diagram of the Timers. It can also interface to the analog
+world with its /C0083/C0068 feature. PWM may be realized together
+with an output compare block. Input signal Timing may be
+captured together with an input capture block.
+Features
+• Supports the Following Modes
+♦ Timer
+♦ Pre-Scaler
+♦ PWM
+♦ /C0083/C0068
+♦ Input Capture
+• Can Operate from the System Clock or Another
+Asynchronous Clock (Note that Some Modes are not
+Supported with Asynchronous Clock)
+• Provides UART Baud Rate and ADC Sampling Rate
+Clocks
+Register: T0CNT0, T0CNT13
+Table 105. T0CNT0, T0CNT13
+Name Bits R/W Reset Description
+T0CNT 15:0 RW 0x0000 Timer 0 Counter
+Since the timer may run at a different clock rate than the
+CPU, reading the timer register may not always be
+consistent. While every effort is made to make reads
+consistent, it is not always possible. Reads are consistent
+under the following conditions:
+• All Modes that Change the Counter Register Only by
+One at a Time, Regardless of Clock Frequencies
+♦ Divide Triangle
+♦ Divide Sawtooth with T0PERIOD = 0xFFFF
+♦ Multiply Sawtooth/Triangle with T0PERIOD = 1
+• All Modes if PERIODTIMERCLK ≥ 2 · PERIODSYSCLK
+• All Modes if T0CLKSYNC is Enabled
+What does consistency mean? A read is consistent if it
+returns either the current counter value, or any counter value
+up to 2 · PERIODSYSCLK in the past.
+When writing to this register, it takes up to two timer clock
+cycles until the value appears in the internal counter register.
+Register: T0PERIOD0, T0PERIOD1
+Table 106. T0PERIOD0, T0PERIOD1
+Name Bits R/W Reset Description
+T0PERIOD 15:0 RW 0x0000 Timer 0 Period
+Register: T0CLKSRC
+Table 107. T0CLKSRC  
+Name Bits R/W Reset Description
+T0CLKSRC 2:0 RW 111 Clock Source
+Bits Meaning
+000
+001
+010
+011
+100
+101
+110
+111
+FRCOSC
+LPOSC
+XOSC
+LPXOSC
+RSYSCLK
+T0CLK
+System Clock
+Off
+
+########## PAGE 60 ##########
+AND9349/D
+www.onsemi.com
+60
+Table 107. T0CLKSRC (continued)
+Name DescriptionResetR/WBits
+T0CLKDIV 5:3 RW 001 Clock Prescaler
+Bits Meaning
+000
+001
+010
+011
+100
+101
+110
+111
+× 2
+× 1
+÷ 2
+÷ 4
+÷ 8
+÷ 16
+÷ 32
+÷ 64
+T0CLKINV 6 RW 0 Timer 0 Clock Invert
+T0CLKSYNC 7 RW 0 Timer 0 Clock Synchronization to System Clock
+Do not select XOSC or LPXOSC unless a crystal is
+connected – see OSCFORCERUN for details.
+The System Clock may stop if the processor enters
+standby mode. Therefore, if System Clock is selected as
+Timer clock source, the timer may pause counting if the
+processor enters standby mode.
+Register: T0MODE
+Table 108. T0MODE  
+Name Bits R/W Reset Description
+T0MODE 2:0 RW 000 Operating Mode (see table below)
+Bits Meaning
+000
+001
+010
+011
+100
+101
+110
+111
+Off
+/C0083/C0068
+Divide Sawtooth
+Divide Triangle
+Multiply Sawtooth
+Multiply Triangle
+invalid
+invalid
+T0LBUF 3 RW 0 Counter Buffering; 0 = No Buffering, 1 = TxCNT0, TxPERIOD0
+updated/written on access of TxCNT1, TxPERIOD1; reading TxCNT0
+returns value latched when reading TxCNT1; TxPERIOD0 is never buffered
+on reads as TxPERIOD can change only under program control
+T0PRBUF 5:4 RW 00 Period Buffering in Divide and Multiply Modes:
+Bits Meaning
+00
+01
+10
+11
+No Double Buffering; TxPERIOD0 buffering according to TxLBUF
+Internal Buffer updated on TxOVER
+Internal Buffer updated on TxUNDER
+Internal Buffer updated on TxOVER and TxUNDER
+Period Buffering in /C0083/C0068 Mode:
+Bits Meaning
+00
+01
+10
+11
+No Double Buffering; TxPERIOD0 buffering according to TxLBUF
+Internal Buffer updated on T0OUT
+Internal Buffer updated on T1OUT
+Internal Buffer updated on T2OUT
+T0IRQMO 6 RW 0 Interrupt on TxOVER enable
+T0IRQMU 7 RW 0 Interrupt on TxUNDER enable
+
+########## PAGE 61 ##########
+AND9349/D
+www.onsemi.com
+61
+Sawtooth Triangle
+DivMultiply
+Figure 18. T0MODE
+e
+Register: T0STATUS
+Table 109. T0STATUS
+Name Bits R/W Reset Description
+T0IRQRO 0 R – TxOVER interrupt request (clears on read)
+T0IRQRU 1 R – TxUNDER interrupt request (clears on read)
+T0IRQEO 2 R – TxOVER interrupt missed (clears on read)
+T0IRQEU 3 R – TxUNDER interrupt missed (clears on read)
+T0IRQPE 4 R – TxPERIOD empty interrupt request
+T0IRQPU 5 R – TxPERIOD underrun interrupt request (clears on read)
+T0IRQMPE 6 RW 0 TxPERIOD empty interrupt enable
+T0IRQMPU 7 RW 0 TxPERIOD underrun interrupt enable
+
+########## PAGE 62 ##########
+AND9349/D
+www.onsemi.com
+62
+OUTPUT COMPARE 0/1
+The output compare unit allows, together with a Timer,
+PWM waveforms to be generated.
+Register: OC0COMP0, OC0COMP1
+Table 110. OC0COMP0, OC0COMP1
+Name Bits R/W Reset Description
+OC0COMP 15:0 RW 0x0000 Output Compare 0 Compare Value
+Register: OC0MODE
+Table 111. OC0MODE
+Name Bits R/W Reset Description
+OC0SRC 1:0 RW 00 Source Timer
+Bits Meaning
+00
+01
+10
+11
+Off
+Timer 0
+Timer 1
+Timer 2
+OC0LBUF 3 RW 0
+OC0CMPBUF 5:4 RW 00 Period Buffering
+Bits Meaning
+00
+01
+10
+11
+No Double Buffering; OCxCOMP0 buffering according to OC0LBUF
+Internal Buffer updated on TxOVER
+Internal Buffer updated on TxUNDER
+Internal Buffer updated on TxOVER and TxUNDER
+OC0IRQMR 6 RW 0 Interrupt on compare rising edge
+OC0IRQMF 7 RW 0 Interrupt on compare rising edge
+Register: OC0PIN
+Table 112. OC0PIN  
+Name Bits R/W Reset Description
+OC0PCR 1:0 RW 00 Pin Change on Compare Rising Edge
+Bits Meaning
+00
+01
+10
+11
+No Change
+Invalid
+Clear
+Set
+OC0PCF 3:2 RW 00 Pin Change on Compare Falling Edge
+Bits Meaning
+00
+01
+10
+11
+No Change
+Invalid
+Clear
+Set
+OC0PCO 5:4 RW 00 Pin Change on TxOVER
+Bits Meaning
+00
+01
+10
+11
+No Change
+Invalid
+Clear
+Set
+
+########## PAGE 63 ##########
+AND9349/D
+www.onsemi.com
+63
+Table 112. OC0PIN (continued)
+Name DescriptionResetR/WBits
+OC0PCU 7:6 RW 00 Pin Change on TxUNDER
+Bits Meaning
+00
+01
+10
+11
+No Change
+Invalid
+Clear
+Set
+Register: OC0STATUS
+Table 113. OC0STATUS
+Name Bits R/W Reset Description
+OC0IRQRR 0 R – Compare Rising interrupt request (clears on read)
+OC0IRQRF 1 R – Compare Falling interrupt request (clears on read)
+OC0IRQER 2 R – Compare Rising interrupt missed (clears on read)
+OC0IRQEF 3 R – Compare Falling interrupt missed (clears on read)
+OC0CEMPTY 4 R – Compare Register Empty (clears on writing OC0COMP)
+OC0CUNDER 5 R – Compare Register Underrun (clears on read)
+OC0IRQMCE 6 RW 0 Compare Register Empty Interrupt Enable
+OC0IRQMCU 7 RW 0 Compare Register Underrun Interrupt Enable
+
+########## PAGE 64 ##########
+AND9349/D
+www.onsemi.com
+64
+INPUT CAPTURE 0/1
+The input capture units allow the timing of digital signals
+to be measured, together with a timer. On a programmable
+edge of the input signal (either rising or falling), the value of
+the selected timer is latched. Not only external signals may
+be measured; a wide variety of capture sources are
+programmable. Two timers plus an input capture unit may
+be used, for example, to measure the frequency of an
+unknown signal with respect to a known clock source.
+Register: IC0CAPT0, IC0CAPT1
+Table 114. IC0CAPT0, IC0CAPT1
+Name Bits R/W Reset Description
+IC0CAPT 15:0 R – Input Capture 0 Capture Value
+Register: IC0MODE
+Table 115. IC0MODE
+Name Bits R/W Reset Description
+IR0SRC 1:0 RW 00 Source Timer
+Bits Meaning
+00
+01
+10
+11
+Off
+Timer 0
+Timer 1
+Timer 2
+IC0EDGE 3:2 RW 00 Trigger Signal Edge
+Bits Meaning
+00
+01
+10
+11
+Invalid
+Rising Edge
+Falling Edge
+Invalid
+IC0LBUF 4 RW 0 Capture Buffering; 0 = No Buffering, 1 = ICxCAPT0 updated on access of
+ICxCAPT1
+IC0IRQMCF 5 RW 0 Capture Register Full Interrupt Enable
+IC0IRQMCO 6 RW 0 Capture Register Overrrun Interrupt Enable
+Register: IC0STATUS
+Table 116. IC0STATUS
+Name Bits R/W Reset Description
+IC0IRQR 0 R − Capture interrupt request
+IC0IRQE 1 R − Capture interrupt missed (clear on read)
+IC0TRIG 7:4 RW 0000 Capture Trigger Signal
+Bits Meaning
+0000
+0001
+0010
+0011
+0100
+0101
+0110
+0111
+1000
+1001
+1010
+1011
+1100
+1101
+1111
+IC0 Capture Pin (IC1: IC1 Capture Pin)
+IC1 Capture Pin (IC1: IC0 Capture Pin)
+OC0 Compare Pin (IC1: OC1 Compare Pin)
+OC1 Compare Pin (IC1: OC0 Compare Pin)
+Timer 0 Out
+Timer 0 Clock
+Timer 1 Out
+Timer 1 Clock
+Timer 2 Out
+Timer 2 Clock
+Analog Comparator 0 (IC1: Analog Comparator 1)
+Analog Comparator 1 (IC1: Analog Comparator 0)
+IC1 Capture Source (IC1: IC0 Capture Source)
+Capture Zero
+Capture One
+
+########## PAGE 65 ##########
+AND9349/D
+www.onsemi.com
+65
+UART 0/1
+The UARTs provide two Universal Asynchronous
+Receiver Transmitters.
+Features
+• Standard Universal Asynchronous Receiver Transmitter
+• Word Lengths: 5, 6, 7, 8, 9 bits
+• Stop Bits: 1, 2 (Note that this Only Affects the
+Transmitter, the Receiver will Always Accept
+1 Stop bit)
+• Arbitrary Baud Rates can be Generated Using a Timer
+as Baud Rate Generator
+• Parity Generation: None, Even, Odd (Software)
+• Break Detection
+• Optional Receiver Deglitching for Improved Noise
+Immunity
+Register: U0SHREG
+Table 117. U0SHREG
+Name Bits R/W Reset Description
+U0SHREG 7:0 RW – UART 0 Shift Register
+Register: U0MODE
+Table 118. U0MODE
+Name Bits R/W Reset Description
+U0BRG 1:0 RW 00 Baud Rate Generator (TxOUT = 16x Baudrate)
+Bits Meaning
+00
+01
+10
+11
+Off
+Timer 0
+Timer 1
+Timer 2
+U0WL 4:2 RW 000 Word Size
+Bits Meaning
+000
+001
+010
+011
+100
+101
+110
+111
+8 Bits
+9 Bits
+invalid
+invalid
+invalid
+5 Bits
+6 Bits
+7 Bits
+U0STOP 5 RW 0 Stop Bits; 0 = 1 Stop Bit, 1 = 2 Stop Bits
+U0RXDGL 6 RW 0 Receiver Deglitch (Figure 8)
+U0TXBRK 7 RW 0 Transmit Break Enable
+Figure 19. UART Deglitch
+Rx
+UxDGL
+
+########## PAGE 66 ##########
+AND9349/D
+www.onsemi.com
+66
+Register: U0CTRL
+Table 119. U0CTRL
+Name Bits R/W Reset Description
+U0RXEN 0 RW 0 Receiver enable
+U0TXEN 1 RW 0 Transmitter enable
+U0RXIE 2 RW 0 Receiver interrupt enable
+U0TXIE 3 RW 0 Transmitter interrupt enable
+U0FEIE 4 RW 0 Receiver Framing error interrupt enable
+U0BRKIE 5 RW 0 Receiver Break detect change interrupt enable (interrupt is activated ifU0BRKDET changes, and cleared when U0BRKDET is read)
+U0MCE 6 RW 0 Multiprocessor Communication Enable; If set, the received byte is onlystored in the receive register if the topmost bit is set
+U0TX8 7 RW 0 8th Tx Bit
+Register: U0STATUS
+Table 120. U0STATUS
+Name Bits R/W Reset Description
+U0RXFULL 0 R − Rx Full interrupt request
+U0RXOVER 1 R − Rx Overrun interrupt request (clears on read)
+U0TXEMPTY 2 R − Tx Empty interrupt request
+U0TXUNDER 3 R − Tx Underrun interrupt request (clears on read)
+U0FERR 4 R − Rx Framing Error Interrupt request (clears on read)
+U0BRKDET 5 R − Rx Break Detected (interrupt clears on read)
+U0TXIDLE 6 R − Tx Idle
+U0RX8 7 R − 8th Rx Bit
+RANDOM NUMBER GENERATOR/AES
+The Random Number Generator and Advanced
+Encryption Standard (AES) engine are documented in the
+AX8052 Cryptographic Functions Programming Manual.
+ON Semiconductor and      are trademarks of Semiconductor Components Industries, LLC dba ON Semiconductor or its subsidiaries i n the United States and/or other countries.
+ON Semiconductor owns the rights to a number of patents, trademarks, copyrights, trade secrets, and other intellectual property . A listing of ON Semiconductor’s product/patent
+coverage may be accessed at www.onsemi.com/site/pdf/Patent−Marking.pdf. ON Semiconductor reserves the right to make changes without further notice to any products herein.
+ON Semiconductor makes no warranty, representation or guarantee regarding the suitability of its products for any particular purpose, nor does ON Semiconductor assume any liability
+arising out of the application or use of any product or circuit, and specifically disclaims any and all liability, including without limitation special, consequential or incidental damages.
+Buyer is responsible for its products and applications using ON Semiconductor products, including compliance with all laws, reg ulations and safety requirements or standards,
+regardless of any support or applications information provided by ON Semiconductor. “Typical” parameters which may be provided in ON Semiconductor data sheets and/or
+specifications can and do vary in different applications and actual performance may vary over time. All operating parameters, including “Typicals” must be validated for each customer
+application by customer’s technical experts. ON Semiconductor does not convey any license under its patent rights nor the right s of others. ON Semiconductor products are not
+designed, intended, or authorized for use as a critical component in life support systems or any FDA Class 3 medical devices or medical devices with a same or similar classification
+in a foreign jurisdiction or any devices intended for implantation in the human body. Should Buyer purchase or use ON Semiconductor products for any such unintended or unauthorized
+application, Buyer shall indemnify and hold ON Semiconductor and its officers, employees, subsidiaries, affiliates, and distributors harmless against all claims, costs, damages, and
+expenses, and reasonable attorney fees arising out of, directly or indirectly, any claim of personal injury or death associated with such unintended or unauthorized use, even if such
+claim alleges that ON Semiconductor was negligent regarding the design or manufacture of the part. ON Semiconductor is an Equal  Opportunity/Affirmative Action Employer. This
+literature is subject to all applicable copyright laws and is not for resale in any manner.
+PUBLICATION ORDERING INFORMATION
+N. American Technical Support: 800−282−9855 Toll Free
+USA/Canada
+Europe, Middle East and Africa Technical Support:
+Phone: 421 33 790 2910
+Japan Customer Focus Center
+Phone: 81−3−5817−1050
+AND9349/D
+LITERATURE FULFILLMENT:
+Literature Distribution Center for ON Semiconductor
+19521 E. 32nd Pkwy, Aurora, Colorado 80011 USA
+Phone: 303−675−2175 or 800−344−3860 Toll Free USA/Canada
+Fax: 303−675−2176 or 800−344−3867 Toll Free USA/Canada
+Email: orderlit@onsemi.com
+ON Semiconductor Website: www.onsemi.com
+Order Literature: http://www.onsemi.com/orderlit
+For additional information, please contact your local
+Sales Representative
+◊

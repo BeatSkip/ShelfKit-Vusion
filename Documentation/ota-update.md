@@ -117,6 +117,18 @@ A tag that has no bootloader yet gets one with the merged HEX from
 application's entry in the jump-vector slot — see
 [ShelfKit-Firmware/Bootloader/README.md](../ShelfKit-Firmware/Bootloader/README.md#installing-the-bootloader-and-the-application-at-once).
 
+### The reset after an update
+
+`cpu_reset()` writes `PCON |= 0x10` (SWRESET) instead of jumping to `0x0000`. A jump
+does not reset the peripherals: the bootloader inherited the application's SPI and
+oscillator state and hung on its first flash read, so the tag stored the image and
+then sat there until it was reset by hand. SWRESET restarts the core and peripherals
+exactly like a power-on.
+
+The commit header write is checked too: if programming it fails the tag logs
+`fw header FAILED` and keeps running the firmware it already has, rather than
+resetting into a boot that has nothing to apply.
+
 ### The reset vector is part of the bootloader
 
 The bootloader only runs if `0x0000` holds `ljmp 0xD838`. That is what
@@ -174,6 +186,18 @@ compiled-in boot logo worth 11,248 bytes — was linked into both radio images w
 nothing referenced it any more (the boot demo it belonged to was replaced by the
 shelf-link main). It was deleted from both targets, which also shrank the hub from
 37,775 to 26,210 bytes.
+
+### The reset after an update
+
+`cpu_reset()` writes `PCON |= 0x10` (SWRESET) instead of jumping to `0x0000`. A jump
+does not reset the peripherals: the bootloader inherited the application's SPI and
+oscillator state and hung on its first flash read, so the tag stored the image and
+then sat there until it was reset by hand. SWRESET restarts the core and peripherals
+exactly like a power-on.
+
+The commit header write is checked too: if programming it fails the tag logs
+`fw header FAILED` and keeps running the firmware it already has, rather than
+resetting into a boot that has nothing to apply.
 
 ### The reset vector is part of the bootloader
 

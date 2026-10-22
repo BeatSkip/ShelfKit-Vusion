@@ -381,10 +381,18 @@ static uint8_t ota_spi(uint8_t out)
      * spi.c): mode 0, MSB first, one byte per SPSHREG write, ready when
      * SPSTATUS bit 0 sets. A bit-banged version read 0x000000 for the JEDEC
      * id on hardware while this one reads 0x1F4200, so the bit-bang was the
-     * broken part, not the flash. */
+     * broken part, not the flash.
+     *
+     * The wait is bounded: after a soft reset (ljmp 0x0000) the chip is not
+     * power-cycled, and an SPI clock that is not actually running would hang
+     * the bootloader here forever with no output. Giving up lets the OTA check
+     * fail and the tag boot normally instead. */
+    uint16_t guard = 0xFFFF;
+
     SPSHREG = out;
     while (!(SPSTATUS & 0x01))
-        ;
+        if (!--guard)
+            return 0xFF;
     return SPSHREG;
 }
 
@@ -393,7 +401,10 @@ static void ota_spi_begin(void)
     /* A soft reset (ljmp 0x0000) does not reset the peripherals, so start from
      * a known SPI state instead of inheriting the application's. */
     SPMODE = 0x00;                  /* make sure any previous master is off */
-    SPCLKSRC = 0xD8;                /* FRC-derived, slow: the app's setting */
+    /* SYSCLK is what the CPU itself executes from (CLKCON = 0x00), so it is
+     * guaranteed to be running after a soft reset; the application's 0xD8 is
+     * FRC-derived and was not reliable in that state. The flash tolerates it. */
+    SPCLKSRC = 0x06;
     DIRC |= 0x07;                   /* CS, SCK, MOSI out ... */
     DIRC &= (uint8_t)~0x08;         /* ... MISO in */
     PORTC_0 = 1;                    /* flash CS idle high */
@@ -715,9 +726,12 @@ __start__stack:
         OSCCALIB = 0x01;
         IE_5 = 1;
         do {
+            uint16_t guard = 0xFFFF;
             for (;;) {
                 uint8_t oc = OSCCALIB;
                 if (oc & 0x40)
+                    break;
+                if (!--guard)       /* no calibration source: do not hang */
                     break;
                 enter_standby();
             }

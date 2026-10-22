@@ -199,7 +199,7 @@ identity assignment.
 ### Updating a tag's firmware over the air
 
 **Fleet** → click a tag → under **Firmware update** pick one of the HEX files from `Release/`
-(written by `ShelfKit-Firmware/Tooling/build-all.py`), then **Reflash**. The `*-full-*.hex`
+(written by `ShelfKit-Firmware/Tooling/build-all.py`), then **Reflash**. The `*-full-*.hex` (`vusion-full-latest.hex`)
 bundles are filtered out on purpose: they carry the bootloader as well and cannot go over the
 air.
 

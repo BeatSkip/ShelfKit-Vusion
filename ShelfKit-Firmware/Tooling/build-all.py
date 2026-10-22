@@ -3,7 +3,7 @@
 
     python ShelfKit-Firmware/Tooling/build-all.py
     python ShelfKit-Firmware/Tooling/build-all.py --version 1.2.0
-    python ShelfKit-Firmware/Tooling/build-all.py --targets vusion,bootloader --clean
+    python ShelfKit-Firmware/Tooling/build-all.py --targets vusion,bootloader
 
 Each target is built with the same flags SDCC-MDF uses, because they are read from
 the target's own ``sdcc-project.json`` and the board definition it names:
@@ -16,9 +16,12 @@ the target's own ``sdcc-project.json`` and the board definition it names:
   ``build.output_name``.
 
 The build happens in a temporary directory; the results land in ``Release/`` at the
-repository root as ``<output_name>-<version>-<date>.hex`` (with the ``.map`` beside
-it, which is where you check the placement). Nothing in ``build/`` is touched, so a
-VS Code build and this script never fight over object files.
+repository root. Names are stable: ``<target>-latest.hex``, or
+``<target>-<version>.hex`` when ``--version`` is given, with the ``.map`` beside it
+(which is where you check the placement). Old ``.hex``/``.map`` files in the output
+folder are removed first, so a stale build cannot be flashed by mistake and the
+folder never accumulates copies. Nothing in ``build/`` is touched, so a VS Code
+build and this script never fight over object files.
 
 Requires SDCC on ``PATH`` or in its default Windows install.
 """
@@ -172,14 +175,8 @@ def git(*args: str) -> str:
 
 
 def build_stem(name: str, version: str | None) -> str:
-    date = datetime.now().strftime("%Y%m%d")
-    if version:
-        return f"{name}-{version}-{date}"
-    stamp = git("rev-parse", "--short", "HEAD")
-    if stamp:
-        dirty = "-dirty" if git("status", "--porcelain") else ""
-        return f"{name}-{date}-{stamp}{dirty}"
-    return f"{name}-{date}"
+    """``<name>-<version>``, or ``<name>-latest`` when no version was given."""
+    return f"{name}-{version}" if version else f"{name}-latest"
 
 
 def slug(name: str) -> str:
@@ -400,9 +397,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--targets", default="all",
                         help="comma separated: " + ", ".join(TARGETS) + " (default all)")
-    parser.add_argument("--version", help="version tag for the file names (default: date + git hash)")
+    parser.add_argument("--version",
+                        help="name the files <target>-<version>.hex (default: <target>-latest.hex)")
     parser.add_argument("--out", default=str(DEFAULT_OUT), help=f"output folder (default {DEFAULT_OUT})")
-    parser.add_argument("--clean", action="store_true", help="remove existing .hex/.map first")
+    parser.add_argument("--clean", action="store_true",
+                        help="accepted for compatibility; old .hex/.map are always removed")
     parser.add_argument("--no-bundle", action="store_true",
                         help="do not also write the bootloader+application HEX")
     args = parser.parse_args(argv)
@@ -418,9 +417,10 @@ def main(argv: list[str] | None = None) -> int:
 
     out_dir = Path(args.out).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
-    if args.clean:
-        for stale in [*out_dir.glob("*.hex"), *out_dir.glob("*.map")]:
-            stale.unlink()
+    # Always: the names are stable now, so a leftover build would sit next to the
+    # fresh one and invite flashing the wrong file.
+    for stale in [*out_dir.glob("*.hex"), *out_dir.glob("*.map")]:
+        stale.unlink()
 
     print(f"SDCC {find_tool('sdcc')}")
     print(f"output {out_dir}")

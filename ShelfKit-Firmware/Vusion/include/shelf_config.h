@@ -27,7 +27,7 @@
  * SHELFHW_TICKS_PER_S (640) per second in 16 bits, so anything above ~102 s
  * overflows. The 1 % duty cycle of the 868.3 MHz sub-band is not a concern at
  * this rate (a poll is a few milliseconds of air). */
-#define SHELF_POLL_INTERVAL_S   60
+#define SHELF_POLL_INTERVAL_S   16
 
 /* How long the tag listens after each poll, in seconds. Everything the hub sends
  * (images, firmware, a new identity) follows a POLL, so this window is the only

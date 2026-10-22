@@ -84,7 +84,7 @@ writes the HEX for that: one file with both images in it, so it is a single flas
 operation instead of two.
 
 ```
-python ShelfKit-Firmware/Tooling/build-all.py          # Release/vusion-full-<date>-<hash>.hex
+python ShelfKit-Firmware/Tooling/build-all.py          # Release/vusion-full-latest.hex
 ```
 
 ```
@@ -210,6 +210,12 @@ Three things had to be right for that read, and each was wrong at first:
 2. **The other chips on the shared bus must be deselected.** The vendor startup
    drives PB1 (NFC CS) low and leaves PA1 (EPD CS) floating, so their chips drive
    MISO while the flash is being read; both are parked high now.
-3. **Use the hardware SPI, not a bit-bang.** A bit-banged read returned
+3. **Survive a soft reset.** The application resets with `ljmp 0x0000`, which
+   does not reset the peripherals: the SPI clock source and oscillator
+   calibration are whatever the app left behind. The bootloader therefore clocks
+   its SPI from SYSCLK (what the CPU itself runs on, so it cannot be stopped),
+   bounds its SPI and FRC-calibration waits so it can never hang silently, and
+   the application disables the SPI before the `ljmp`.
+4. **Use the hardware SPI, not a bit-bang.** A bit-banged read returned
    `0x000000` on hardware while the application's hardware-SPI read of the same
    chip returns `0x1F4200`.

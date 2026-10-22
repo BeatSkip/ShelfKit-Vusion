@@ -24,7 +24,7 @@ python ShelfKit-Firmware/Tooling/build-all.py --clean
 
 ```
 === one HEX for both ===
-  Release/vusion-full-20261021-12a46fc-dirty.hex
+  Release/vusion-full-latest.hex
   bootloader 0xD800..0xF876  (8314 bytes)
   application 0x0003..0xA484  (42088 bytes, entry 0x021B)
   jump vector 0xD7FE = 1B 02
@@ -53,7 +53,9 @@ The compiler work happens in a temp directory, so a VS Code build and this scrip
 object files. Each HEX lands in `Release/` with its `.map` next to it — the map is where you confirm
 placement, and the `.mem` figures are printed in the summary.
 
-**File names:** `<target>-<version>-<date>.hex` when you pass `--version`, otherwise
+**File names:** `<target>-latest.hex` by default, or `<target>-<version>.hex` when you
+pass `--version`. The output folder is cleared of old `.hex`/`.map` files on every
+run, so `Release/` always holds exactly the build you just made. The old wording was
 `<target>-<date>-<git hash>[-dirty].hex`. The target name comes from the folder (`vusion`,
 `vusion-hub`, `bootloader`), not from `build.output_name` — both Vusion projects call their build
 `firmware`, which would collide.

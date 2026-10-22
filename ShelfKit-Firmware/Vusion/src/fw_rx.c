@@ -52,14 +52,20 @@ static uint8_t __xdata dump_frame[SM_DUMP_HDR + SM_DUMP_CHUNK];
 static const uint8_t __xdata * __xdata msg;
 static uint8_t __xdata msg_len;
 
-/* Back to the reset vector: the bootloader's jump when it is installed, the
- * application's own when it is not. Internal RAM is too tight for anything
- * fancier, and this is exactly what a reset is. */
+/* A real chip reset through PCON.SWRESET, not a jump: the bootloader has to
+ * start from the same state as a power-on or it can hang on its first flash
+ * read. */
 static void cpu_reset(void)
 {
-    __asm
-    ljmp    0x0000
-    __endasm;
+    /* PCON.SWRESET (bit 4) is the chip's own software reset: the core and the
+     * peripherals restart exactly as after power-on (AND9349/D, PCON bit 4 -
+     * "writing 1 resets the chip"). `ljmp 0x0000` only jumped, so the bootloader
+     * inherited the application's SPI/oscillator state and hung on its first
+     * flash read: the tag wrote the OTA image and then needed a manual reset
+     * before the bootloader would program it. */
+    PCON |= 0x10;
+    for (;;)
+        ;                       /* the reset takes effect here */
 }
 
 static void abort_transfer(void)
@@ -161,7 +167,14 @@ static void on_end(void)
     }
 
     ota_header_build(header, total, crc_want);
-    extflash_write(OTA_HDR_ADDR, header, OTA_HDR_BYTES);
+    if (!extflash_write(OTA_HDR_ADDR, header, OTA_HDR_BYTES)) {
+        /* without the header the bootloader has nothing to find: say so and let
+         * the tag keep the firmware it already runs instead of resetting into a
+         * boot that will do nothing */
+        log_puts("fw header FAILED, flash busy\r\n");
+        abort_transfer();
+        return;
+    }
     log_puts("fw stored, resetting\r\n");
     /* the radio/flash are done: reset into the bootloader, which finds the magic */
     cpu_reset();
