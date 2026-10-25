@@ -157,6 +157,32 @@ For a shell, [ShelfKit-Server/shelfkit/hubhost.py](ShelfKit-Server/shelfkit/hubh
 without the page: `serve` watches announcements and pushes new images, `send` pushes one, `ping`
 checks the hub.
 
+## Making a release
+
+`Release/` is git-ignored - it is build output - so a release is a git tag plus the four
+HEX files as release assets:
+
+```bash
+# 1. name the artefacts after the version (this also clears the previous build)
+python ShelfKit-Firmware/Tooling/build-all.py --version 1.0.0
+
+# 2. tag the commit the build came from
+git tag -a v1.0.0 -m "ShelfKit 1.0.0"
+git push origin main --tags
+
+# 3. attach the HEX files to a GitHub release for that tag:
+#    https://github.com/BeatSkip/ShelfKit-skeleton/releases/new?tag=v1.0.0
+```
+
+Attach all four: `vusion-1.0.0.hex` (tag), `vusion-hub-1.0.0.hex` (hub),
+`bootloader-1.0.0.hex` and `vusion-full-1.0.0.hex` (the tag bundle - the one to flash,
+because the app-only hex bypasses the bootloader). The `.map` files next to them are
+build output and do not belong in a release.
+
+Building without `--version` produces `*-latest.hex` instead, which is what the build
+script prints as the flash command; use it while iterating, and the versioned names when
+you publish.
+
 ## Where this is going
 
 ShelfKit is a **skeleton on purpose** — the point is to grow it. The direction:

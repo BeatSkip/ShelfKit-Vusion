@@ -95,7 +95,7 @@ range is everything the firmware writes.
 ## Flashing a build
 
 ```
-python ShelfKit-Firmware/Tooling/axsem-flasher.py Release/vusion-20261018-1326e7e-dirty.hex -p COM7
+python ShelfKit-Firmware/Tooling/axsem-flasher.py Release/vusion-full-latest.hex -p COM7
 ```
 
 **SDCC: Flash calls this too.** `upload` in each target's `sdcc-project.json` runs this script with
