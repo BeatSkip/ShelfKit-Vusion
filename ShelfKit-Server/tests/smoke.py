@@ -31,7 +31,7 @@ SERVER = Path(__file__).resolve().parents[1]
 REPO = SERVER.parent
 sys.path.insert(0, str(SERVER))
 
-from shelfkit import firmware, serial_link, store as store_mod, webapp  # noqa: E402
+from shelfkit import firmware, hubhost, serial_link, store as store_mod, webapp  # noqa: E402
 from shelfkit.app import App  # noqa: E402
 from shelfkit.serial_link import PortSpec  # noqa: E402
 
@@ -51,6 +51,7 @@ class FakePort:
     """A hub that answers like the firmware does."""
 
     def __init__(self) -> None:
+        self.frames: list[bytes] = []   # DATA payloads, one entry per frame
         self._open = False
         self._dtr = False
         self._rts = False
@@ -108,10 +109,22 @@ class FakePort:
             addr = frame[0] | (frame[1] << 8)
             self.feed(f"SENT {addr:04x} ok att=1\r\n")
             payload = frame[2:-1]
+            self.frames.append(payload)
             if payload and payload[0] == 9:          # a flash read-back request
                 start = payload[1] | (payload[2] << 8) | (payload[3] << 16)
                 length = payload[4] | (payload[5] << 8)
                 self.stream(addr, start, length)
+        elif line.startswith("B"):
+            # a batch: address, count, then (length, payload) per frame - the same
+            # walk the hub does, so the test catches a format the hub would reject
+            raw = bytes.fromhex(line[1:])
+            addr = raw[0] | (raw[1] << 8)
+            off, count = 3, raw[2]
+            for _ in range(count):
+                ln = raw[off]
+                self.frames.append(raw[off + 1: off + 1 + ln])
+                off += 1 + ln
+            self.feed(f"SENT {addr:04x} ok att=1\r\n")
         return len(data)
 
     def stream(self, addr: int, start: int, length: int) -> None:
@@ -190,6 +203,8 @@ def main() -> int:
         return False
 
     try:
+        # the hub's boot banner is what state() and the push read capabilities from
+        PORTS["SMOKE1"].feed("*** ShelfKit hub, node 0001 net 5a dump=1 batch=1\r\n")
         PORTS["SMOKE1"].feed("POLL src=0100 seq=01 rssi=-30 up=12s att=1 hubrssi=-33 vdd=0300\r\n")
         time.sleep(0.2)
         check("a poll makes a tag appear", [a for a, _ in get("/api/state")["tags"]] == [0x100])
@@ -213,16 +228,27 @@ def main() -> int:
         label = post("/api/tags/0100/service", {})["result"]
         check("service label queued", label.get("ok") is True and label.get("queued"), label)
         check("the queue delivered it on the poll", wait_job(label["queued"]), label)
-        frames = [w for w in PORTS["SMOKE1"].written if w.startswith("S")]
-        check(f"the label went out as {IMAGE_FRAMES} image frames", len(frames) == IMAGE_FRAMES,
-              len(frames))
+        check(f"the label went out as {IMAGE_FRAMES} image frames",
+              len(PORTS["SMOKE1"].frames) >= IMAGE_FRAMES, len(PORTS["SMOKE1"].frames))
 
         # an ordinary image push
-        before = len(PORTS["SMOKE1"].written)
+        before = len(PORTS["SMOKE1"].frames)
+        check("the hub advertises batching", app.hub_capabilities().get("batch") is True,
+              app.hub_capabilities())
+        # ── batched DATA line (format only: the fake hub below does not advertise
+        #    batch=1, so the push itself still goes out one frame at a time) ──
+        line = hubhost.build_batch_line(0x1234, [b"\x01", b"\x02" + b"\x00" * 30])
+        raw = bytes.fromhex(line[1:])
+        check("batch line is a B line", line[0] == "B")
+        check("batch line checksum", (sum(raw) & 0xFF) == 0)
+        check("batch line carries addr and count",
+              raw[0] == 0x34 and raw[1] == 0x12 and raw[2] == 2)
+        check("batch line length byte", raw[3] == 1 and raw[4] == 1 and raw[5] == 31)
+
         check("send accepted", app.send(0x100) is True)
         check("the push finished", wait_idle())
-        sent = [w for w in PORTS["SMOKE1"].written[before:] if w.startswith("S")]
-        check("an image is still 404 frames", len(sent) == IMAGE_FRAMES, len(sent))
+        sent = len(PORTS["SMOKE1"].frames) - before
+        check("an image is still 404 frames", sent == IMAGE_FRAMES, sent)
 
         # the flash read-back: request, collect from the pane log, save, serve
         result = post("/api/tags/0100/read", {})["result"]

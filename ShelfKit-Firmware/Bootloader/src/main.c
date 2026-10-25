@@ -750,6 +750,10 @@ __start__stack:
 
     orig_jmp_vector_mask = 0;
 
+    /* 38400 stays: the bootloader is not reflashable on this board, and the app
+     * re-initialises the same UART at its own rate as soon as it starts. The two
+     * rates therefore differ, and the bootloader's few boot lines are only
+     * readable with a 38400 terminal. */
     uart_timer0_baud(CLKSRC_FRCOSC, 38400, 20000000);
     uart0_init(0, 8, 1);
 

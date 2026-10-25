@@ -17,7 +17,7 @@ tag announces itself and its file is new or changed since the last successful pu
 --rotate, default 90 = a 296x152 landscape source) and sent. The tag refreshes its panel
 (~15 s) at the end of the transfer.
 
-Hub command channel (38400 8N1, one line per command, hex only):
+Hub command channel (115200 8N1, one line per command, hex only):
     P                                 -> PONG
     S<addr:4><payload><chk:2>         -> SENT <addr> ok|fail att=N     (reliable DATA frame)
 chk = two's complement of the byte sum, so addr+payload+chk adds up to 0 mod 256.
@@ -38,7 +38,7 @@ try:
 except ImportError:
     sys.exit("pyserial is required:  pip install pyserial")
 
-BAUD = 38400
+BAUD = 115200
 OP_BEGIN, OP_CHUNK, OP_END = 1, 2, 3
 PLANE_BW, PLANE_RED = 0, 1
 CHUNK = 28                  # SM_IMG_CHUNK
@@ -55,6 +55,22 @@ RETRY_COOLDOWN_S = 30.0
 
 RE_POLL = re.compile(r"^POLL src=([0-9a-fA-F]{4})\b")
 RE_SENT = re.compile(r"^SENT ([0-9a-fA-F]{4}) (ok|fail) att=(\d+)")
+
+
+# Frames per 'B' line. One serial round-trip per batch instead of per frame; the
+# hub still sends them one at a time and waits for each acknowledgement, so the
+# air protocol is unchanged.
+BATCH_FRAMES = 8
+BATCH_RETRY_S = 0.3     # pause between batch retries: the tag's window is short
+
+
+def build_batch_line(addr, frames):
+    """The 'B' line for several DATA frames: addr, count, then (len, payload) each."""
+    body = bytes([addr & 0xFF, addr >> 8, len(frames)])
+    for frame in frames:
+        body += bytes([len(frame)]) + bytes(frame)
+    chk = (-sum(body)) & 0xFF
+    return "B" + (body + bytes([chk])).hex()
 
 
 def build_line(cmd, addr, payload=b""):

@@ -9,7 +9,7 @@ RTS drives RESET. The boot pin selects the boot mode (PB3 on the tag):
 
 The dump firmware boots into the application and prints the flash
 hexdump once, ending with "*** end of dump ***". Everything runs at
-38400 baud, the bootloader's native rate.
+115200 baud, matching the firmware.
 
 Usage:
     python Data/flashdump.py COM7
@@ -32,7 +32,7 @@ except ImportError:
     sys.exit("pyserial is required:  pip install pyserial")
 
 END_MARKER = b"*** end of dump ***"
-DEFAULT_BAUD = 38400
+DEFAULT_BAUD = 115200
 
 
 class Tag:

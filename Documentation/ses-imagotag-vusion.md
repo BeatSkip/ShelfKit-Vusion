@@ -4,7 +4,7 @@
 **MCU:** Axsem AX8052F143 — 8051 core + AX5043 sub-GHz radio, 26 MHz. 256 B IRAM, 8 KB XRAM, 59,389 B code space, ~150 B of stack left.
 **Panel:** Good Display GDEW026Z39 — 296×152 native, black/white/red, IL0373, SPI, OTP waveform. Driven rotated (152 wide × 296 tall) as two 5,624-byte planes.
 **Also on board:** NFC (FM11NT081DS), SPI NOR flash.
-**Toolchain:** SDCC 3.6.0 (`-mmcs51 --model-small`), VS Code + SDCC-MDF extension. Flashed over the AX8052 UART bootloader at 38400 8N1 (BOOT pin held by the adapter's DTR).
+**Toolchain:** SDCC 3.6.0 (`-mmcs51 --model-small`), VS Code + SDCC-MDF extension. Flashed over the AX8052 UART bootloader at 115200 8N1 (BOOT pin held by the adapter's DTR).
 **Firmware:** polls a hub every 60 s on 868.3 MHz (network id 0x5A, hub node 0x0001) with reliable, retried frames, then sleeps for the rest of the minute (radio in `AXRADIO_MODE_OFF`, 3 s listening window after each poll); an image arrives in 28-byte chunks straight into the panel controller (no frame buffer in RAM), then a ~15 s full refresh and deep sleep.
 
 **Gotchas:**

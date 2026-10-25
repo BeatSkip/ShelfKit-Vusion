@@ -126,19 +126,23 @@ uint16_t shelfhw_random(void)
  * arrived as "ERR chk" / "ERR len", which is exactly what stalled an image push
  * when another tag polled at the same time. Collect the byte during the wait for
  * the transmitter instead of losing it. */
-#define HOST_RX_RING    64u
+/* Must hold one whole host line, not just a burst: a batched DATA line is ~537
+ * characters (46 ms at 115200), and while the main loop is inside the radio that
+ * much can arrive at once. At 64 bytes the line arrived truncated, which is what
+ * showed up as "ERR cmd" / "ERR len" on a healthy hub. */
+#define HOST_RX_RING    1024u
 static uint8_t __xdata host_rx_buf[HOST_RX_RING];
-static uint8_t __xdata host_rx_head;
-static uint8_t __xdata host_rx_tail;
+static uint16_t __xdata host_rx_head;
+static uint16_t __xdata host_rx_tail;
 
 static void host_rx_pump(void)
 {
     while (U0STATUS & 0x01) {
         uint8_t c = U0SHREG;
-        uint8_t next;
+        uint16_t next;
 
         U0CTRL |= 0x04;             /* re-arm the RX flag, like iocore */
-        next = (uint8_t)((host_rx_head + 1u) & (HOST_RX_RING - 1u));
+        next = (uint16_t)((host_rx_head + 1u) & (HOST_RX_RING - 1u));
         if (next != host_rx_tail) { /* full: drop, the frame will be retried */
             host_rx_buf[host_rx_head] = c;
             host_rx_head = next;
@@ -307,7 +311,10 @@ void shelfhw_init(void)
     wtimer1_setclksrc(CLKSRC_FRCOSC, 7);
     wtimer_init();
 
-    uart_timer0_baud(CLKSRC_FRCOSC, 38400, 20000000);
+    /* 115200: the timer reload rounds to 11 from 20 MHz (113.6 kbaud, 1.4% low,
+     * the same rounding 38400 already had). Both boards and their bootloaders
+     * have to agree, so the baud lives next to the UART setup on both sides. */
+    uart_timer0_baud(CLKSRC_FRCOSC, 115200, 20000000);
     uart0_init(0, 8, 1);
 
     IE = 0x40;
@@ -336,7 +343,7 @@ int16_t host_rx_getc(void)
     host_rx_pump();
     if (host_rx_tail != host_rx_head) {
         c = host_rx_buf[host_rx_tail];
-        host_rx_tail = (uint8_t)((host_rx_tail + 1u) & (HOST_RX_RING - 1u));
+        host_rx_tail = (uint16_t)((host_rx_tail + 1u) & (HOST_RX_RING - 1u));
         return c;
     }
     return -1;

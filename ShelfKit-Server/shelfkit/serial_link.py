@@ -14,7 +14,9 @@ from typing import Callable
 import serial
 from serial.tools import list_ports
 
-DEFAULT_BAUD = 38400
+# The applications' rate (shelfhw.c). The bootloader on the same wire still runs at
+# 38400, so its few boot lines show up here as noise - see "The two line rates".
+DEFAULT_BAUD = 115200
 READ_TIMEOUT_S = 0.05
 
 

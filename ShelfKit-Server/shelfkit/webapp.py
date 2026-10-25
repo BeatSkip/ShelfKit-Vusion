@@ -10,7 +10,7 @@ long-lived poll connection per browser tab. The API is small and boring:
     GET  /api/files?dir=...    one folder's sub-directories and image files
     GET  /api/log              both logs merged, as plain text (copy/download)
     GET  /api/preview.png?t=<key>&kind=original|device   a rendered frame
-    POST /api/pane/<key>/open      {"port": "...", "baud": 38400}
+    POST /api/pane/<key>/open      {"port": "...", "baud": 115200}
     POST /api/pane/<key>/close
     POST /api/pane/<key>/clear
     POST /api/pane/<key>/line      {"line": "dtr"|"rts", "value": true|false}

@@ -950,7 +950,19 @@ class App:
                 self.status = f"forgot {len(hexes)} tag(s)"
         return {"forgot": len(hexes), "hexes": hexes}
 
-    def hub_capabilities(self) -> dict:
+    def _scan_caps(self, pane) -> dict:
+        with self.lock:
+            lines = [entry[3] for entry in pane.log]
+        dump = batch = banner = None
+        for line in reversed(lines):
+            if "*** ShelfKit hub" in line:
+                banner = line.strip()
+                dump = "dump=1" in line
+                batch = "batch=1" in line
+                break
+        return {"key": pane.key, "dump": dump, "batch": batch, "banner": banner}
+
+    def hub_capabilities(self, probe: bool = False) -> dict:
         """What the flashed hub can do, read off its boot banner.
 
         A hub prints `*** ShelfKit hub, node 0001 net 5a dump=1` when it can forward
@@ -961,17 +973,23 @@ class App:
         key = self.hub_key()
         pane = self.panes.get(key)
         if pane is None:
-            return {"key": key, "dump": None, "banner": None}
-        with self.lock:
-            lines = [entry[3] for entry in pane.log]
-        dump = None
-        banner = None
-        for line in reversed(lines):
-            if "*** ShelfKit hub" in line:
-                banner = line.strip()
-                dump = "dump=1" in line
-                break
-        return {"key": key, "dump": dump, "banner": banner}
+            return {"key": key, "dump": None, "batch": None, "banner": None}
+        caps = self._scan_caps(pane)
+        if caps["banner"] is None and probe:
+            # The banner is printed once, at boot. If the server started later it
+            # is not in the log, so ask the hub to say it again. This is why an
+            # otherwise capable hub reported "does not batch".
+            with self.lock:
+                start = pane.seq
+            if pane.worker.write(b"V\n"):
+                end = time.monotonic() + 1.5
+                while time.monotonic() < end:
+                    with self.lock:
+                        if pane.seq != start:
+                            break
+                    time.sleep(0.05)
+            caps = self._scan_caps(pane)
+        return caps
 
     # ── flash read-back ─────────────────────────────────────────────────────
     def read_flash(self, addr: int, start: int = 0, length: int = 0x3000) -> dict:
@@ -1296,6 +1314,33 @@ class App:
                 return True
         return False
 
+    def _send_batch(self, key: str, addr: int, frames: list[bytes], cancel) -> bool:
+        """Several DATA frames in one 'B' line: one SENT answer for the batch."""
+        pane = self.panes[key]
+        line = (hubhost.build_batch_line(addr, frames) + "\n").encode("ascii")
+        end = time.monotonic() + hubhost.CMD_RETRY_WINDOW_S
+        self.last_answer = None
+        while time.monotonic() < end:
+            if cancel.is_set():
+                return False
+            with self.lock:
+                start = pane.seq
+            if not pane.worker.write(line):
+                self.last_answer = "port closed"
+                return False
+            match = self._wait_line(key, hubhost.RE_SENT, start, hubhost.CMD_TIMEOUT_S)
+            if match is not None:
+                self.last_answer = match.group(2)
+                if int(match.group(1), 16) == addr and self.last_answer == "ok":
+                    return True
+            else:
+                self.last_answer = "no answer"
+            # The tag listens only for a moment after its poll, so a failed batch
+            # must not be re-sent as fast as the hub answers: pace it.
+            if cancel.wait(hubhost.BATCH_RETRY_S):
+                return False
+        return False
+
     def _send_frame(self, key: str, addr: int, payload: bytes, cancel) -> bool:
         """One reliable DATA frame: write the S line, wait for its SENT answer."""
         pane = self.panes[key]
@@ -1317,6 +1362,11 @@ class App:
                     return True
             else:
                 self.last_answer = "no answer"
+            # The tag only listens for a moment after its poll, so a failed batch
+            # must not be re-sent as fast as the hub answers: pace it, or the retry
+            # lands after the window has closed and burns the whole transfer.
+            if not cancel.wait(hubhost.BATCH_RETRY_S):
+                continue
             # No answer, an ERR line or a fail: the hub is busy or the frame was
             # damaged. A repeat is safe - the tag acknowledges and ignores it.
             time.sleep(hubhost.CMD_RETRY_PAUSE_S)
@@ -1541,27 +1591,58 @@ class App:
                 self.note(key, "# hub did not answer P - right port, hub flashed?")
                 return
             frames = list(hubhost.image_messages(bw, red))
-            self.note(key, f"# {len(frames)} DATA frames to send")
-            for i, frame in enumerate(frames):
-                if cancel.is_set():
-                    self.note(key, f"# cancelled at frame {i + 1}/{len(frames)}")
-                    return
-                if not self._send_frame(key, addr, frame, cancel):
+            caps = self.hub_capabilities(probe=True)
+            step = hubhost.BATCH_FRAMES if caps.get("batch") else 1
+            self.note(
+                key,
+                f"# {len(frames)} DATA frames to send"
+                + (f", {step} per command" if step > 1 else " (hub does not batch)"),
+            )
+            sent = 0
+            # Frame one is BEGIN: the tag resets the panel on it and cannot
+            # acknowledge anything for a couple of seconds. Sent alone, with the
+            # settle after it; in a batch the next seven frames land in that hole
+            # and the whole batch fails on frame 2 (seen on hardware as BAT 2/8).
+            if frames:
+                if not self._send_frame(key, addr, frames[0], cancel):
                     if cancel.is_set():
-                        self.note(key, f"# cancelled at frame {i + 1}/{len(frames)}")
+                        self.note(key, f"# cancelled at frame 1/{len(frames)}")
                     else:
                         self.note(
                             key,
-                            f"# gave up at frame {i + 1}/{len(frames)} "
+                            f"# gave up at frame 1/{len(frames)} "
                             f"(last hub answer: {self.last_answer})",
                         )
                     return
+                sent = 1
+                cancel.wait(hubhost.BEGIN_SETTLE_S)
                 with self.lock:
-                    self.progress = f"{i + 1}/{len(frames)}"
-                if i == 0:
-                    cancel.wait(hubhost.BEGIN_SETTLE_S)
-                if i % 50 == 0:
-                    self.note(key, f"# frame {i}/{len(frames)}")
+                    self.progress = f"1/{len(frames)}"
+            while sent < len(frames):
+                group = frames[sent:sent + step]
+                if step > 1:
+                    ok = self._send_batch(key, addr, group, cancel)
+                else:
+                    ok = True
+                    for frame in group:
+                        if not self._send_frame(key, addr, frame, cancel):
+                            ok = False
+                            break
+                if not ok:
+                    if cancel.is_set():
+                        self.note(key, f"# cancelled at frame {sent + 1}/{len(frames)}")
+                    else:
+                        self.note(
+                            key,
+                            f"# gave up at frame {sent + 1}/{len(frames)} "
+                            f"(last hub answer: {self.last_answer})",
+                        )
+                    return
+                sent += len(group)
+                with self.lock:
+                    self.progress = f"{sent}/{len(frames)}"
+                if sent // 50 != (sent - len(group)) // 50:
+                    self.note(key, f"# frame {sent}/{len(frames)}")
             cancel.wait(hubhost.END_SETTLE_S)
             if cancel.is_set():
                 self.note(key, "# cancelled before the refresh finished")

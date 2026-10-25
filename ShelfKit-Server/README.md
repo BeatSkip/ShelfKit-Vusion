@@ -24,6 +24,21 @@ ShelfKit-Server/
 Only `pyserial` and `pillow` are needed: the server is the standard library's `http.server` and the
 page is plain HTML/JS, with no framework and no build step.
 
+## The two line rates
+
+The **applications** run their UART at 115200 (that is what the server opens, and what
+`DEFAULT_BAUD` sets). The **bootloader** on the same wire still runs at 38400, because it
+is not reflashable on a flashed board. Both are correct and they do not have to match:
+
+- `axsem-flasher.py` defaults to **38400**, because it talks to the bootloader.
+- The server opens at **115200**, because it talks to the application.
+- The bootloader's few boot lines (`OTA jedec`, `OTA image`, `boot mode ...`) arrive at
+  38400 and show up in the console as noise. They are readable with a 38400 terminal,
+  or by reopening that pane at 38400 from the console.
+- One consequence: the server's "did the board come up in its bootloader?" learning,
+  which watches those lines, cannot see them at 115200. Set a pane to 38400 before
+  relying on it.
+
 ## Install and run
 
 ```
@@ -42,13 +57,13 @@ It prints the URL and opens a browser window on it:
 
 ```
 ShelfKit server on http://127.0.0.1:8765/
-  hub    COM4         open @ 38400 8N1
-  tag    COM3         open @ 38400 8N1
+  hub    COM4         open @ 115200 8N1
+  tag    COM3         open @ 115200 8N1
 Ctrl+C to stop
 ```
 
 Ports named on the command line are opened at startup; ports that only come from the auto-detected
-list are pre-filled but left closed. `--baud` sets the initial rate for both panes (default 38400,
+list are pre-filled but left closed. `--baud` sets the initial rate for both panes (default 115200,
 the firmware's UART0 rate). The page listens on **127.0.0.1** by default — it can drive a serial port
 and read image files on this machine, so it is not meant to be reachable from elsewhere;
 `--host 0.0.0.0` is there deliberately if you want it on your LAN.
@@ -129,7 +144,7 @@ The server itself never touches those lines otherwise. Opening a port still re-a
 driver does that, not this program), so opening it logs exactly what they were left at:
 
 ```
-# COM4 open @ 38400 8N1, DTR released, RTS released
+# COM4 open @ 115200 8N1, DTR released, RTS released
 ```
 
 If a board resets *while the console is sitting there*, something else has hold of the port and is

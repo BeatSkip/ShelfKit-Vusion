@@ -27,7 +27,7 @@ the effect of the PA2/PA5 transistor lines on range, LED polarity.
 | 6 | The same label clash also hit the engine itself (inline `enter_critical()` from `libmftypes.h`); `easyax5043.c` now has local static copies of those helpers. |
 | 7 | SDCC 3.6.0: function pointers with several arguments must be `__reentrant`; the shelflink "done" callback therefore takes one struct pointer. |
 | 8 | **Standby needs the wake-up-timer interrupt enabled.** `wtimer_idle(WTFLAG_CANSTANDBY)` enters standby with `EA = 0`; standby only ends if the wake source's enable bit is set in `IE`. The demo uses `IE_3` — that is Timer 1 on the AX8052, not the wake-up timer. The wake-up timer is vector 1 → **`IE_1`**. Without it the tag slept forever after its first poll. Fixed in `shelfhw_poll()` (the radio interrupt, `IE_4`, is enabled by the engine). |
-| 9 | Pin/clock facts used: UART0 TX on PB4 at 38400 (needs the FRC oscillator slaved to the 32 kHz LPXOSC, sequence copied from the existing demo); PB5 (EPD reset / UART RX) is never driven; chip selects PA1/PB1/PC0 are parked high at boot. |
+| 9 | Pin/clock facts used: UART0 TX on PB4 at 115200 (needs the FRC oscillator slaved to the 32 kHz LPXOSC, sequence copied from the existing demo); PB5 (EPD reset / UART RX) is never driven; chip selects PA1/PB1/PC0 are parked high at boot. |
 | 10 | Loading the debug firmware shows `rssi≈−35 dBm` at a few cm — the receiver is not saturated and reception is clean at this distance. |
 
 ## Architecture
@@ -142,7 +142,7 @@ and the host-side framing is checked, but this has not been run on hardware.** T
 image to a tag and watch the tag's `img begin / img refresh / img done` log lines.
 ## Debug output and tools
 
-Both firmwares log on UART0 TX (PB4, 38400 8N1).
+Both firmwares log on UART0 TX (PB4, 115200 8N1).
 
 **LEDs are pulses, never levels.** They sit directly behind the e-paper glass and a lit LED warms
 the panel into a visible blob on the frame, so every indication is one bounded flash

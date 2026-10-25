@@ -54,9 +54,12 @@
  * (images, firmware, a new identity) follows a POLL, so this window is the only
  * time the tag can be reached. Longer = easier pushes, shorter = less RX time. */
 #define SHELF_LISTEN_WINDOW_S   2
-/* How long to keep listening after a reply that did *not* say data is coming:
- * long enough for a late frame, short enough not to hold the receiver open. */
-#define SHELF_LISTEN_GRACE_MS   500
+/* How long to keep listening after a reply that did *not* say data is coming.
+ * The host needs a few hundred ms to render and start a push, and the pre-arm
+ * is not always in place (a queue that filled up, a server that started after
+ * the Q), so 500 ms missed often enough to cost a whole poll interval. 1500 ms
+ * covers that; it costs ~0.1 mA of average draw. */
+#define SHELF_LISTEN_GRACE_MS   1500
 
 /* ── adaptive check-in (openepaperlink-style backoff) ─────────────────────
  * The base interval above is only a starting point. It stretches when the link

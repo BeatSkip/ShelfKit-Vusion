@@ -30,7 +30,7 @@ radio: always in receive
       and logs: SENT <addr> ok|fail att=N
 ```
 
-- **`src/main.c`** — the radio loop plus the **host command channel** on UART0 (38400 8N1):
+- **`src/main.c`** — the radio loop plus the **host command channel** on UART0 (115200 8N1):
   `P` → `PONG` (are you there?), `S<addr:4><payload><chk:2>` → send one reliable frame and answer
   `SENT <addr> ok|fail att=N`. The reply goes out before anything is logged, because the tag only
   waits `SL_RSP_TIMEOUT_MS`.

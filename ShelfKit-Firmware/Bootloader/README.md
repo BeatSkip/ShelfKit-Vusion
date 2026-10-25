@@ -219,3 +219,12 @@ Three things had to be right for that read, and each was wrong at first:
 4. **Use the hardware SPI, not a bit-bang.** A bit-banged read returned
    `0x000000` on hardware while the application's hardware-SPI read of the same
    chip returns `0x1F4200`.
+
+## Line rate
+
+The bootloader stays at **38400 8N1**, because it cannot be replaced on a flashed board.
+The applications moved to 115200, so the two rates differ on the same wire: the
+bootloader's boot lines (`OTA jedec`, `OTA image`, `boot mode ...`) are only readable
+with a 38400 terminal, and the server shows them as noise. Everything the application
+prints is readable at 115200, and flashing is unaffected - `axsem-flasher.py` defaults
+to 38400 because it talks to this bootloader, not to the application.

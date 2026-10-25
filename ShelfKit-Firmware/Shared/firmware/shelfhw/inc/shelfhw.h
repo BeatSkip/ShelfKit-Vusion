@@ -8,7 +8,7 @@
  * UART0 TX debug log is started.
  *
  * Pin ownership (see Documentation/signal-list.md):
- *   PB4            UART0 TX debug log (38400 8N1)
+ *   PB4            UART0 TX debug log (115200 8N1)
  *   PB0/6/7, PC4   LEDs
  *   PA1/PB1/PC0    chip selects of EPD / NFC / flash, parked high
  *   PB2/PB3/PB5    never touched here (EPD BUSY, boot/NFC FD, EPD RST/UART RX)

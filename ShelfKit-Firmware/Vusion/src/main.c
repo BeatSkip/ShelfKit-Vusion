@@ -185,12 +185,19 @@ static void on_done(const struct sl_done __xdata *done)
         log_stats();
 
 #if SHELF_RADIO_SLEEP
-    /* Only the hub knows whether anything is actually queued for us. Unless it
-     * said so in the reply, close the listening window after a short grace
-     * instead of holding the receiver open for the whole window. */
-    if (!(rsp->len >= SM_RSP_LEN && rsp->payload[SM_RSP_CMD] == SM_CMD_DATA)) {
+    /* Re-arm the listening window from the reply in BOTH cases, so "data follows"
+     * and "nothing queued" differ only in how long it stays open. Re-arming only
+     * in the quiet case left a pre-armed poll running on the timer that was armed
+     * before the poll was even sent - and on hardware that polled fine, was told
+     * cmd=01, and then never received the first frame of the push. */
+    {
+        uint32_t ms = (rsp->len >= SM_RSP_LEN &&
+                       rsp->payload[SM_RSP_CMD] == SM_CMD_DATA)
+                      ? (uint32_t)SHELF_LISTEN_WINDOW_S * 1000u
+                      : (uint32_t)SHELF_LISTEN_GRACE_MS;
+
         wtimer0_remove(&listen_timer);
-        listen_timer.time = SHELFHW_MS_TO_TICKS(SHELF_LISTEN_GRACE_MS);
+        listen_timer.time = (uint16_t)((ms * SHELFHW_TICKS_PER_S + 500u) / 1000u);
         wtimer0_addrelative(&listen_timer);
     }
 #endif

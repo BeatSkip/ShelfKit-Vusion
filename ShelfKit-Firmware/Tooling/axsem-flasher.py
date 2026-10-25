@@ -150,7 +150,8 @@ def main():
     parser = argparse.ArgumentParser(description='Axsem Hex File Flasher')
     parser.add_argument('hex_file', nargs='?', help='Path to the hex file')
     parser.add_argument('-p', '--port', help='Serial port')
-    parser.add_argument('-b', '--baudrate', type=int, default=38400, help='Baudrate (default: 38400)')
+    parser.add_argument('-b', '--baudrate', type=int, default=38400,
+                        help='Baudrate of the bootloader (default: 38400)')
     parser.add_argument('-l', '--list', action='store_true', help='List available serial ports')
     
     args = parser.parse_args()
