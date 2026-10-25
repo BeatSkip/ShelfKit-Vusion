@@ -29,6 +29,9 @@ static uint8_t __xdata poll_payload[SM_POLL_LEN];
 static uint8_t __xdata last_attempts;
 static int8_t __xdata last_hub_rssi;
 static uint16_t __xdata polls_done;
+/* the power summary's arithmetic, kept in XRAM: the tag has no internal RAM to
+ * spare for five 32-bit locals */
+static uint32_t __xdata pow_awake_ms, pow_radio_ms, pow_asleep_s, pow_total_ms, pow_ua;
 static uint16_t __xdata node_id;   /* from the SPI flash record, see shelf_id.c */
 static struct wtimer_desc __xdata listen_timer;
 static uint8_t __xdata radio_asleep;
@@ -108,13 +111,31 @@ static void log_stats(void)
      * Multiply by the datasheet currents to get the average draw:
      *   I = (awake_ms * 3 mA + radio_ms * 9.5 mA + asleep_s * 1000 * 0.002 mA)
      *       / (awake_ms + asleep_s * 1000) */
+    pow_awake_ms = shelfhw_awake_ticks() * 1000u / SHELFHW_TICKS_PER_S;
+    pow_radio_ms = shelfhw_radio_on_ticks() * 1000u / SHELFHW_TICKS_PER_S;
+    pow_asleep_s = shelfhw_asleep_ticks() / SHELFHW_TICKS_PER_S;
+    pow_total_ms = pow_awake_ms + pow_asleep_s * 1000u;
+    /* datasheet currents: MCU running ~3 mA, receiver +9.5 mA, sleep 3 uA */
+    pow_ua = pow_total_ms
+        ? (pow_awake_ms * 3000u + pow_radio_ms * 9500u + pow_asleep_s * 1000u * 3u)
+          / pow_total_ms
+        : 0;
+
     log_puts("pow awake=");
-    log_dec32(shelfhw_awake_ticks() * 1000u / SHELFHW_TICKS_PER_S);
+    log_dec32(pow_awake_ms);
     log_puts("ms radio=");
-    log_dec32(shelfhw_radio_on_ticks() * 1000u / SHELFHW_TICKS_PER_S);
+    log_dec32(pow_radio_ms);
     log_puts("ms asleep=");
-    log_dec32(shelfhw_asleep_ticks() / SHELFHW_TICKS_PER_S);
-    log_puts("s");
+    log_dec32(pow_asleep_s);
+    log_puts("s avg=");
+    log_dec32(pow_ua);
+    log_puts("uA");
+    if (pow_ua) {
+        /* 620 mAh CR2450 -> 620000 uAh; days = 620000 / uA / 24 */
+        log_puts(" life=");
+        log_dec32(25833u / pow_ua);
+        log_puts("d");
+    }
     log_nl();
 }
 

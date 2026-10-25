@@ -74,7 +74,7 @@
 #define SHELF_LOST_2DAY_S       86400UL  /* ... once a day from the day after */
 
 /* Print the link statistics every this many polls */
-#define SHELF_STATS_EVERY       10
+#define SHELF_STATS_EVERY       5   /* one power summary every 5 polls */
 
 /* 1 = power the SPI flash's switched rail (PA5, transistor U4, active low) before
  * every flash access and drop it again after. The rail is only brought up by the
