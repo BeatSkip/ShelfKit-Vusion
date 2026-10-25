@@ -121,10 +121,35 @@ uint16_t shelfhw_random(void)
 
 /* ── UART0 TX log (register level, avoids the libmf FIFO tables) ─────── */
 
+/* The AX8052 UART has a ONE byte receive buffer, and the hub prints a line for
+ * every frame it sends. A host command arriving during that print lost bytes and
+ * arrived as "ERR chk" / "ERR len", which is exactly what stalled an image push
+ * when another tag polled at the same time. Collect the byte during the wait for
+ * the transmitter instead of losing it. */
+#define HOST_RX_RING    64u
+static uint8_t __xdata host_rx_buf[HOST_RX_RING];
+static uint8_t __xdata host_rx_head;
+static uint8_t __xdata host_rx_tail;
+
+static void host_rx_pump(void)
+{
+    while (U0STATUS & 0x01) {
+        uint8_t c = U0SHREG;
+        uint8_t next;
+
+        U0CTRL |= 0x04;             /* re-arm the RX flag, like iocore */
+        next = (uint8_t)((host_rx_head + 1u) & (HOST_RX_RING - 1u));
+        if (next != host_rx_tail) { /* full: drop, the frame will be retried */
+            host_rx_buf[host_rx_head] = c;
+            host_rx_head = next;
+        }
+    }
+}
+
 void log_putc(uint8_t c)
 {
     while (!(U0STATUS & 0x04))      /* wait for U0TXEMPTY */
-        ;
+        host_rx_pump();             /* free time: swallow anything arriving */
     U0SHREG = c;
     U0CTRL |= 0x08;                 /* arm the TX-done flag, like iocore */
 }
@@ -150,6 +175,27 @@ void log_hex16(uint16_t v)
 {
     log_hex8((uint8_t)(v >> 8));
     log_hex8((uint8_t)v);
+}
+
+/* 32-bit decimal without a buffer: the tag has no internal RAM to spare for one,
+ * so print the high part with log_dec() and the low four digits by hand. */
+void log_dec32(uint32_t v)
+{
+    uint16_t r;
+
+    if (v > 0xFFFFu) {
+        log_dec((uint16_t)(v / 10000u));
+        r = (uint16_t)(v % 10000u);
+        log_putc((uint8_t)('0' + r / 1000u));
+        r = (uint16_t)(r % 1000u);
+        log_putc((uint8_t)('0' + r / 100u));
+        r = (uint16_t)(r % 100u);
+        log_putc((uint8_t)('0' + r / 10u));
+        r = (uint16_t)(r % 10u);
+        log_putc((uint8_t)('0' + r));
+    } else {
+        log_dec((uint16_t)(v & 0xFFFFu));
+    }
 }
 
 void log_dec(uint16_t v)
@@ -287,11 +333,13 @@ int16_t host_rx_getc(void)
 {
     uint8_t c;
 
-    if (!(U0STATUS & 0x01))
-        return -1;
-    c = U0SHREG;
-    U0CTRL |= 0x04;                 /* re-arm the RX flag, like iocore */
-    return c;
+    host_rx_pump();
+    if (host_rx_tail != host_rx_head) {
+        c = host_rx_buf[host_rx_tail];
+        host_rx_tail = (uint8_t)((host_rx_tail + 1u) & (HOST_RX_RING - 1u));
+        return c;
+    }
+    return -1;
 }
 
 /* ── radio power ──────────────────────────────────────────────────────────
@@ -334,8 +382,33 @@ uint16_t shelfhw_measure_vdd(void) __reentrant
 
 static uint8_t __xdata radio_deep;  /* radio parked in AX5043 deep sleep: SPI pins are GPIO */
 
+/* ── software ammeter ─────────────────────────────────────────────────────
+ * 16-bit tick deltas accumulated into 32-bit totals, so the ~128 s wrap of the
+ * wake-up timer is harmless. awake = everything shelfhw_poll() was not idling,
+ * which includes the boot, the polls and any transfer. */
+static uint16_t __xdata meter_prev;
+static uint32_t __xdata meter_total;
+static uint32_t __xdata meter_asleep;
+static uint32_t __xdata meter_radio_since;
+static uint32_t __xdata meter_radio;
+
+uint32_t shelfhw_awake_ticks(void)  { return meter_total - meter_asleep; }
+uint32_t shelfhw_asleep_ticks(void) { return meter_asleep; }
+uint32_t shelfhw_radio_on_ticks(void)
+{
+    /* the radio is on right now: count the time since it woke */
+    if (!radio_deep)
+        return meter_radio + (uint16_t)(wtimer0_curtime() - (uint16_t)meter_radio_since);
+    return meter_radio;
+}
+
 void shelfhw_radio_sleep(void)
 {
+    /* close the radio-on interval */
+    if (!radio_deep) {
+        meter_radio += (uint16_t)(wtimer0_curtime() - (uint16_t)meter_radio_since);
+        meter_radio_since = wtimer0_curtime();
+    }
 #if SHELF_RADIO_DEEPSLEEP
     /* The AX5043's own deep sleep: the 26 MHz XTAL stops, which is the ~1 mA
      * saving. The MCU runs from the internal FRC (CLKCON = 0 = FRCOSC), so it
@@ -399,6 +472,10 @@ uint8_t shelfhw_radio_wake(void)
 void shelfhw_poll(void)
 {
     uint8_t woke;
+    uint16_t t0 = wtimer0_curtime();
+
+    meter_total += (uint16_t)(t0 - meter_prev);
+    meter_prev = t0;
 
     wtimer_runcallbacks();
 
@@ -429,4 +506,6 @@ void shelfhw_poll(void)
     }
     IE_1 = 0;
     EA = 1;
+
+    meter_asleep += (uint16_t)(wtimer0_curtime() - t0);
 }

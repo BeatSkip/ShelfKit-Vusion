@@ -22,7 +22,10 @@
 #include "spi.h"
 #include "img_rx.h"
 
-#define IMG_TIMEOUT_TICKS   (10u * SHELFHW_TICKS_PER_S)
+/* The hub can be busy with another tag's poll or a retry for a few seconds, so a
+ * short gap is normal mid-transfer. 10 s aborted a half-sent image when the link
+ * hiccuped; 30 s still gives up on a link that has really gone away. */
+#define IMG_TIMEOUT_TICKS   (30u * SHELFHW_TICKS_PER_S)
 
 static uint8_t __xdata active;
 static uint8_t __xdata plane;

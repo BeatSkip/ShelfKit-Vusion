@@ -103,6 +103,19 @@ static void log_stats(void)
     log_puts(" stray=");
     log_dec(sl_stats.rx_stray);
     log_nl();
+
+    /* Software ammeter: awake/radio in ms, asleep in s, counted since boot.
+     * Multiply by the datasheet currents to get the average draw:
+     *   I = (awake_ms * 3 mA + radio_ms * 9.5 mA + asleep_s * 1000 * 0.002 mA)
+     *       / (awake_ms + asleep_s * 1000) */
+    log_puts("pow awake=");
+    log_dec32(shelfhw_awake_ticks() * 1000u / SHELFHW_TICKS_PER_S);
+    log_puts("ms radio=");
+    log_dec32(shelfhw_radio_on_ticks() * 1000u / SHELFHW_TICKS_PER_S);
+    log_puts("ms asleep=");
+    log_dec32(shelfhw_asleep_ticks() / SHELFHW_TICKS_PER_S);
+    log_puts("s");
+    log_nl();
 }
 
 /* The listening window is over and nothing arrived: park the radio until the

@@ -1,3 +1,15 @@
+## The serial link is the fragile part
+
+Host commands arrive on UART0 RX (PB5) and the radio log goes out on UART0 TX (PB4), at
+38.4 kbaud. The AX8052's UART has a **one byte** receive buffer, and the hub prints a
+`SENT` line for every frame of an image push - so a command that arrived while a line
+was printing lost bytes and came back as `ERR chk` / `ERR len`. That is what stalled a
+push when another tag polled at the same moment.
+
+`log_putc()` now collects receive bytes while it waits for the transmitter, into a 64
+byte ring that `host_rx_getc()` drains first. Keep that in mind when adding logging: the
+more the hub says per frame, the less headroom there is for the host's next command.
+
 # Vusion-Hub — the hub target
 
 The hub half of ShelfKit: it listens permanently, **answers every tag poll** (the answer *is* the

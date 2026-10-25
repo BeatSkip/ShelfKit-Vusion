@@ -74,6 +74,13 @@ void shelfhw_poll_awake(void);
 #ifndef SHELF_XTAL_OFF
 #define SHELF_XTAL_OFF 0
 #endif
+/* Software ammeter: how many ticks the MCU has spent awake, asleep and with the
+ * radio on since boot. Multiply by the datasheet currents to get an average draw
+ * without a shunt - see "Measuring power without a meter" in the tag README. */
+uint32_t shelfhw_awake_ticks(void);
+uint32_t shelfhw_asleep_ticks(void);
+uint32_t shelfhw_radio_on_ticks(void);
+
 void shelfhw_radio_sleep(void);
 uint8_t shelfhw_radio_wake(void);   /* AXRADIO_ERR_NOERROR (0) when the receiver is on */
 
@@ -112,6 +119,7 @@ void log_puts(const char *s);
 void log_hex8(uint8_t v);
 void log_hex16(uint16_t v);
 void log_dec(uint16_t v);
+void log_dec32(uint32_t v);
 void log_sdec(int16_t v);
 void log_nl(void);
 

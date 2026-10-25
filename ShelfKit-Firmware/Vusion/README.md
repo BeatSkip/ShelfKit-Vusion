@@ -155,6 +155,58 @@ The radio deep sleep is still the least proven step. If a tag stops making its p
 `SHELF_WAKE_LPXOSC` from `Vusion/sdcc-project.json` falls back to the internal RC at
 640 Hz.
 
+### Measuring power without a meter
+
+There is no shunt on the board, so measure **time in each state** and multiply by the
+datasheet currents. The tag counts it for you and prints it with the link stats every
+`SHELF_STATS_EVERY` polls (10 by default, so once per 10 minutes):
+
+```
+stats req=12 ok=12 fail=0 air=12 err=0 rxbad=0 stray=0
+pow awake=2100ms radio=2000ms asleep=578s
+```
+
+| field | meaning | datasheet current |
+|---|---|---|
+| `awake` | MCU running, since boot: the boot itself, every poll, every transfer | ~3 mA (150 uA/MHz at 20 MHz) |
+| `radio` | of that, the transmitter/receiver was on (a subset of `awake`) | +9.5 mA RX, +7.5 mA TX |
+| `asleep` | MCU in Sleep | ~2 uA |
+
+```
+I = (awake_ms * 3 mA + radio_ms * 9.5 mA + asleep_s * 1000 * 0.002 mA)
+    / (awake_ms + asleep_s * 1000)
+```
+
+Worked example from a real 60 s cycle (poll, 2 s window, sleep):
+
+```
+(2100 * 3 + 2000 * 9.5 + 57.8 s * 1000 * 0.002) / 60000 = 0.42 mA   -> ~60 days
+```
+
+The same cycle with the 500 ms grace instead of a flagged 2 s window:
+
+```
+(600 * 3 + 500 * 9.5 + 59.5 s * 1000 * 0.002) / 60000 = 0.11 mA       -> ~230 days
+```
+
+So **awake time is the whole ball game**: the MCU alone is 3 mA while it runs, and the
+receiver adds 9.5 mA. Fifteen minutes of being awake per day costs more than the sleep
+current for a month.
+
+Read the numbers like this:
+
+- `asleep` ≈ 58-59 s per 60 s cycle → the tag really is sleeping; the cost is the
+  window, so shorten it (500 ms grace, and pre-arm only when something is queued).
+- `asleep` well below that → something keeps it awake: a transfer that never ends, a
+  queue retrying every poll (each flagged poll opens a 2 s window), or the listen window
+  re-arming because `img_rx_active()`/`fw_dump_active()` is stuck.
+- `radio` close to `awake` → the receiver is never parked; check that `listen_cb` runs.
+
+The second, slower cross-check is the supply voltage the tag already reports every poll
+(`vdd=034c` = 3.30 V): plot it over days. A CR2450's curve is flat in the middle, so a
+few hours prove little, but a day of decay tells you the order of magnitude and catches a
+tag that is not sleeping at all.
+
 **Battery.** Each poll carries the supply voltage, measured with the AXSEM bootloader's
 ADC recipe (`shelfhw_measure_vdd`, volts*256, e.g. 3.00 V -> 0x0300). The hub prints
 it as `vdd=0300` and the server shows it in the Fleet **Battery** column and the
