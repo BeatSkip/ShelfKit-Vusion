@@ -48,18 +48,37 @@
  * SHELFHW_TICKS_PER_S (640) per second in 16 bits, so anything above ~102 s
  * overflows. The 1 % duty cycle of the 868.3 MHz sub-band is not a concern at
  * this rate (a poll is a few milliseconds of air). */
-#define SHELF_POLL_INTERVAL_S   60
+#define SHELF_POLL_INTERVAL_S   120
 
 /* How long the tag listens after each poll, in seconds. Everything the hub sends
  * (images, firmware, a new identity) follows a POLL, so this window is the only
  * time the tag can be reached. Longer = easier pushes, shorter = less RX time. */
 #define SHELF_LISTEN_WINDOW_S   2
 /* How long to keep listening after a reply that did *not* say data is coming.
- * The host needs a few hundred ms to render and start a push, and the pre-arm
- * is not always in place (a queue that filled up, a server that started after
- * the Q), so 500 ms missed often enough to cost a whole poll interval. 1500 ms
- * covers that; it costs ~0.1 mA of average draw. */
-#define SHELF_LISTEN_GRACE_MS   1500
+ * A push needs ~200 ms to render and start, so 700 ms is 3x margin; the receiver
+ * is 9.5 mA and this window is almost the whole power budget, so it is sized to
+ * the job rather than to a bad case. A miss costs one poll, not the push. */
+#define SHELF_LISTEN_GRACE_MS   700
+
+/* 1 = a falling edge on PB3 (the NFC chip's field-detect output, shared with the
+ * bootloader's BOOT strap) wakes the tag, flashes the blue LED and makes it poll.
+ *
+ * The chip is passive: while a reader's field is present it powers itself from it and
+ * pulls that open-drain pin low even though the tag's switched rail is off, which is
+ * why this can work between polls. The FD mode has to be selected once, over the
+ * contact interface, while the rail is up - nfc_cfg_fd() does that at boot, and the
+ * "nfc uid ... ok" line proves the transport that carries it. */
+#define SHELF_NFC_POLL          0
+/* Only meaningful with SHELF_NFC_POLL. 1 = leave the switched rail (PA5 / U4) on, so
+ * the NFC chip is powered and its
+ * open-drain field-detect output is actually driven. Unpowered, that pin has only the
+ * weak pull-up, and on hardware it oscillated at ~4 Hz - each edge woke the tag and
+ * re-armed a poll, which measured 7.4 mA / 3 days. Holding the rail costs the standby
+ * current of whatever else shares it (the flash, and the panel's supply). */
+#define SHELF_NFC_RAIL_HOLD     0
+/* 1 = read the NFC chip's UID and dump its configuration area at boot. Read-only and
+ * useful when this work resumes; off so a parked build logs nothing extra. */
+#define SHELF_NFC_PROBE         0
 
 /* ── adaptive check-in (openepaperlink-style backoff) ─────────────────────
  * The base interval above is only a starting point. It stretches when the link
@@ -74,7 +93,7 @@
 #define SHELF_LOST_2DAY_S       86400UL  /* ... once a day from the day after */
 
 /* Print the link statistics every this many polls */
-#define SHELF_STATS_EVERY       5   /* one power summary every 5 polls */
+#define SHELF_STATS_EVERY       2   /* one power summary every 2 polls */
 
 /* 1 = power the SPI flash's switched rail (PA5, transistor U4, active low) before
  * every flash access and drop it again after. The rail is only brought up by the

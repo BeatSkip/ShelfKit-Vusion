@@ -85,7 +85,10 @@ static void log_rx(const struct sl_rx __xdata *rx)
  */
 /* A 'B' line carries up to BLK_MAX_FRAMES frames of SL_MAX_PAYLOAD bytes, each
  * prefixed with its length, plus address, count and checksum. */
-#define BLK_MAX_FRAMES  8
+/* 16 rather than 8: the line is one serial write per batch, and 16 still leaves the
+ * hub's XRAM comfortable (see the ring size below). 32 is the ceiling with a power-of-two
+ * host ring; 48 and 64 do not fit in the AX8052's 8 KB. */
+#define BLK_MAX_FRAMES  16
 #define BLK_MAX_BYTES   (3 + BLK_MAX_FRAMES * (1 + SL_MAX_PAYLOAD) + 1)
 #define LINE_MAX        (1 + 2 * BLK_MAX_BYTES + 2)
 

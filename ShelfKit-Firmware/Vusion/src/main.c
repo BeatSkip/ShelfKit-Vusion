@@ -23,6 +23,7 @@
 #include "img_rx.h"
 #include "pwr.h"
 #include "shelf_id.h"
+#include "nfc_cfg.h"
 
 static struct wtimer_desc __xdata poll_timer;
 static uint8_t __xdata poll_payload[SM_POLL_LEN];
@@ -33,6 +34,13 @@ static uint16_t __xdata polls_done;
  * spare for five 32-bit locals */
 static uint32_t __xdata pow_awake_ms, pow_radio_ms, pow_asleep_s, pow_total_ms, pow_ua;
 static uint16_t __xdata node_id;   /* from the SPI flash record, see shelf_id.c */
+#if SHELF_NFC_POLL
+/* A reader gives one or two edges per visit. A line that is floating or held can
+ * produce hundreds, so the feature protects the battery by itself: after this many
+ * events in one poll cycle it stops reacting until listen_cb() resets the count. */
+#define SHELF_NFC_BURST_MAX  3
+static uint8_t __xdata nfc_burst;
+#endif
 static struct wtimer_desc __xdata listen_timer;
 static uint8_t __xdata radio_asleep;
 
@@ -157,6 +165,10 @@ static void listen_cb(struct wtimer_desc __xdata *desc)
     log_puts("sleep\r\n");
     shelfhw_radio_sleep();
     radio_asleep = 1;
+#if SHELF_NFC_POLL
+    nfc_burst = 0;              /* new cycle: a reader is welcome again */
+    shelfhw_nfc_arm();          /* one shot: ready for the next reader */
+#endif
 #else
     (void)desc;
 #endif
@@ -243,11 +255,12 @@ static void poll_cb(struct wtimer_desc __xdata *desc)
 
     (void)desc;
 
-    /* A backoff longer than one timer arm: wake just to step the countdown. */
+    /* A backoff longer than one timer arm: wake just to step the countdown, and arm
+     * only what is LEFT. Arming the full cap again here is how a 120 s interval became
+     * 200 s (100 + 100 instead of 100 + 20) - invisible at 60 s, where this never ran. */
     if (poll_due_s > SHELF_POLL_ARM_MAX_S) {
-        poll_due_s -= SHELF_POLL_ARM_MAX_S;
-        poll_timer.time = (uint32_t)SHELF_POLL_ARM_MAX_S * SHELFHW_TICKS_PER_S;
-        wtimer0_addrelative(&poll_timer);
+        poll_due_s -= SHELF_POLL_ARM_MAX_S;     /* the arm that just elapsed */
+        arm_poll(poll_due_s);                   /* arms min(remaining, cap) */
         return;
     }
     poll_due_s = 0;
@@ -320,6 +333,19 @@ void main(void)
 #endif
     node_id = shelf_id_boot();
 
+#if SHELF_NFC_PROBE
+    /* Read-only: the UID and the configuration area, for when this work resumes. */
+    nfc_probe();
+#endif
+#if SHELF_NFC_POLL && SHELF_NFC_RAIL_HOLD
+    extflash_power_up();        /* and leave it up: the NFC chip needs VCC to drive FD */
+#endif
+#if SHELF_NFC_POLL
+    /* The NFC chip's field-detect pin has to be selected before the interrupt on
+     * PB3 can ever see a reader; the SPI bus is up by now. */
+    nfc_cfg_fd();
+#endif
+
     log_puts("\r\n*** ShelfKit tag, node ");
     log_hex16(node_id);
     log_puts(" net ");
@@ -334,6 +360,13 @@ void main(void)
         log_nl();
         shelfhw_fatal(SHELFHW_LED_RED);
     }
+#if SHELF_NFC_POLL
+    log_puts("nfc fd pin=");
+    log_dec((uint8_t)(shelfhw_nfc_level() & 1u));
+    log_puts(" extirq=");
+    log_hex8(shelfhw_nfc_extirq());
+    log_nl();
+#endif
     log_puts("radio ok, pll rng=");
     log_dec(axradio_get_pllrange());
     log_puts(", polling every ");
@@ -351,6 +384,22 @@ void main(void)
     /* While an image or a firmware image arrives the tag must hear every frame,
      * so no standby */
     for (;;) {
+#if SHELF_NFC_POLL
+        if (shelfhw_nfc_take()) {
+            if (nfc_burst < SHELF_NFC_BURST_MAX) {
+                nfc_burst++;
+                /* A reader appeared. The LED is the point: on a battery board with no
+                 * serial attached it is the only way to see that the field-detect line
+                 * works. Then poll while the phone is still there. */
+                shelfhw_led_pulse(SHELFHW_LED_BLUE, SHELFHW_LED_PULSE_MS);
+                log_puts("nfc field\r\n");
+                arm_poll(1);
+            } else if (nfc_burst == SHELF_NFC_BURST_MAX) {
+                nfc_burst++;    /* one line, then silence until the next poll */
+                log_puts("nfc noisy, ignoring until next poll\r\n");
+            }
+        }
+#endif
         if (fw_dump_active())
             fw_dump_step();
         if (img_rx_active() || fw_rx_active() || fw_dump_active())

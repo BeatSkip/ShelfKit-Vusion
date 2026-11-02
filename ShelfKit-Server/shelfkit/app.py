@@ -1120,7 +1120,7 @@ class App:
         return Path(path) if path else None
 
     def service_image(self, addr: int, note: str | None = None,
-                      alias: str | None = None) -> dict:
+                      alias: str | None = None, staged=None) -> dict:
         """Draw this tag's service label and push it over the air.
 
         The label carries what a tag in hand needs to be identified: the node id,
@@ -1144,7 +1144,8 @@ class App:
         except Exception as exc:  # noqa: BLE001 - Pillow or font trouble
             return {"ok": False, "error": f"cannot draw the label: {exc}"}
 
-        if not self.send(addr, fit="stretch", dither="threshold", image_path=str(path)):
+        if not self.send(addr, fit="stretch", dither="threshold",
+                         image_path=str(path), staged=staged):
             return {"ok": False, "error": self.status, "image": str(path)}
         return {"ok": True, "id": f"{addr:04X}", "alias": used_alias,
                 "note": used_note, "image": str(path)}
@@ -1320,9 +1321,16 @@ class App:
         line = (hubhost.build_batch_line(addr, frames) + "\n").encode("ascii")
         end = time.monotonic() + hubhost.CMD_RETRY_WINDOW_S
         self.last_answer = None
+        attempt = 0
         while time.monotonic() < end:
             if cancel.is_set():
                 return False
+            if attempt:
+                # The pre-arm is consumed by the poll it was sent for. Without a
+                # fresh one, every retry hammers a tag that is asleep and gets
+                # nowhere: re-arm, so the next poll answers "data coming".
+                self._prearm(addr)
+            attempt += 1
             with self.lock:
                 start = pane.seq
             if not pane.worker.write(line):
@@ -1347,9 +1355,13 @@ class App:
         line = (hubhost.build_line("S", addr, payload) + "\n").encode("ascii")
         end = time.monotonic() + hubhost.CMD_RETRY_WINDOW_S
         self.last_answer = None
+        attempt = 0
         while time.monotonic() < end:
             if cancel.is_set():
                 return False
+            if attempt:
+                self._prearm(addr)      # see _send_batch: a stale pre-arm is no pre-arm
+            attempt += 1
             with self.lock:
                 start = pane.seq
             if not pane.worker.write(line):
@@ -1377,11 +1389,57 @@ class App:
     # moment would usually be lost. Everything outbound is therefore queued and
     # delivered when its tag next announces itself.
 
+    def _stage(self, path, fit, dither):
+        """Render an image into DATA frames now, so the transfer can start the
+        instant a tag polls.
+
+        A tag listens for well under two seconds after it reports, and the time
+        between "the poll arrived" and "the first frame is on the wire" has to fit
+        inside that. Rendering a PNG there is the one part that can be done before
+        the poll, so it is. It also surfaces a bad image when the user clicks rather
+        than a minute later.
+        """
+        from . import preview
+
+        rendered = preview.render(Path(path), fit, dither)
+        return list(hubhost.image_messages(rendered.bw, rendered.red)), rendered
+
     def enqueue(self, kind: str, addr: int, label: str, **params) -> dict:
         with self.lock:
+            if kind in ("image", "service"):
+                try:
+                    if kind == "service":
+                        from . import service_image as _svc
+                        meta = self.tag_meta.get(addr) or {}
+                        label_path = (REPO_ROOT / "ShelfKit-Server" / "data" / "service"
+                                      / f"service-{addr:04X}.png")
+                        _svc.write(
+                            label_path, addr,
+                            params.get("alias") if params.get("alias") is not None
+                            else meta.get("alias"),
+                            (params.get("note") if params.get("note") is not None
+                             else meta.get("notes") or "").strip(),
+                        )
+                        params["path"] = str(label_path)
+                        fit, dither = "stretch", "threshold"
+                    else:
+                        fit = params.get("fit") or self.fit
+                        dither = params.get("dither") or self.dither
+                    frames, rendered = self._stage(params.get("path"), fit, dither)
+                    params["staged"] = (frames, rendered.key)
+                    params["staged_note"] = (
+                        f"{rendered.source[0]}x{rendered.source[1]}"
+                        f"{f', rotation {rendered.angle} deg' if rendered.angle else ''}"
+                        f" -> {rendered.fitted[0]}x{rendered.fitted[1]}, {fit}, {dither}"
+                    )
+                except Exception as exc:  # noqa: BLE001 - report at click time
+                    return {"ok": False, "error": f"cannot prepare the image: {exc}"}
             job = {"id": next(self._jobs), "kind": kind, "addr": addr,
                    "label": label, "params": params, "created": time.time(),
-                   "state": "pending", "error": None}
+                   "state": "pending", "error": None,
+                   # A delivery that fails is retried at that tag's next poll instead of
+                   # holding the worker (and every other tag) for the whole retry window.
+                   "tries": 0, "not_before": 0.0}
             self.queue.append(job)
             self.status = f"queued: {label} for {addr:04X}"
         self._prearm(addr)
@@ -1424,13 +1482,18 @@ class App:
             self._event("cancel", None, f"{cancelled} queued command(s)")
         return {"ok": True, "cancelled": cancelled}
 
+    JOB_TRIES = 2        # attempts before a queued delivery is reported failed
+    JOB_RETRY_S = 5.0    # and the pause before it is offered again
+
     def _pump_queue(self, addr: int) -> None:
         """The tag at addr just polled: start its next pending command."""
         with self.lock:
             if self.sending or self.dump.get("active"):
                 return
+            now = time.time()
             job = next((j for j in self.queue
-                        if j["state"] == "pending" and j["addr"] == addr), None)
+                        if j["state"] == "pending" and j["addr"] == addr
+                        and j.get("not_before", 0.0) <= now), None)
             if job is None:
                 return
             job["state"] = "running"
@@ -1457,7 +1520,8 @@ class App:
                 self.transfer_result = None
             if kind == "image":
                 if not self.send(addr, image_path=params.get("path"),
-                                 fit=params.get("fit"), dither=params.get("dither")):
+                                 fit=params.get("fit"), dither=params.get("dither"),
+                                 staged=params.get("staged")):
                     error = self.status
                 else:
                     outcome = self._wait_transfer()
@@ -1469,7 +1533,8 @@ class App:
                     error = started.get("error")
             elif kind == "service":
                 started = self.service_image(addr, params.get("note"),
-                                             params.get("alias"))
+                                             params.get("alias"),
+                                             staged=params.get("staged"))
                 if started.get("ok"):
                     outcome = self._wait_transfer()
                 else:
@@ -1495,6 +1560,19 @@ class App:
             ok = bool(outcome)
         if not ok and error is None:
             error = "did not complete"
+        if not ok and job.get("tries", 0) < self.JOB_TRIES:
+            with self.lock:
+                job["tries"] = job.get("tries", 0) + 1
+                job["state"] = "pending"       # back in the queue, not failed
+                job["error"] = error
+                job["not_before"] = time.time() + self.JOB_RETRY_S
+            self.note(
+                self.hub_key(),
+                f"# {job['label']} deferred (attempt {job['tries']}/{self.JOB_TRIES}),"
+                " will retry at the next poll",
+            )
+            self._prearm(addr)                 # so that poll is armed when it comes
+            return
         with self.lock:
             job["state"] = "done" if ok else "failed"
             job["error"] = None if ok else error
@@ -1503,7 +1581,7 @@ class App:
         self._event("ok" if ok else "fail", f"{addr:04X}", job["label"])
 
     def send(self, addr: int, fit: str | None = None, dither: str | None = None,
-             image_path: str | None = None) -> bool:
+             image_path: str | None = None, staged=None) -> bool:
         with self.lock:
             if self.sending:
                 self.status = "a transfer is already running"
@@ -1540,7 +1618,7 @@ class App:
         self._event("push", f"{addr:04X}", f"{image.name} ({fit}, {dither})")
         threading.Thread(
             target=self._send_worker,
-            args=(key, port, addr, image, fit, dither, cancel),
+            args=(key, port, addr, image, fit, dither, cancel, staged),
             name="send-image",
             daemon=True,
         ).start()
@@ -1555,7 +1633,8 @@ class App:
             self.status = "cancelling after the current frame ..."
 
     def _send_worker(
-        self, key: str, port: str, addr: int, path: Path, fit: str, dither: str, cancel
+        self, key: str, port: str, addr: int, path: Path, fit: str, dither: str, cancel,
+        staged=None,
     ) -> None:
         """Mirrors hubhost.send_image(), with a cancellation check per frame.
 
@@ -1574,23 +1653,28 @@ class App:
                 self.note(key, f"# previews need Pillow: {exc}")
                 return
 
-            try:
-                rendered = preview.render(path, fit, dither)
-            except Exception as exc:  # noqa: BLE001
-                self.note(key, f"# cannot render {path.name}: {exc}")
-                return
-            self.note(
-                key,
-                f"# {path.name}: {rendered.source[0]}x{rendered.source[1]}"
-                f"{f', rotation {rendered.angle} deg' if rendered.angle else ''}"
-                f" -> {rendered.fitted[0]}x{rendered.fitted[1]}, {fit}, {dither}",
-            )
-            bw, red = rendered.bw, rendered.red
+            if staged is not None:
+                frames, render_key = staged
+                frames = list(frames)
+                self.note(key, f"# {path.name}: pre-rendered, {len(frames)} frames")
+            else:
+                try:
+                    rendered = preview.render(path, fit, dither)
+                except Exception as exc:  # noqa: BLE001
+                    self.note(key, f"# cannot render {path.name}: {exc}")
+                    return
+                self.note(
+                    key,
+                    f"# {path.name}: {rendered.source[0]}x{rendered.source[1]}"
+                    f"{f', rotation {rendered.angle} deg' if rendered.angle else ''}"
+                    f" -> {rendered.fitted[0]}x{rendered.fitted[1]}, {fit}, {dither}",
+                )
+                frames = list(hubhost.image_messages(rendered.bw, rendered.red))
+                render_key = rendered.key
 
             if not self._ping_hub(key, cancel):
                 self.note(key, "# hub did not answer P - right port, hub flashed?")
                 return
-            frames = list(hubhost.image_messages(bw, red))
             caps = self.hub_capabilities(probe=True)
             step = hubhost.BATCH_FRAMES if caps.get("batch") else 1
             self.note(
@@ -1655,7 +1739,7 @@ class App:
         finally:
             with self.lock:
                 if ok:
-                    self.tag_push[addr] = (path.name, time.time(), rendered.key)
+                    self.tag_push[addr] = (path.name, time.time(), render_key)
                 self.transfer_result = ok
                 self.sending = False
                 self.send_to = None
@@ -1668,7 +1752,7 @@ class App:
                         self.store.put_bitmap(rendered, name=path.name)
                     if ok:
                         self.store.record_push(
-                            f"{addr:04X}", path.name, rendered.key if rendered else None
+                            f"{addr:04X}", path.name, render_key
                         )
                 except Exception as exc:  # noqa: BLE001 - storage must not break a push
                     self.note(key, f"# storage: {exc}")

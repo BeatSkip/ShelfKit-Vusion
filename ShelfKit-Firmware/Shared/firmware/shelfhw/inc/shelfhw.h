@@ -81,6 +81,13 @@ uint32_t shelfhw_awake_ticks(void);
 uint32_t shelfhw_asleep_ticks(void);
 uint32_t shelfhw_radio_on_ticks(void);
 
+#if SHELF_NFC_POLL
+void shelfhw_nfc_arm(void);         /* (re)enable the PB3 field-detect interrupt */
+uint8_t shelfhw_nfc_take(void);     /* 1 once, after a field was detected */
+uint8_t shelfhw_nfc_level(void);    /* current PB3 level, for the log */
+uint8_t shelfhw_nfc_extirq(void);   /* EXTIRQ as written: bits 5:4 = 11 is falling edge */
+#endif
+
 void shelfhw_radio_sleep(void);
 uint8_t shelfhw_radio_wake(void);   /* AXRADIO_ERR_NOERROR (0) when the receiver is on */
 

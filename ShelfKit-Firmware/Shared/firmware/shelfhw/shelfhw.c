@@ -31,6 +31,56 @@ void disable_radio_interrupt_in_mcu_pin(void)
     IE_4 = 0;
 }
 
+#if SHELF_NFC_POLL
+/* ── NFC field detect on PB3 ─────────────────────────────────────────────
+ * The FM11's FD output is open drain: pulled low while a reader's field is
+ * present, released (and pulled up by the pin's weak pull-up) when it goes away.
+ * PB3 is that wire and also the bootloader's BOOT strap, so an attached serial
+ * adapter's DTR fights it - test on a battery board.
+ *
+ * AND9349/D's EXTIRQ register is exactly the right tool and its default pin is
+ * PB3: EXTIRQ1PIN = 0 selects Port B.3, EXTIRQ1MODE = 11 selects falling edge.
+ * That fires once when the reader arrives, instead of on every level change -
+ * the pin-change interrupt used before fired on both edges and could not be
+ * acknowledged on this part. */
+static uint8_t __xdata nfc_event;
+
+static void nfc_irq(void) __interrupt(INT_EXTERNAL1)
+{
+    /* The pin is open drain and active low, so only a low level is a reader. If
+     * EXTIRQ ends up in a level mode - its reset value is 00 = level high - the
+     * idle level would otherwise count as an endless stream of arrivals. */
+    if (!(PORTB & 0x08))
+        nfc_event = 1;
+    IE &= (uint8_t)~0x04;           /* IE.2 off: one shot until re-armed */
+}
+
+void shelfhw_nfc_arm(void)
+{
+    /* bits 5:4 = 11 (falling edge), bit 6 = 0 (Port B.3) */
+    EXTIRQ = (uint8_t)((EXTIRQ & (uint8_t)~0x70) | 0x30);
+    IE |= 0x04;                     /* IE.2 = External 1 interrupt */
+}
+
+uint8_t shelfhw_nfc_extirq(void)
+{
+    return EXTIRQ;                  /* what the mode write actually left behind */
+}
+
+uint8_t shelfhw_nfc_take(void)
+{
+    uint8_t e = nfc_event;
+
+    nfc_event = 0;
+    return e;
+}
+
+uint8_t shelfhw_nfc_level(void)
+{
+    return (uint8_t)((PORTB & 0x08) ? 1 : 0);
+}
+#endif
+
 /* Power management interrupt, as in the vendor template: on a brown-out
  * freeze the pins and halt instead of running on a collapsing supply. */
 static void pwrmgmt_irq(void) __interrupt(INT_POWERMGMT)
@@ -130,7 +180,9 @@ uint16_t shelfhw_random(void)
  * characters (46 ms at 115200), and while the main loop is inside the radio that
  * much can arrive at once. At 64 bytes the line arrived truncated, which is what
  * showed up as "ERR cmd" / "ERR len" on a healthy hub. */
-#define HOST_RX_RING    1024u
+/* Must stay a power of two (the ring uses a mask). One 'B' line for 16 frames is
+ * ~939 chars, so 2048 holds a whole line plus a partial one. */
+#define HOST_RX_RING    2048u
 static uint8_t __xdata host_rx_buf[HOST_RX_RING];
 static uint16_t __xdata host_rx_head;
 static uint16_t __xdata host_rx_tail;
@@ -233,6 +285,16 @@ void log_nl(void)
 
 /* ── bring-up ─────────────────────────────────────────────────────────── */
 
+/* ── software ammeter ─────────────────────────────────────────────────────
+ * 16-bit tick deltas accumulated into 32-bit totals, so the ~128 s wrap of the
+ * wake-up timer is harmless. awake = everything shelfhw_poll() was not idling,
+ * which includes the boot, the polls and any transfer. */
+static uint16_t __xdata meter_prev;
+static uint32_t __xdata meter_total;
+static uint32_t __xdata meter_asleep;
+static uint32_t __xdata meter_radio_since;
+static uint32_t __xdata meter_radio;
+
 void shelfhw_init(void)
 {
     uint8_t i;
@@ -266,6 +328,12 @@ void shelfhw_init(void)
     DIRB |= 0x10;
     PORTB |= 0x10;
 
+#if SHELF_NFC_POLL
+    PALTB &= (uint8_t)~0x08;        /* PB3: plain GPIO ... */
+    DIRB &= (uint8_t)~0x08;         /* ... an input ... */
+    PORTB |= 0x08;                  /* ... with a pull-up while no field drives it */
+    shelfhw_nfc_arm();
+#endif
     DPS = 0;
     GPIOENABLE = 1;
 
@@ -323,6 +391,10 @@ void shelfhw_init(void)
     EA = 1;
 
     rnd_state = (uint16_t)wtimer0_curtime();
+    /* The radio is on from sl_init() until the first sleep, so the meter has to
+     * start counting from boot. Left at 0, the first shelfhw_radio_sleep()
+     * credited the entire uptime to the radio (radio > uptime in the pow line). */
+    meter_radio_since = wtimer0_curtime();
 }
 
 void shelfhw_poll_awake(void)
@@ -389,15 +461,6 @@ uint16_t shelfhw_measure_vdd(void) __reentrant
 
 static uint8_t __xdata radio_deep;  /* radio parked in AX5043 deep sleep: SPI pins are GPIO */
 
-/* ── software ammeter ─────────────────────────────────────────────────────
- * 16-bit tick deltas accumulated into 32-bit totals, so the ~128 s wrap of the
- * wake-up timer is harmless. awake = everything shelfhw_poll() was not idling,
- * which includes the boot, the polls and any transfer. */
-static uint16_t __xdata meter_prev;
-static uint32_t __xdata meter_total;
-static uint32_t __xdata meter_asleep;
-static uint32_t __xdata meter_radio_since;
-static uint32_t __xdata meter_radio;
 
 uint32_t shelfhw_awake_ticks(void)  { return meter_total - meter_asleep; }
 uint32_t shelfhw_asleep_ticks(void) { return meter_asleep; }
@@ -421,8 +484,20 @@ void shelfhw_radio_sleep(void)
      * saving. The MCU runs from the internal FRC (CLKCON = 0 = FRCOSC), so it
      * keeps executing; the engine wakes the transceiver with the 0xAB wake
      * protocol from axradio_set_mode(ASYNC_RECEIVE) -- see shelfhw_radio_wake(). */
-    (void)axradio_set_mode(AXRADIO_MODE_DEEPSLEEP);
-    radio_deep = 1;
+    {
+        uint8_t err = axradio_set_mode(AXRADIO_MODE_DEEPSLEEP);
+
+        radio_deep = (uint8_t)(err == AXRADIO_ERR_NOERROR);
+        /* The engine's own view, logged whether or not it worked: err != 0 means
+         * the transceiver never went down, and then every "off" period is at
+         * receiver current. mode==2 (AXRADIO_MODE_DEEPSLEEP) is the engine
+         * agreeing that it did. */
+        log_puts("rslp err=");
+        log_dec(err);
+        log_puts(" eng=");
+        log_dec(axradio_get_mode());
+        log_nl();
+    }
 #else
     /* AXRADIO_MODE_OFF = ax5043_off(): receiver, synth and baseband down, XTAL
      * kept running (PWRSTATE_XTAL_ON + POWERDOWN). Reliable, but pays ~1 mA. */
@@ -438,6 +513,11 @@ uint8_t shelfhw_radio_wake(void)
 {
     uint8_t err;
     uint8_t tries = 8;
+
+    /* Start the radio-on interval here. Without this stamp the meter measured
+     * from the previous *sleep*, so every poll was charged a whole minute of
+     * receiver time instead of the ~1.5 s window. */
+    meter_radio_since = wtimer0_curtime();
 
     /* Wake first, then let the PLL lock: waiting *before* the mode change left
      * the transmitter off-frequency on the first frame after a deep-sleep wake,
@@ -505,6 +585,7 @@ void shelfhw_poll(void)
          * fed and every poll after the first sleep went unheard. */
         GPIOENABLE = 1;
         IE = 0x40;
+
         if (!radio_deep) {
             axradio_commsleepexit();
             axradio_setup_pincfg2();

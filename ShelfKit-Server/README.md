@@ -275,6 +275,14 @@ POST /api/tags/<hex>/assign  ->  {"ok": true, "queued": 7, ...}     (pending)
 
 - The queue is per tag and in arrival order; a poll for tag A never runs tag B's job.
 - One command runs at a time; a second waits for the next poll (the link is busy).
+- `hubhost.BATCH_FRAMES` is 16, and that is near the hardware ceiling. The 'B' line is
+  hex, so a frame costs ~60 characters; 16 frames need a ~939-character line, which is why
+  the hub's host ring is 2 KB and its XRAM is 4.8 kB of 8 kB. 32 frames still fits
+  (~7.5 kB, with a 4 KB ring), 48 and 64 do not. It also buys less than it looks: the total
+  serial volume is the same whatever the batch size, and the measured 37 ms/frame is the
+  tag's flash write plus the radio turn-around, not the batching.
+- `hubhost.CMD_RETRY_WINDOW_S` is 180 s, longer than a tag's 120 s poll interval:
+  shorter and a missed push is abandoned before the tag ever polls again.
 - `hubhost.CMD_TIMEOUT_S` is 6 s on purpose: the hub only prints `SENT` after all
   four transmission attempts (~4.5 s), and waiting 3 s made the server give up in the
   middle of them and start a retry cycle, turning one miss into a burst of failed

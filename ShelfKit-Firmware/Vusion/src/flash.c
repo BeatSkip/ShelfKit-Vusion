@@ -32,9 +32,12 @@ void extflash_power_up(void)
 
 void extflash_power_down(void)
 {
-#if SHELF_FLASH_POWER_ON
+#if SHELF_FLASH_POWER_ON && !SHELF_NFC_RAIL_HOLD
     pwr_off();
 #endif
+    /* With SHELF_NFC_RAIL_HOLD the rail stays up: the NFC chip shares it and can
+     * only drive its open-drain field-detect output while it has VCC. Left unpowered
+     * that pin floats, oscillates, and each edge wakes the tag. */
 }
 
 uint8_t extflash_probe(void)

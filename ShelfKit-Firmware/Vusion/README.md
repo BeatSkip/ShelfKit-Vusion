@@ -104,6 +104,53 @@ also park tags itself — `L<hh>` on its console makes every reply carry a delay
 Counters reset on the first answered poll, and the day-based steps use uptime, so a
 tag that comes back into range returns to the base interval immediately.
 
+## Polling on an NFC field (parked)
+
+**Disabled for now** (`SHELF_NFC_POLL 0`); the driver and the findings are kept in
+`Documentation/nfc-field-detect.md`, and the section below describes the intended behaviour.
+
+`SHELF_NFC_POLL` would make the tag react when someone holds a reader to the label: it flashes
+the **blue LED** and polls within a second instead of waiting out the interval. The LED is
+there so the feature can be tested on a battery board with nothing plugged into the serial
+port.
+
+The NFC chip's field-detect output is **open drain**: it pulls the line low while a
+reader's field is present and releases it otherwise, so the pin needs the weak pull-up it
+gets from `DIRB` bit 3 = input and `PORTB` bit 3 = 1 (AND9349/D's pin table: `0 1` is
+"Z, Pull-Up"). With an open drain, "a reader arrived" is a **falling edge**.
+
+That is what `EXTIRQ` provides, and its default pin happens to be PB3 already:
+
+| register | value | meaning |
+|---|---|---|
+| `EXTIRQ` bits 5:4 | `11` | dropping edge |
+| `EXTIRQ` bit 6 | `0` | Port B.3 |
+| `IE.2` | 1 | External 1 interrupt enable (vector `0x13`) |
+
+The handler sets a flag and disables itself; the main loop flashes the LED, logs
+`nfc field` and arms a poll one second out; `listen_cb` re-arms it after the poll. One
+event per arrival, and no way for a level that stays present to keep firing.
+
+The first attempt used the pin-change interrupt (`INT_GPIO`). It fired on **both** edges
+and on this part its change flag has no documented acknowledge, so it re-fired
+continuously. `EXTIRQ` is edge-triggered and self-clearing, which is why it replaces it.
+
+### PB3 is shared with the bootloader's BOOT strap
+
+The same pin is the BOOT input and the serial adapter's **DTR** is wired to it. With an
+adapter attached - especially one that is unpowered or holding a level - that line is not
+the NFC chip's signal, and the tag will react to the adapter. Treat anything seen with a
+serial cable plugged in as a property of the cable; test on a battery board, which is
+what the LED is for.
+
+`SHELF_NFC_POLL 0` removes the feature and leaves PB3 untouched.
+
+**The chip has to be configured before it does anything.** By default that pin reports
+the NFC chip's EEPROM write-in-progress flag, not a field detect, so the firmware is inert
+until the chip's configuration byte is changed. That write needs register details the
+datasheet in this repository does not contain - see
+[Documentation/nfc-field-detect.md](../../Documentation/nfc-field-detect.md).
+
 ## Power
 
 The tag polls as above. Between polls:
@@ -157,55 +204,47 @@ The radio deep sleep is still the least proven step. If a tag stops making its p
 
 ### Measuring power without a meter
 
-There is no shunt on the board, so measure **time in each state** and multiply by the
-datasheet currents. The tag counts it for you and prints it with the link stats every
-`SHELF_STATS_EVERY` polls (10 by default, so once per 10 minutes):
+There is no shunt on the board, so the firmware counts **time in each state** and prints
+the estimate itself, every `SHELF_STATS_EVERY` polls (5, so every 5 minutes) on the tag's
+own serial port:
 
 ```
-stats req=12 ok=12 fail=0 air=12 err=0 rxbad=0 stray=0
-pow awake=2100ms radio=2000ms asleep=578s
+pow awake=1600ms radio=1500ms asleep=58s avg=322uA life=80d
 ```
 
 | field | meaning | datasheet current |
 |---|---|---|
-| `awake` | MCU running, since boot: the boot itself, every poll, every transfer | ~3 mA (150 uA/MHz at 20 MHz) |
-| `radio` | of that, the transmitter/receiver was on (a subset of `awake`) | +9.5 mA RX, +7.5 mA TX |
-| `asleep` | MCU in Sleep | ~2 uA |
+| `awake` | MCU running since boot: the boot, every poll, the listening window | ~3 mA (150 uA/MHz at 20 MHz) |
+| `radio` | of that, the transceiver was on (a subset of `awake`) | +9.5 mA RX |
+| `asleep` | MCU in Sleep | ~3 uA |
+| `avg` | the average draw, computed from the three above | - |
+| `life` | days on a 620 mAh CR2450 at that average | - |
 
-```
-I = (awake_ms * 3 mA + radio_ms * 9.5 mA + asleep_s * 1000 * 0.002 mA)
-    / (awake_ms + asleep_s * 1000)
-```
+The window is the whole story: 1.5 s of a 60 s cycle at 12.5 mA (MCU + receiver) is
+0.3 mA average on its own, while the sleep current is irrelevant. Hence:
 
-Worked example from a real 60 s cycle (poll, 2 s window, sleep):
+| configuration | average | CR2450 |
+|---|---|---|
+| 1.5 s grace, 60 s poll | 0.30 mA | ~86 days |
+| 0.7 s grace, 60 s poll | 0.16 mA | ~160 days |
+| **0.7 s grace, 120 s poll (current)** | **0.07 mA** | **~400 days** |
 
-```
-(2100 * 3 + 2000 * 9.5 + 57.8 s * 1000 * 0.002) / 60000 = 0.42 mA   -> ~60 days
-```
+The receiver window is ~98 % of the budget at these intervals, so those two knobs are
+the whole story: the sleep chain below is worth about 1 uA of the 70.
 
-The same cycle with the 500 ms grace instead of a flagged 2 s window:
+Read the line like this:
 
-```
-(600 * 3 + 500 * 9.5 + 59.5 s * 1000 * 0.002) / 60000 = 0.11 mA       -> ~230 days
-```
+- `asleep` ≈ 58 s per 60 s cycle → it really is sleeping; the cost is the window.
+- `asleep` well below that → something keeps it awake (a stuck transfer, a queue that
+  re-arms the window every poll).
+- `radio` much larger than the window → the receiver is not being parked; check that
+  `listen_cb` runs.
+- `avg` moving between ~320 and ~430 uA is normal: it tracks how many polls carried a
+  queued command and therefore opened the full 2 s window.
 
-So **awake time is the whole ball game**: the MCU alone is 3 mA while it runs, and the
-receiver adds 9.5 mA. Fifteen minutes of being awake per day costs more than the sleep
-current for a month.
-
-Read the numbers like this:
-
-- `asleep` ≈ 58-59 s per 60 s cycle → the tag really is sleeping; the cost is the
-  window, so shorten it (500 ms grace, and pre-arm only when something is queued).
-- `asleep` well below that → something keeps it awake: a transfer that never ends, a
-  queue retrying every poll (each flagged poll opens a 2 s window), or the listen window
-  re-arming because `img_rx_active()`/`fw_dump_active()` is stuck.
-- `radio` close to `awake` → the receiver is never parked; check that `listen_cb` runs.
-
-The second, slower cross-check is the supply voltage the tag already reports every poll
-(`vdd=034c` = 3.30 V): plot it over days. A CR2450's curve is flat in the middle, so a
-few hours prove little, but a day of decay tells you the order of magnitude and catches a
-tag that is not sleeping at all.
+The second, slower cross-check is the `vdd=` value each poll already carries: plot it
+over days. A CR2450's curve is flat in the middle, so hours prove nothing, but a day
+reveals the order of magnitude.
 
 **Battery.** Each poll carries the supply voltage, measured with the AXSEM bootloader's
 ADC recipe (`shelfhw_measure_vdd`, volts*256, e.g. 3.00 V -> 0x0300). The hub prints

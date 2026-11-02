@@ -49,7 +49,9 @@ END_SETTLE_S = 20.0         # ... and refreshes it after acknowledging END
 # middle of the hub's attempts and started a new cycle, so one miss turned into a
 # 90 s burst of "SENT ... fail".
 CMD_TIMEOUT_S = 6.0
-CMD_RETRY_WINDOW_S = 90.0   # a tag sleeps between polls (60 s + 3 s window), so a frame may wait a whole cycle
+# A tag sleeps between polls (120 s + its window), so a frame may wait a whole
+# cycle; below that, a missed push is abandoned before the tag ever polls again.
+CMD_RETRY_WINDOW_S = 180.0
 CMD_RETRY_PAUSE_S = 0.3
 RETRY_COOLDOWN_S = 30.0
 
@@ -60,7 +62,7 @@ RE_SENT = re.compile(r"^SENT ([0-9a-fA-F]{4}) (ok|fail) att=(\d+)")
 # Frames per 'B' line. One serial round-trip per batch instead of per frame; the
 # hub still sends them one at a time and waits for each acknowledgement, so the
 # air protocol is unchanged.
-BATCH_FRAMES = 8
+BATCH_FRAMES = 16
 BATCH_RETRY_S = 0.3     # pause between batch retries: the tag's window is short
 
 
