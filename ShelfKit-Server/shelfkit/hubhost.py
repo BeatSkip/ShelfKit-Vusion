@@ -63,6 +63,12 @@ RE_SENT = re.compile(r"^SENT ([0-9a-fA-F]{4}) (ok|fail) att=(\d+)")
 # hub still sends them one at a time and waits for each acknowledgement, so the
 # air protocol is unchanged.
 BATCH_FRAMES = 16
+
+# Pre-rendering made the first frame leave within ~6 ms of the poll, and hardware
+# answered `fail att=4` every time: the tag has just finished sending its poll and is
+# only then settling into receive. Rendering used to provide ~80 ms of slack by
+# accident. This is that slack, on purpose - far inside the tag's listening window.
+PUSH_SETTLE_S = 0.08
 BATCH_RETRY_S = 0.3     # pause between batch retries: the tag's window is short
 
 

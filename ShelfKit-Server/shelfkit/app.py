@@ -1682,6 +1682,10 @@ class App:
                 f"# {len(frames)} DATA frames to send"
                 + (f", {step} per command" if step > 1 else " (hub does not batch)"),
             )
+            # Let the tag settle into receive after its poll before the first frame:
+            # see hubhost.PUSH_SETTLE_S - without it every pre-rendered push failed 4/4.
+            if cancel.wait(hubhost.PUSH_SETTLE_S):
+                return
             sent = 0
             # Frame one is BEGIN: the tag resets the panel on it and cannot
             # acknowledge anything for a couple of seconds. Sent alone, with the
