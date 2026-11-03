@@ -1315,6 +1315,69 @@ class App:
                 return True
         return False
 
+    # ── alternating transfers ─────────────────────────────────────────────
+    # A tag listens for ~2 s after its poll, but once it has received BEGIN it stays
+    # awake until END (the tag's image timeout is idle-based, 30 s). That makes it safe
+    # to take turns: while the running transfer waits between batches, another tag that
+    # has just polled can start its own transfer and advance one batch at a time.
+    # One extra session is enough - the point is that no tag waits for a whole transfer
+    # to finish, not that N transfers run at once (the radio is half duplex anyway).
+    YIELD_WINDOW_S = 1.5    # a tag is listening this long after its poll
+
+    def _interloper_start(self, key: str, mine: int, cancel):
+        """Take a queued transfer for another listening tag, send its BEGIN."""
+        with self.lock:
+            now = time.time()
+            job = next(
+                (j for j in self.queue
+                 if j["state"] == "pending"
+                 and j["kind"] in ("image", "service")
+                 and j["addr"] != mine
+                 and j["params"].get("staged")
+                 and now - self.tag_seen.get(j["addr"], 0.0) <= self.YIELD_WINDOW_S),
+                None,
+            )
+            if job is None:
+                return None
+            job["state"] = "running"
+        addr = job["addr"]
+        frames = list(job["params"]["staged"][0])
+        if not frames:
+            self._interloper_fail(job, "no frames")
+            return None
+        self.note(key, f"# {addr:04X} alternating while {mine:04X} transfers")
+        if not self._send_frame(key, addr, frames[0], cancel):
+            self._interloper_fail(job, f"first frame not acknowledged ({self.last_answer})")
+            return None
+        cancel.wait(hubhost.BEGIN_SETTLE_S)
+        return {"job": job, "addr": addr, "frames": frames, "sent": 1}
+
+    def _interloper_fail(self, job: dict, why: str) -> None:
+        with self.lock:
+            job["state"] = "failed"
+            job["error"] = why
+        self._event("fail", f"{job['addr']:04X}", job["label"])
+
+    def _interloper_step(self, key: str, inter: dict, step: int, cancel) -> bool:
+        """One batch of the interloper. False when it is finished or dead."""
+        group = inter["frames"][inter["sent"]:inter["sent"] + step]
+        if not group:
+            return False
+        ok = self._send_batch(key, inter["addr"], group, cancel)
+        if not ok:
+            self._interloper_fail(inter["job"], f"batch failed ({self.last_answer})")
+            return False
+        inter["sent"] += len(group)
+        if inter["sent"] >= len(inter["frames"]):
+            cancel.wait(hubhost.END_SETTLE_S)
+            with self.lock:
+                inter["job"]["state"] = "done"
+                inter["job"]["error"] = None
+            self.note(key, f"# {inter['addr']:04X} updated")
+            self._event("ok", f"{inter['addr']:04X}", inter["job"]["label"])
+            return False
+        return True
+
     def _send_batch(self, key: str, addr: int, frames: list[bytes], cancel) -> bool:
         """Several DATA frames in one 'B' line: one SENT answer for the batch."""
         pane = self.panes[key]
@@ -1687,6 +1750,7 @@ class App:
             if cancel.wait(hubhost.PUSH_SETTLE_S):
                 return
             sent = 0
+            inter = None        # a second tag's transfer, alternating with this one
             # Frame one is BEGIN: the tag resets the panel on it and cannot
             # acknowledge anything for a couple of seconds. Sent alone, with the
             # settle after it; in a batch the next seven frames land in that hole
@@ -1729,8 +1793,20 @@ class App:
                 sent += len(group)
                 with self.lock:
                     self.progress = f"{sent}/{len(frames)}"
+                # take turns: let another tag that is listening advance by a batch
+                if inter is not None:
+                    if not self._interloper_step(key, inter, step, cancel):
+                        inter = None
+                elif sent < len(frames) - step:
+                    inter = self._interloper_start(key, addr, cancel)
                 if sent // 50 != (sent - len(group)) // 50:
                     self.note(key, f"# frame {sent}/{len(frames)}")
+            # If the interloper is still going, finish it: abandoning it here leaves
+            # its job stuck in "running" for ever, and its tag waiting for an END
+            # that never comes.
+            while inter is not None:
+                if not self._interloper_step(key, inter, step, cancel):
+                    inter = None
             cancel.wait(hubhost.END_SETTLE_S)
             if cancel.is_set():
                 self.note(key, "# cancelled before the refresh finished")

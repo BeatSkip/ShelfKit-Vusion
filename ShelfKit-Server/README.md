@@ -275,6 +275,24 @@ POST /api/tags/<hex>/assign  ->  {"ok": true, "queued": 7, ...}     (pending)
 
 - The queue is per tag and in arrival order; a poll for tag A never runs tag B's job.
 - One command runs at a time; a second waits for the next poll (the link is busy).
+- **Two transfers take turns instead of queueing.** A tag listens for ~2 s after it
+  polls, but once it has received BEGIN it stays awake until END (its image timeout is
+  idle-based, 30 s). `_interloper_start()` therefore picks up a queued transfer for a
+  *different* tag that has polled within `YIELD_WINDOW_S` (1.5 s) and advances it one batch
+  at a time between the running transfer's batches. Only one extra session is tracked - the
+  point is that no tag waits for a whole transfer to finish, not that N run at once (the
+  radio is half duplex, so total throughput is unchanged). It costs airtime and battery:
+  both tags hold their receivers open for the duration, so two 16 s transfers become ~32 s
+  of receiver time each.
+- **Images are rendered when they are queued, not when the tag polls.** A tag listens
+  for under two seconds after it reports, and rendering inside that window was the largest
+  avoidable delay in it; `_stage()` renders to the finished DATA frames at click time and
+  the worker only writes them. It also means a bad image fails at the click.
+- **`hubhost.PUSH_SETTLE_S` (80 ms) exists because that worked too well.** With rendering
+  out of the path the first frame left ~6 ms after the poll and hardware answered
+  `SENT ... fail att=4` every time - the tag was still turning around from its own
+  transmission. Rendering had been supplying that slack by accident; now it is explicit
+  and well inside the tag's window.
 - `hubhost.BATCH_FRAMES` is 16, and that is near the hardware ceiling. The 'B' line is
   hex, so a frame costs ~60 characters; 16 frames need a ~939-character line, which is why
   the hub's host ring is 2 KB and its XRAM is 4.8 kB of 8 kB. 32 frames still fits

@@ -230,6 +230,13 @@ def main() -> int:
         check("the queue delivered it on the poll", wait_job(label["queued"]), label)
         check(f"the label went out as {IMAGE_FRAMES} image frames",
               len(PORTS["SMOKE1"].frames) >= IMAGE_FRAMES, len(PORTS["SMOKE1"].frames))
+        # The whole point of pre-rendering: the frames must exist against the job
+        # before the tag ever polls, so nothing is rendered after the poll.
+        job = next(j for j in app.queue if j["kind"] == "service")
+        staged = job["params"].get("staged")
+        check("the frames were pre-rendered at enqueue",
+              staged is not None and len(staged[0]) == IMAGE_FRAMES,
+              job.get("state"))
 
         # an ordinary image push
         before = len(PORTS["SMOKE1"].frames)
@@ -249,6 +256,31 @@ def main() -> int:
         check("the push finished", wait_idle())
         sent = len(PORTS["SMOKE1"].frames) - before
         check("an image is still 404 frames", sent == IMAGE_FRAMES, sent)
+
+        # two transfers queued at once: the second must alternate, not wait
+        first = app.enqueue("image", 0x0100, "alt-first", path=str(app.image),
+                            fit="stretch", dither="threshold")
+        second = app.enqueue("image", 0x0101, "alt-second", path=str(app.image),
+                             fit="stretch", dither="threshold")
+        check("both transfers queued", first.get("ok") is True and second.get("ok") is True,
+              [first, second])
+        for _ in range(600):
+            PORTS["SMOKE1"].feed("POLL src=0100 seq=05 rssi=-30 up=13s att=1 hubrssi=-33 vdd=0300\r\n")
+            PORTS["SMOKE1"].feed("POLL src=0101 seq=06 rssi=-30 up=13s att=1 hubrssi=-33 vdd=0300\r\n")
+            if (job_state(first["queued"]) == "done"
+                    and job_state(second["queued"]) == "done"):
+                break
+            time.sleep(0.1)
+        check("the first transfer finished", job_state(first["queued"]) == "done",
+              job_state(first["queued"]))
+        check("the second finished too", job_state(second["queued"]) == "done",
+              job_state(second["queued"]))
+        flat = []
+        for item in app.panes[app.hub_key()].since(0):
+            flat.extend([item] if isinstance(item, str) else [str(x) for x in item])
+        hub_log = "\n".join(flat)
+        check("the second tag alternated instead of waiting", "alternating" in hub_log,
+              hub_log[-300:])
 
         # the flash read-back: request, collect from the pane log, save, serve
         result = post("/api/tags/0100/read", {})["result"]
