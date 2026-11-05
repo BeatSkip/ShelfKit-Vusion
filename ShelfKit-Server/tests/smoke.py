@@ -24,6 +24,7 @@ import sys
 import tempfile
 import threading
 import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -36,7 +37,23 @@ from shelfkit.app import App  # noqa: E402
 from shelfkit.serial_link import PortSpec  # noqa: E402
 
 FAILED: list[str] = []
-IMAGE_FRAMES = 404          # two 5,624-byte planes at 28 bytes per frame
+RAW_IMAGE_FRAMES = 404      # two 5,624-byte planes at 28 bytes per frame, uncompressed
+
+
+def planes_from(frames):
+    """Rebuild (bw, red) from one transfer's DATA payloads, as the tag would."""
+    from shelfkit import eco
+    planes, zbuf = {}, {}
+    for f in frames:
+        if f[0] == hubhost.OP_CHUNK:
+            planes.setdefault(f[1], bytearray()).extend(f[4:])
+        elif f[0] == hubhost.OP_ZCHUNK:
+            zbuf.setdefault(f[1], bytearray()).extend(f[4:])
+        elif f[0] == hubhost.OP_ZEND:
+            n = f[2] | (f[3] << 8)
+            assert n == len(zbuf[f[1]]) <= hubhost.ECO_MAX
+            planes[f[1]] = bytearray(eco.decode(bytes(zbuf[f[1]])))
+    return bytes(planes.get(0, b"")), bytes(planes.get(1, b""))
 
 
 def check(name: str, ok: bool, detail=None) -> None:
@@ -57,6 +74,9 @@ class FakePort:
         self._rts = False
         self.buf = bytearray()
         self.written: list[str] = []
+        self.panel: list[bytes] = []    # IMG messages the hub's own panel received
+        self.hex_lines: list[str] = []  # what a bootloader flash wrote
+        self.booted = False             # ... and whether it then sent R
 
     @property
     def is_open(self) -> bool:
@@ -104,6 +124,14 @@ class FakePort:
         self.written.append(line)
         if line == "P":
             self.feed("PONG\r\n")
+        elif line == "?":                       # the mask-ROM bootloader's banner
+            self.feed("AX8052 Bootloader V1.1 Checksum 0xA7D2\r\n")
+        elif line == "K":
+            self.feed("OK\r\n")
+        elif line == "R":
+            self.booted = True
+        elif line.startswith(":"):
+            self.hex_lines.append(line)
         elif line.startswith("S"):
             frame = bytes.fromhex(line[1:])
             addr = frame[0] | (frame[1] << 8)
@@ -114,6 +142,14 @@ class FakePort:
                 start = payload[1] | (payload[2] << 8) | (payload[3] << 16)
                 length = payload[4] | (payload[5] << 8)
                 self.stream(addr, start, length)
+        elif line.startswith("D"):
+            # an image message for the hub's own panel: checksum must add up to 0
+            raw = bytes.fromhex(line[1:])
+            if sum(raw) & 0xFF:
+                self.feed("ERR chk\r\n")
+            else:
+                self.panel.append(raw[:-1])
+                self.feed("OK img\r\n")
         elif line.startswith("B"):
             # a batch: address, count, then (length, payload) per frame - the same
             # walk the hub does, so the test catches a format the hub would reject
@@ -204,7 +240,7 @@ def main() -> int:
 
     try:
         # the hub's boot banner is what state() and the push read capabilities from
-        PORTS["SMOKE1"].feed("*** ShelfKit hub, node 0001 net 5a dump=1 batch=1\r\n")
+        PORTS["SMOKE1"].feed("*** ShelfKit hub, node 0001 net 5a dump=1 batch=1 show=1\r\n")
         PORTS["SMOKE1"].feed("POLL src=0100 seq=01 rssi=-30 up=12s att=1 hubrssi=-33 vdd=0300\r\n")
         time.sleep(0.2)
         check("a poll makes a tag appear", [a for a, _ in get("/api/state")["tags"]] == [0x100])
@@ -228,15 +264,23 @@ def main() -> int:
         label = post("/api/tags/0100/service", {})["result"]
         check("service label queued", label.get("ok") is True and label.get("queued"), label)
         check("the queue delivered it on the poll", wait_job(label["queued"]), label)
-        check(f"the label went out as {IMAGE_FRAMES} image frames",
-              len(PORTS["SMOKE1"].frames) >= IMAGE_FRAMES, len(PORTS["SMOKE1"].frames))
         # The whole point of pre-rendering: the frames must exist against the job
         # before the tag ever polls, so nothing is rendered after the poll.
         job = next(j for j in app.queue if j["kind"] == "service")
         staged = job["params"].get("staged")
-        check("the frames were pre-rendered at enqueue",
-              staged is not None and len(staged[0]) == IMAGE_FRAMES,
-              job.get("state"))
+        check("the frames were pre-rendered at enqueue", staged is not None, job.get("state"))
+        label_frames = list(staged[0])
+        check("the label went out compressed",
+              len(label_frames) < RAW_IMAGE_FRAMES / 5
+              and any(f[0] == hubhost.OP_ZEND for f in label_frames), len(label_frames))
+        check("every staged frame reached the hub",
+              PORTS["SMOKE1"].frames[-len(label_frames):] == [bytes(f) for f in label_frames])
+        from shelfkit import preview as _pv
+        want = _pv.render(str(SERVER / "data" / "service" / "service-0100.png"), "stretch", "threshold")
+        check("the compressed label decodes to the rendered planes",
+              planes_from(label_frames) == (bytes(want.bw), bytes(want.red)))
+        raw = list(hubhost.image_messages(want.bw, want.red, compress=False))
+        check("uncompressed is still 404 frames", len(raw) == RAW_IMAGE_FRAMES, len(raw))
 
         # an ordinary image push
         before = len(PORTS["SMOKE1"].frames)
@@ -254,10 +298,16 @@ def main() -> int:
 
         check("send accepted", app.send(0x100) is True)
         check("the push finished", wait_idle())
-        sent = len(PORTS["SMOKE1"].frames) - before
-        check("an image is still 404 frames", sent == IMAGE_FRAMES, sent)
+        sent = PORTS["SMOKE1"].frames[before:]
+        st = app.state()["editor"]
+        img = _pv.render(str(app.image), st["fit"], st["dither"])
+        check("the push decodes to the rendered image",
+              planes_from(sent) == (bytes(img.bw), bytes(img.red)), len(sent))
 
-        # two transfers queued at once: the second must alternate, not wait
+        # two transfers queued at once: the second must alternate, not wait. Run with
+        # raw planes (as a dithered photo goes out): a compressed push is ~30 frames
+        # and over before the second tag has even polled.
+        eco_max, hubhost.ECO_MAX = hubhost.ECO_MAX, 0
         first = app.enqueue("image", 0x0100, "alt-first", path=str(app.image),
                             fit="stretch", dither="threshold")
         second = app.enqueue("image", 0x0101, "alt-second", path=str(app.image),
@@ -281,6 +331,7 @@ def main() -> int:
         hub_log = "\n".join(flat)
         check("the second tag alternated instead of waiting", "alternating" in hub_log,
               hub_log[-300:])
+        hubhost.ECO_MAX = eco_max
 
         # the flash read-back: request, collect from the pane log, save, serve
         result = post("/api/tags/0100/read", {})["result"]
@@ -299,6 +350,249 @@ def main() -> int:
               len(body) == 0x3000 and body[0x1000:0x100A] == IDENTITY,
               [len(body), body[0x1000:0x100A].hex()])
 
+        # ── pre-arms: the tag only stays awake after a poll when the hub was told ──
+        hub = PORTS["SMOKE1"]
+
+        def wait_for(pred, secs=3.0):
+            end = time.time() + secs
+            while time.time() < end:
+                if pred():
+                    return True
+                time.sleep(0.02)
+            return False
+
+        hub.written.clear()
+        pend = app.enqueue("image", 0x0200, "prearm", path=str(app.image),
+                           fit="stretch", dither="threshold")
+        check("queueing a command pre-arms its tag", "Q0200" in hub.written, hub.written)
+        hub.written.clear()
+        hub.feed("*** ShelfKit hub, node 0001 net 5a dump=1 batch=1 show=1\r\n")
+        check("a reset hub gets its pre-arms back",
+              wait_for(lambda: "Q0200" in hub.written), hub.written)
+        app.cancel_queue()
+        hub.written.clear()
+        hub.feed("*** ShelfKit hub, node 0001 net 5a dump=1 batch=1 show=1\r\n")
+        time.sleep(0.3)
+        check("nothing pending, nothing re-armed", not any(w.startswith("Q") for w in hub.written),
+              hub.written)
+
+        # ── the hub's own panel lists the connected tags ──
+        disp = app.hubdisp
+        check("the hub display is off by default", disp.tick() is False and not hub.panel)
+        disp.configure(enabled=True, min_interval_s=1, timeout_s=300, title="Test hub")
+        check("the config persists",
+              store.settings()["hub_display"]["title"] == "Test hub", store.settings())
+        check("a connected tag makes the panel draw", disp.tick() is True)
+        msgs = hub.panel
+        check("BEGIN, 88 chunks of 128 B or less, END", len(msgs) == 90 and msgs[0] == b"\x01"
+              and msgs[-1] == b"\x03", len(msgs))
+        check("the panel lists tag 0100", "0100" in disp.info()["shown"], disp.info())
+        check("no change, no redraw", disp.tick() is False)
+        check("the hub was released afterwards", app.display_busy is False)
+        for addr in list(app.tag_seen):                  # every tag silent for > 5 minutes
+            app.tag_seen[addr] = time.time() - 400
+        time.sleep(1.1)
+        before = len(hub.panel)
+        check("a tag silent for 5 minutes leaves the panel", disp.tick() is True
+              and disp.info()["shown"] == [] and len(hub.panel) == before + 90, disp.info())
+        check("an empty, unchanged panel is left alone", disp.tick() is False)
+        check("the display API answers", get("/api/hub-display")["timeout_s"] == 300)
+        post("/api/hub-display", {"enabled": False})
+        check("the display API configures", get("/api/hub-display")["enabled"] is False)
+        app.tag_seen[0x100] = time.time()
+
+        # page settings: validated, stored, and shared through /api/state
+        check("prefs start at the defaults", get("/api/state")["prefs"]["late_after_s"] == 330)
+        saved = post("/api/prefs", {"late_after_s": 400, "low_battery_v": 2.6, "fleet_view": "table"})
+        check("prefs save", saved.get("ok") is True and saved["prefs"]["late_after_s"] == 400, saved)
+        check("prefs reach the state", get("/api/state")["prefs"]["fleet_view"] == "table")
+        try:
+            post("/api/prefs", {"late_after_s": 9000, "silent_after_s": 700})
+            refused = False
+        except urllib.error.HTTPError as err:
+            refused = err.code == 400 and not json.loads(err.read())["ok"]
+        check("an impossible time is refused", refused)
+        check("a refused change stores nothing", get("/api/state")["prefs"]["late_after_s"] == 400)
+        try:
+            post("/api/prefs", {"late_after_s": 700, "silent_after_s": 650})
+            refused = False
+        except urllib.error.HTTPError as err:
+            refused = err.code == 400
+        check("times out of order are refused", refused)
+
+        # alias CSV: export, then import (including a tag that has not been heard)
+        post("/api/tags/0100", {"alias": "A, \"quoted\"", "notes": "n1", "grid_row": 2, "grid_col": 5})
+        exported = urllib.request.urlopen(base + "/api/aliases.csv", timeout=20).read().decode()
+        check("the export has a header and the tag", exported.startswith("hex_id,alias,notes,shelf,slot")
+              and "0100" in exported and '"A, ""quoted"""' in exported, exported)
+        result = post("/api/aliases", {"csv": "hex_id,alias,notes,shelf,slot\n"
+                                              "0100,Dairy,,1,2\n0abc,Bread,fresh,,\nzzzz,Bad,,,\n"})["result"]
+        check("the import applies good rows and reports bad ones",
+              result["imported"] == 2 and len(result["problems"]) == 1, result)
+        meta = get("/api/state")["tag_info"]["256"]
+        check("an import sets alias and clears blanks",
+              meta["alias"] == "Dairy" and meta["notes"] is None and meta["row"] == 1, meta)
+        check("an import keeps a tag that has not been heard", app.tag_meta[0x0ABC]["alias"] == "Bread")
+
+        # ── flashing: the serial bootloader and the debugger ──
+        flash0 = get("/api/state")["flash"]
+        check("the flash starts idle with four steps",
+              flash0["active"] is False and [x["key"] for x in flash0["steps"]]
+              == ["connect", "erase", "program", "run"], flash0)
+
+        def wait_flash(timeout: float = 30.0) -> dict:
+            end = time.time() + timeout
+            while time.time() < end:
+                info = get("/api/state")["flash"]
+                if not info["active"] and info["result"]:
+                    return info
+                time.sleep(0.1)
+            return get("/api/state")["flash"]
+
+        hex_lines = [":020000040000FA", ":10000000" + "00" * 16 + "F0", ":00000001FF"]
+        app_hex = tmp / "tag-app.hex"
+        app_hex.write_text("\n".join(hex_lines) + "\n")
+        full_hex = tmp / "tag-full-test.hex"
+        full_hex.write_text("\n".join(hex_lines) + "\n")
+        tag_pane = app.keys[1]
+
+        started = post("/api/flash", {"method": "serial", "path": str(app_hex), "pane": tag_pane})
+        check("a serial flash starts", started.get("ok") is True, started)
+        done = wait_flash()
+        check("the serial flash finishes", done["result"] == "ok", done)
+        check("every serial step is done", all(x["state"] == "done" for x in done["steps"]),
+              done["steps"])
+        check("the hex lines reached the bootloader", PORTS["SMOKE2"].hex_lines == hex_lines,
+              PORTS["SMOKE2"].hex_lines)
+        check("the bootloader was told to run", PORTS["SMOKE2"].booted)
+        check("the pane is open again afterwards", app.panes[tag_pane].worker.is_open)
+        check("the flash is in the event log",
+              any(e[3] == "flash" for e in get("/api/poll?c=&e=0")["events"]))
+        check("the flash output is served",
+              any("Banner" in line for line in get("/api/flash")["flash"]["log"]))
+
+        # the debugger: a fake axsdb prints the real tool's lines
+        from shelfkit import flasher as flasher_mod
+        windows = sys.platform.startswith("win")
+        ext = ".bat" if windows else ".sh"
+        ok_tool, bad_tool = tmp / f"fake-axsdb{ext}", tmp / f"fail-axsdb{ext}"
+        argv_file = tmp / "argv.txt"
+        flasher_mod.AXSDB_NAMES = (*flasher_mod.AXSDB_NAMES, ok_tool.name, bad_tool.name)
+        if windows:
+            ok_tool.write_text("@echo off\r\necho %*>\"" + str(argv_file) + "\"\r\n"
+                               "echo Programming Serial 39DC0854\r\necho Bulk erase...\r\n"
+                               "echo Flash program...\r\necho Run program...\r\n")
+            bad_tool.write_text("@echo off\r\necho Programming Serial 39DC0854\r\n"
+                                "echo Bulk erase...\r\necho ERROR: debugger lost\r\nexit /b 3\r\n")
+        else:
+            ok_tool.write_text("#!/bin/sh\necho \"$@\" > '" + str(argv_file) + "'\n"
+                               "echo Programming Serial 39DC0854\necho Bulk erase...\n"
+                               "echo Flash program...\necho Run program...\n")
+            bad_tool.write_text("#!/bin/sh\necho Programming Serial 39DC0854\necho Bulk erase...\n"
+                                "echo ERROR: debugger lost\nexit 3\n")
+            ok_tool.chmod(0o755)
+            bad_tool.chmod(0o755)
+
+        try:
+            post("/api/prefs", {"axsdb_path": str(tmp / "nowhere" / "axsdb.exe")})
+            refused = False
+        except urllib.error.HTTPError as err:
+            refused = err.code == 400
+        check("a missing axsdb path is refused", refused)
+        saved = post("/api/prefs", {"axsdb_path": str(ok_tool)})
+        check("an axsdb path is stored", saved.get("ok") is True
+              and saved["prefs"]["axsdb_path"] == str(ok_tool), saved)
+        check("the page can see axsdb was found", get("/api/state")["flash"]["axsdb"]["found"])
+
+        try:
+            post("/api/flash", {"method": "debugger", "path": str(app_hex)})
+            guarded = None
+        except urllib.error.HTTPError as err:
+            guarded = json.loads(err.read())
+        check("an image without a bootloader needs confirming before --eraseall",
+              guarded is not None and guarded.get("needs_confirm") is True, guarded)
+
+        post("/api/flash", {"method": "debugger", "path": str(full_hex)})
+        done = wait_flash()
+        check("the debugger flash finishes", done["result"] == "ok", done)
+        check("every debugger step is done", all(x["state"] == "done" for x in done["steps"]),
+              done["steps"])
+        check("the chip's serial number is read from the output", done["serial"] == "39DC0854", done)
+        argv = argv_file.read_text() if argv_file.exists() else ""
+        check("axsdb got the erase and program flags",
+              "--eraseall" in argv and "--flashprog" in argv and full_hex.name in argv, argv)
+
+        post("/api/prefs", {"axsdb_path": str(bad_tool)})
+        post("/api/flash", {"method": "debugger", "path": str(full_hex)})
+        done = wait_flash()
+        steps = {x["key"]: x["state"] for x in done["steps"]}
+        check("a failing debugger reports the step it failed on",
+              done["result"] == "failed" and steps["erase"] == "failed"
+              and steps["connect"] == "done" and steps["program"] == "waiting", done)
+        check("the failure carries the tool's own words",
+              "code 3" in (done["error"] or "") and "debugger lost" in (done["error"] or ""), done)
+
+        # a page on another site must not be able to start any of this
+        request = urllib.request.Request(
+            base + "/api/prefs", data=b"{}", method="POST",
+            headers={"Content-Type": "application/json", "Origin": "http://evil.example"})
+        try:
+            urllib.request.urlopen(request, timeout=20)
+            blocked = False
+        except urllib.error.HTTPError as err:
+            blocked = err.code == 403
+        check("a cross-site POST is refused", blocked)
+        request = urllib.request.Request(
+            base + "/api/prefs", data=b"{}", method="POST",
+            headers={"Content-Type": "application/json", "Origin": base})
+        check("a same-site POST is accepted", json.loads(urllib.request.urlopen(request, timeout=20).read())["ok"])
+        post("/api/prefs", {"axsdb_path": ""})
+
+        # the debugger runs beside a busy hub; a serial flash only waits on the hub's own port
+        post("/api/prefs", {"axsdb_path": str(ok_tool)})
+        hub_pane = get("/api/state")["hub"]
+        app.sending = True                       # the hub is mid-transfer
+        try:
+            post("/api/flash", {"method": "debugger", "path": str(full_hex)})
+            started = True
+        except urllib.error.HTTPError as err:
+            started = False
+        check("the debugger flashes while the hub is busy", started)
+        check("a debugger flash leaves the hub's queue running", not app.flash.blocks_hub)
+        wait_flash()
+        try:
+            post("/api/flash", {"method": "serial", "path": str(app_hex), "pane": hub_pane})
+            refused = False
+        except urllib.error.HTTPError as err:
+            refused = err.code == 409
+        check("a serial flash on the busy hub's own port is refused", refused)
+        post("/api/flash", {"method": "serial", "path": str(app_hex), "pane": tag_pane})
+        check("a serial flash on the other port runs beside a busy hub",
+              wait_flash()["result"] == "ok")
+        app.sending = False
+
+        # serial ports are settings too
+        shown = get("/api/state")["prefs"]
+        check("the ports are in the settings", shown["hub_port"] == "SMOKE1"
+              and shown["tag_port"] == "SMOKE2", shown)
+        try:
+            post("/api/prefs", {"tag_port": "smoke1"})
+            refused = False
+        except urllib.error.HTTPError as err:
+            refused = err.code == 400
+        check("the tag can't take the hub's port", refused)
+        check("a refused port changes nothing", get("/api/state")["prefs"]["tag_port"] == "SMOKE2")
+        saved = post("/api/prefs", {"tag_port": "SMOKE3"})
+        check("a new tag port is stored", saved["prefs"]["tag_port"] == "SMOKE3", saved)
+        check("the pane follows the setting",
+              [x["port"] for x in get("/api/state")["panes"] if x["key"] == tag_pane] == ["SMOKE3"])
+        post("/api/prefs", {"tag_port": "SMOKE2"})
+        hidden = post("/api/prefs", {"show_tag_port": False})
+        check("the tag port can be hidden", hidden["prefs"]["show_tag_port"] is False)
+        check("hiding it closes it", not [x for x in get("/api/state")["panes"]
+                                          if x["key"] == tag_pane][0]["open"])
+        post("/api/prefs", {"show_tag_port": True})
+
         # a restart restores the editor and re-renders its preview
         for pane in app.panes.values():
             pane.worker.close()
@@ -313,6 +607,9 @@ def main() -> int:
         check("the image comes back too",
               bool(state["image"]) and state["image"]["name"] == "polyform-eink.png",
               state["image"])
+        check("prefs come back after a restart",
+              state["prefs"]["late_after_s"] == 400 and state["prefs"]["fleet_view"] == "table",
+              state["prefs"])
         for pane in app2.panes.values():
             pane.worker.close()
         server2.shutdown()

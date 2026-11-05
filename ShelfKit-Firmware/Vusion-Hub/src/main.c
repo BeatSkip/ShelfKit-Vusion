@@ -24,6 +24,7 @@
 #include "shelfmsg.h"
 #include "shelf_config.h"
 #include "pwr.h"
+#include "img_rx.h"
 
 static uint8_t __xdata rsp[SM_RSP_LEN];
 static uint8_t __xdata delay_hint;      /* 10 s units, 0 = no request */
@@ -203,6 +204,51 @@ static void batch_step(void)
     }
 }
 
+/* ── image for the hub's own panel ───────────────────────────────────────
+ * D<msg...><chk:2>: msg is exactly the DATA payload a tag would receive over the air
+ * (SM_OP_IMG_BEGIN / CHUNK / END, see shelfmsg.h), so img_rx.c is shared with the tag.
+ * Chunks may be larger than the radio's, up to IMG_SER_CHUNK bytes. "OK img" is
+ * printed once the message has been handled - BEGIN resets the panel and END waits
+ * for the refresh (~15 s), during which the host must stay silent. */
+#define IMG_SER_CHUNK   128
+static uint8_t __xdata img_buf[SM_IMG_HDR + IMG_SER_CHUNK];
+
+static void cmd_img(void)
+{
+    uint16_t digits = (uint16_t)(line_len - 1);
+    uint16_t n, i;
+    uint8_t sum = 0;
+    int8_t hi, lo;
+
+    if (digits < 4 || (digits & 1)) {
+        log_puts("ERR len\r\n");
+        return;
+    }
+    n = (uint16_t)(digits / 2);
+    if (n - 1 > sizeof(img_buf)) {
+        log_puts("ERR len\r\n");
+        return;
+    }
+    for (i = 0; i < n; i++) {
+        hi = hexval(line[1 + 2 * i]);
+        lo = hexval(line[2 + 2 * i]);
+        if (hi < 0 || lo < 0) {
+            log_puts("ERR hex\r\n");
+            return;
+        }
+        img_buf[i] = (uint8_t)((hi << 4) | lo);
+        sum = (uint8_t)(sum + img_buf[i]);
+    }
+    if (sum) {
+        log_puts("ERR chk\r\n");
+        return;
+    }
+    if (img_rx_data(img_buf, (uint8_t)(n - 1)))
+        log_puts("OK img\r\n");
+    else
+        log_puts("ERR cmd\r\n");
+}
+
 static void cmd_batch(void)
 {
     uint16_t digits = (uint16_t)(line_len - 1);
@@ -282,7 +328,7 @@ static void log_banner(void)
     log_hex16(SHELF_NODE_ID);
     log_puts(" net ");
     log_hex8(SHELF_NET_ID);
-    log_puts(" dump=1 batch=1");
+    log_puts(" dump=1 batch=1 show=1");
     log_nl();
 }
 
@@ -337,6 +383,8 @@ static void host_line(void)
             cmd_send();
         else if (line[0] == 'B')
             cmd_batch();
+        else if (line[0] == 'D')
+            cmd_img();
         else
             log_puts("ERR cmd\r\n");
     }
@@ -435,6 +483,7 @@ void main(void)
     uint8_t r;
 
     shelfhw_init();
+    pwr_park_u5();              /* PA2 (U5) has no pull: park it off rather than float */
 #if SHELF_POWER_LINES
     pwr_init();
     pwr_on();

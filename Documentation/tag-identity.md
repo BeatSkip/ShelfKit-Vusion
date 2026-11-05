@@ -29,6 +29,11 @@ OTA header. Both firmwares now power the rail before every flash access:
 - the **bootloader** drives PA5 low before it reads the OTA header, or it would
   see `0xFF` and skip the update.
 
+> A bench probe of one board ([pa2-pa5-findings.md](pa2-pa5-findings.md)) read the flash's real
+> id with PA5 high, so the rail is not always off when U4 is: it depends on how the board is
+> supplied (or on back-powering through the SPI pins). The power-up calls stay; they are correct
+> either way.
+
 Two consequences of getting this wrong, both seen on hardware:
 
 1. every reset regenerates the identity (the record reads blank) and

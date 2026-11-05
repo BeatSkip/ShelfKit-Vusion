@@ -1,10 +1,10 @@
 ### Port A 
 - PA:0 - [E-Ink] D/C
 - PA:1 - [SPI] CS (E-Ink)
-- PA:2 - Transistor U5
+- PA:2 - Transistor U5 (active high, no pull, a load on the supply; parked low) - see pa2-pa5-findings.md
 - PA:3 - Crystal Oscillator P
 - PA:4 - Crystal Oscillator N
-- PA:5 - Transistor U4
+- PA:5 - Transistor U4 (e-paper panel supply, active low, externally pulled up) - see pa2-pa5-findings.md
 
 ### Port B
 - PB:0 - [LED] White LED

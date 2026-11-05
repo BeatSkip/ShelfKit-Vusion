@@ -4,7 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark light">
-  <title>ShelfKit — e-paper fleet</title>
+  <title>ShelfKit</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8' shape-rendering='crispEdges'%3E%3Crect width='8' height='8' fill='%23f2f2ec'/%3E%3Cpath d='M1 1h6v2H1zM1 4h4v1H1z' fill='%231c1e20'/%3E%3Cpath d='M1 6h3v1H1z' fill='%23c4141c'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="/style.css">
   <script>
     /* Pick the theme before the first paint: ?theme=dark|light wins (handy for a
@@ -35,464 +36,548 @@
 </head>
 <body>
   <header class="topbar">
-    <span class="brand">ShelfKit<span class="dim">-server</span></span>
+    <a class="brand" href="#fleet" id="brand" aria-label="ShelfKit, go to the fleet"></a>
 
-    <nav class="nav" id="nav">
-      <button class="tab on" data-screen="fleet">Fleet</button>
-      <button class="tab" data-screen="editor">Editor</button>
-      <button class="tab" data-screen="queue">Queue</button>
-      <button class="tab" data-screen="logs">Logs</button>
-      <button class="tab" data-screen="stats">Stats</button>
-      <button class="tab" data-screen="hub">Hub</button>
-      <button class="tab" data-screen="console">Console<span class="dot" id="console-dot" hidden></span></button>
-      <button class="tab" data-screen="settings">Settings</button>
+    <nav class="nav" id="nav" aria-label="Screens">
+      <a href="#fleet" data-screen="fleet">Fleet</a>
+      <a href="#editor" data-screen="editor">Editor</a>
+      <a href="#queue" data-screen="queue">Queue<span class="count" id="nav-queue" hidden></span></a>
+      <a href="#logs" data-screen="logs">Logs</a>
+      <a href="#hub" data-screen="hub">Hub</a>
+      <a href="#flash" data-screen="flash">Flash<span class="mark s-sending" id="nav-flash" hidden></span></a>
+      <a href="#settings" data-screen="settings">Settings</a>
     </nav>
 
-    <span class="grow"></span>
-    <span id="status" class="status">connecting&hellip;</span>
-    <button id="theme-toggle" class="theme" title="Switch theme" aria-label="Switch theme">&#9790;</button>
+    <p id="status" class="status" role="status">Connecting to the server</p>
+
+    <a class="link-state" id="link-state" href="#hub">
+      <span class="mark" id="link-mark"></span><span id="link-text">Hub</span>
+    </a>
+    <button id="theme-toggle" class="quiet" type="button"></button>
+
+    <div class="transfer" id="transfer" hidden>
+      <div class="transfer-fill" id="transfer-fill"></div>
+    </div>
   </header>
 
   <main id="screens">
 
-    <!-- ── Fleet (home) ─────────────────────────────────────────────────── -->
-    <section class="screen" data-screen="fleet">
-      <div class="screen-head">
-        <h1>Fleet</h1>
-        <input id="fleet-search" class="search" type="search" placeholder="search hex id or alias" spellcheck="false">
-        <div class="chips" id="fleet-filters">
-          <button class="chip on" data-status="all">All</button>
-          <button class="chip" data-status="online">Online</button>
-          <button class="chip" data-status="pending">Pending</button>
-          <button class="chip" data-status="offline">Offline</button>
-          <button class="chip" data-status="alert">Alert</button>
-          <button class="chip" data-status="unreachable">Unreachable</button>
+    <!-- Fleet -->
+    <section class="screen" data-screen="fleet" aria-labelledby="fleet-headline">
+      <div class="fleet-head">
+        <div class="headline">
+          <h1 id="fleet-headline">Reading the shelf</h1>
+          <p id="fleet-subline" class="subline"></p>
         </div>
+        <button id="fleet-open-hub" class="primary" type="button" hidden>Open the hub port</button>
+      </div>
+
+      <div class="toolbar">
+        <input id="fleet-search" class="search" type="search" placeholder="Find an ID, alias or note"
+               aria-label="Find a tag" spellcheck="false">
+        <div class="filters" id="fleet-filters" role="group" aria-label="Show tags by status"></div>
         <span class="grow"></span>
-        <button id="fleet-forget-stale" class="ghost"
-                title="Delete every tag that has not been heard for 10 minutes">Forget silent</button>
-        <div class="segmented">
-          <button class="on">Table</button>
-          <button disabled title="Configure a grid in Settings first">Map</button>
+        <div class="segmented" id="wall-size" role="group" aria-label="Tag size on the shelf">
+          <button type="button" data-size="full" title="One panel pixel per screen pixel">Actual size</button>
+          <button type="button" data-size="half">Half</button>
         </div>
+        <div class="segmented" id="fleet-view" role="group" aria-label="Fleet layout">
+          <button type="button" data-view="wall">Shelf</button>
+          <button type="button" data-view="table">Table</button>
+        </div>
+      </div>
+
+      <div id="fleet-wall" class="wall"></div>
+
+      <div id="fleet-table-wrap" class="table-wrap" hidden>
+        <table class="grid" id="fleet-table">
+          <thead>
+            <tr>
+              <th class="pick"><input type="checkbox" id="fleet-all" aria-label="Select every tag shown"></th>
+              <th data-sort="hex"><button type="button">Tag</button></th>
+              <th data-sort="alias"><button type="button">Alias</button></th>
+              <th data-sort="status"><button type="button">Status</button></th>
+              <th data-sort="seen"><button type="button">Heard</button></th>
+              <th data-sort="battery"><button type="button">Battery</button></th>
+              <th data-sort="push"><button type="button">On the glass</button></th>
+              <th data-sort="shelf"><button type="button">Shelf</button></th>
+            </tr>
+          </thead>
+          <tbody id="fleet-rows"></tbody>
+        </table>
+      </div>
+
+      <p class="nomatch" id="fleet-nomatch" hidden>No tag matches this search and filter.</p>
+
+      <div class="empty-wall" id="fleet-empty" hidden>
+        <div class="empty-rail"></div>
+        <p>Tags join the shelf the first time the hub hears them. A tag checks in about every
+          two minutes, so a new one can take a little while to appear.</p>
+      </div>
+
+      <div class="fleet-foot">
+        <button id="fleet-forget-stale" class="quiet" type="button"
+                title="Deletes the server's record of each tag not heard for 15 minutes. A tag that checks in again comes back.">Forget tags silent for 15 minutes</button>
       </div>
 
       <div class="bulkbar" id="fleet-bulk" hidden>
-        <span id="fleet-selected">0 selected</span>
-        <button id="bulk-push">Push</button>
-        <button disabled title="Firmware updates go to one tag at a time (open its row)">Reflash</button>
-        <button id="bulk-forget" class="primary cancel" title="Delete the server's record of the selected tags">Forget</button>
-      </div>
-
-      <table class="grid" id="fleet-table">
-        <thead>
-          <tr>
-            <th class="pick"><input type="checkbox" id="fleet-all" title="select all"></th>
-            <th data-sort="hex">Hex ID</th>
-            <th data-sort="alias">Alias</th>
-            <th data-sort="status">Status</th>
-            <th data-sort="battery">Battery</th>
-            <th data-sort="seen">Last content</th>
-            <th class="actions">Actions</th>
-          </tr>
-        </thead>
-        <tbody id="fleet-rows"></tbody>
-      </table>
-      <div class="empty" id="fleet-empty" hidden>
-        <p>No tags yet. They appear here as soon as the hub prints a
-          <code>POLL src=&lt;id&gt;</code> line for one.</p>
-        <p class="row">
-          <span id="fleet-serial" class="dim"></span>
-          <button id="fleet-open-serial" class="primary">Open the serial ports</button>
-        </p>
+        <span id="fleet-selected"></span>
+        <button id="bulk-push" class="primary" type="button">Push image</button>
+        <button id="bulk-service" type="button">Send service labels</button>
+        <button id="bulk-forget" class="danger" type="button">Forget</button>
+        <span class="grow"></span>
+        <button id="bulk-clear" class="quiet" type="button">Clear selection</button>
       </div>
     </section>
 
-    <!-- ── Editor ──────────────────────────────────────────────────────── -->
-    <section class="screen" data-screen="editor" hidden>
+    <!-- Editor -->
+    <section class="screen" data-screen="editor" aria-labelledby="editor-title" hidden>
       <div class="screen-head">
-        <h1>Editor</h1>
-        <span id="editor-targets" class="dim"></span>
-        <span class="grow"></span>
-        <span class="pill soon">templates, plain text, QR and the job queue are not implemented yet</span>
+        <h1 id="editor-title">Editor</h1>
       </div>
 
-      <div class="editor-body">
+      <div class="editor">
         <div class="editor-controls">
-          <fieldset class="group">
-            <legend>Source</legend>
-            <label><input type="radio" name="source" checked> Upload image</label>
-            <label class="soon"><input type="radio" name="source" disabled> Template <span class="chip">soon</span></label>
-            <label class="soon"><input type="radio" name="source" disabled> Plain text <span class="chip">soon</span></label>
-            <label class="soon"><input type="radio" name="source" disabled> QR <span class="chip">soon</span></label>
+          <div class="field">
+            <h2>Image</h2>
+            <p id="editor-image" class="filename">No image picked</p>
+            <div class="row">
+              <button id="editor-browse" type="button">Browse this computer</button>
+              <button id="editor-render" class="quiet" type="button"
+                      title="Render again, for example after editing the file">Render again</button>
+            </div>
+          </div>
+
+          <fieldset class="field">
+            <legend>Fit</legend>
+            <div class="segmented radios" id="editor-fit"></div>
+            <p class="hint" id="editor-fit-hint"></p>
           </fieldset>
 
-          <div class="group">
-            <span class="legend">Image</span>
+          <fieldset class="field">
+            <legend>Dither</legend>
+            <div class="segmented radios" id="editor-dither"></div>
+            <p class="hint" id="editor-dither-hint"></p>
+          </fieldset>
+
+          <fieldset class="field targets-field">
+            <legend>Send to</legend>
             <div class="row">
-              <button id="editor-browse">Browse&hellip;</button>
-              <button id="editor-render" title="Re-render the preview (e.g. after editing the file)">Render</button>
+              <button id="targets-online" class="quiet" type="button">Select online</button>
+              <button id="targets-none" class="quiet" type="button">Clear</button>
             </div>
-            <input id="editor-image" type="text" readonly placeholder="no image picked">
-            <p class="hint">Drag &amp; drop will come with the upload endpoint; today the server
-              browses this machine's folders.</p>
-          </div>
-
-          <label class="group">
-            <span class="legend">Fit mode</span>
-            <select id="editor-fit">
-              <option value="cover">Cover (fills, crops the overflow)</option>
-              <option value="contain">Contain (letterboxed)</option>
-              <option value="stretch">Stretch (distorts)</option>
-            </select>
-          </label>
-
-          <label class="group">
-            <span class="legend">Dither</span>
-            <select id="editor-dither">
-              <option value="threshold">Threshold (no dither)</option>
-              <option value="floyd-steinberg">Floyd-Steinberg</option>
-              <option value="bayer4">Bayer 4&times;4</option>
-            </select>
-            <p class="hint">Rendered by the server, never in the browser. The same render is what
-              gets sent, so the preview cannot lie.</p>
-          </label>
-
-          <label class="group">
-            <span class="legend">Target tag</span>
-            <select id="editor-tag"></select>
-            <p class="hint">Multi-select and the render → confirm → queue flow land with the
-              bitmap store. Today: one tag, sent immediately.</p>
-          </label>
-
-          <p class="hint">A landscape source is turned upright automatically; fit and dither then
-            place it in the panel's 152&times;296 footprint.</p>
+            <div id="editor-targets" class="targets"></div>
+          </fieldset>
         </div>
 
-        <div class="editor-preview">
-          <div class="preview-stack">
-            <figure>
-              <figcaption>Original</figcaption>
-              <div class="pv pv-original">
-                <img id="preview-original" alt="the source after fit, in colour" hidden>
-                <span id="preview-original-hint" class="pv-hint">nothing rendered yet</span>
+        <div class="editor-stage">
+          <div class="previews">
+            <figure class="preview">
+              <div class="pv-frame">
+                <div class="glass pv-source">
+                  <img id="preview-original" alt="The source image fitted to the panel, in colour" hidden>
+                </div>
               </div>
+              <figcaption>Source, fitted</figcaption>
             </figure>
-            <figure>
-              <figcaption>On device &middot; 152&times;296</figcaption>
-              <div class="pv pv-device">
-                <img id="preview-device" alt="the frame as the panel shows it: black, white, red" hidden>
-                <div id="preview-sel" class="sel" hidden></div>
-                <span id="preview-device-hint" class="pv-hint">nothing rendered yet</span>
+            <figure class="preview preview-device">
+              <div class="pv-frame tag-case">
+                <div class="glass" id="preview-glass" tabindex="0"
+                     aria-label="The frame as the tag shows it. Move the pointer or use the arrow keys to move the loupe.">
+                  <img id="preview-device" alt="The frame in black, white and red" draggable="false" hidden>
+                  <div id="preview-sel" class="loupe-mark" hidden></div>
+                </div>
               </div>
+              <figcaption>On the tag, 152&times;296</figcaption>
             </figure>
-            <figure>
-              <figcaption>Zoom 4&times;</figcaption>
-              <div class="pv pv-zoom" id="preview-zoom">
-                <span id="preview-zoom-hint" class="pv-hint">drag on the device pane to inspect</span>
+            <figure class="preview">
+              <div class="pv-frame">
+                <div class="glass pv-loupe" id="preview-zoom"></div>
               </div>
+              <figcaption>Loupe, 4&times;</figcaption>
             </figure>
           </div>
 
-          <p id="editor-warn" class="warn" hidden></p>
+          <p id="editor-empty" class="stage-empty">Pick an image to see exactly what the panel will show.</p>
+          <p id="editor-warn" class="warning" hidden></p>
+          <p id="editor-preview-info" class="hint"></p>
 
-          <div class="actions">
-            <button id="editor-cancel">Cancel</button>
-            <button id="editor-push" class="primary" disabled>Push to 1 tag</button>
-            <span id="editor-preview-info" class="dim"></span>
-            <span id="editor-progress" class="dim"></span>
+          <div class="push-bar">
+            <button id="editor-push" class="primary" type="button" disabled>Push image</button>
+            <span id="editor-push-note" class="hint"></span>
           </div>
+        </div>
+      </div>
+    </section>
 
-          <details class="library">
-            <summary>Content library <span class="chip">soon</span></summary>
-            <p class="hint">Last 20 bitmaps, click to reload into the editor. Empty until the
-              server stores bitmaps (SHA256-deduped) instead of streaming them straight out.</p>
+    <!-- Queue -->
+    <section class="screen" data-screen="queue" aria-labelledby="queue-title" hidden>
+      <div class="screen-head">
+        <h1 id="queue-title">Queue</h1>
+        <p class="screen-note">A tag only listens for a few seconds after it checks in, so each
+          command waits here for that moment.</p>
+        <span class="grow"></span>
+        <button id="queue-cancel" type="button" disabled>Cancel all</button>
+      </div>
+      <div class="table-wrap" id="queue-wrap">
+        <table class="grid queue-table">
+          <thead>
+            <tr><th>State</th><th>Tag</th><th>Command</th><th>Detail</th><th>Queued</th></tr>
+          </thead>
+          <tbody id="queue-rows"></tbody>
+        </table>
+      </div>
+      <p class="empty" id="queue-empty">Nothing is queued. Images, firmware and other commands
+        you send to a tag appear here.</p>
+    </section>
+
+    <!-- Logs -->
+    <section class="screen" data-screen="logs" aria-labelledby="logs-title" hidden>
+      <div class="screen-head">
+        <h1 id="logs-title">Logs</h1>
+        <label class="inline">Tag <select id="logs-tag"><option value="">All tags</option></select></label>
+        <label class="inline">Event <select id="logs-event"><option value="">All events</option></select></label>
+        <label class="check"><input id="logs-sync" type="checkbox"> Show check-ins</label>
+      </div>
+      <div class="table-wrap" id="logs-wrap">
+        <table class="grid logs-table">
+          <thead>
+            <tr><th>Time</th><th>Tag</th><th>Alias</th><th>Event</th><th>Detail</th><th>Count</th></tr>
+          </thead>
+          <tbody id="logs-rows"></tbody>
+        </table>
+      </div>
+      <p class="empty" id="logs-empty" hidden>No events match. The server records pushes, failures,
+        boots and port changes here, and keeps them across restarts.</p>
+    </section>
+
+    <!-- Hub -->
+    <section class="screen" data-screen="hub" aria-labelledby="hub-title" hidden>
+      <div class="screen-head">
+        <h1 id="hub-title">Hub</h1>
+        <p class="screen-note" id="hub-banner"></p>
+        <span class="grow"></span>
+        <button id="copy-logs" class="quiet" type="button">Copy logs</button>
+        <a id="save-log" class="button quiet" href="/api/log" download="shelfkit-log.txt">Save log</a>
+      </div>
+
+      <div id="panes" class="panes"></div>
+
+      <div class="hub-lower">
+        <section class="hub-section" aria-labelledby="caps-title">
+          <h2 id="caps-title">Firmware features</h2>
+          <dl class="facts" id="hub-caps"></dl>
+          <p class="hint">Read from the banner the hub prints when it starts. Press Reset on the
+            hub port if these say unknown.</p>
+        </section>
+
+        <section class="hub-section hub-display" aria-labelledby="display-title">
+          <h2 id="display-title">Hub's own panel</h2>
+          <p id="display-warning" class="warning" hidden></p>
+          <label class="check">
+            <input id="display-enabled" type="checkbox">
+            List the connected tags on the hub's panel
+          </label>
+          <div class="display-fields">
+            <label class="field-inline">Title
+              <input id="display-title-input" maxlength="24" spellcheck="false">
+            </label>
+            <label class="field-inline">Drop a tag after (seconds)
+              <input id="display-timeout" type="number" min="1" step="30">
+            </label>
+            <label class="field-inline">Shortest redraw gap (seconds)
+              <input id="display-interval" type="number" min="1" step="10">
+            </label>
+          </div>
+          <label class="check">
+            <input id="display-alias" type="checkbox">
+            Print each tag's alias next to its ID
+          </label>
+          <div class="row">
+            <button id="display-refresh" type="button">Redraw now</button>
+            <span id="display-result" class="hint"></span>
+          </div>
+          <p class="hint">Each redraw takes about 15 seconds, and the hub can't answer tags while it
+            runs. Keep the drop time above 600 seconds if any tag has a weak link.</p>
+          <div id="display-shown" class="shown-ids"></div>
+        </section>
+      </div>
+    </section>
+
+    <!-- Flash -->
+    <section class="screen" data-screen="flash" aria-labelledby="flash-title" hidden>
+      <div class="screen-head">
+        <h1 id="flash-title">Flash</h1>
+        <p class="screen-note">Put firmware on a tag or the hub, with the USB debugger or the
+          serial bootloader.</p>
+      </div>
+
+      <div class="flash">
+        <form id="flash-form" class="flash-setup" novalidate>
+          <fieldset class="field">
+            <legend>Method</legend>
+            <div class="segmented radios" id="flash-method">
+              <label><input type="radio" name="flash-method" value="debugger"><span>USB debugger</span></label>
+              <label><input type="radio" name="flash-method" value="serial"><span>Serial bootloader</span></label>
+            </div>
+            <p class="hint" id="flash-method-hint"></p>
+          </fieldset>
+
+          <label class="field">Firmware file
+            <select id="flash-file"></select>
+          </label>
+
+          <label class="field" id="flash-pane-field">Serial port
+            <select id="flash-pane"></select>
+          </label>
+
+          <label class="check" id="flash-partial-field" hidden>
+            <input id="flash-partial" type="checkbox">
+            Erase the bootloader as well
+          </label>
+
+          <p id="flash-warning" class="warning"></p>
+
+          <div class="row">
+            <button id="flash-start" class="primary" type="submit">Start flashing</button>
+            <button id="flash-cancel" type="button" hidden>Stop</button>
+          </div>
+        </form>
+
+        <div class="flash-status" aria-live="polite">
+          <h2 id="flash-result">Ready</h2>
+          <p id="flash-sub" class="hint"></p>
+          <ol id="flash-steps" class="steps"></ol>
+          <p id="flash-error" class="warning" hidden></p>
+          <details class="tool" id="flash-log-wrap">
+            <summary>Output</summary>
+            <div id="flash-log" class="log" tabindex="0" role="log" aria-label="Flash output"></div>
           </details>
         </div>
       </div>
     </section>
 
-    <!-- ── Queue ───────────────────────────────────────────────────────── -->
-    <section class="screen" data-screen="queue" hidden>
+    <!-- Settings -->
+    <section class="screen" data-screen="settings" aria-labelledby="settings-title" hidden>
       <div class="screen-head">
-        <h1>Queue</h1>
-        <span class="grow"></span>
-        <button id="queue-cancel" disabled title="Cancel every command that has not started">Cancel all</button>
-      </div>
-      <table class="grid">
-        <thead>
-          <tr><th>Kind</th><th>Hex ID</th><th>Content</th><th>State</th><th>Detail</th><th>Age</th></tr>
-        </thead>
-        <tbody id="queue-rows"></tbody>
-      </table>
-      <p class="empty" id="queue-empty">
-        Nothing queued. Every command — image, firmware, id, factory reset, service label or
-        flash read — lands here first and is sent when its tag next polls, because a tag only
-        listens for a few seconds after each poll.
-      </p>
-    </section>
-
-    <!-- ── Logs ────────────────────────────────────────────────────────── -->
-    <section class="screen" data-screen="logs" hidden>
-      <div class="screen-head">
-        <h1>Logs</h1>
-        <select id="logs-tag"><option value="">all tags</option></select>
-        <select id="logs-event">
-          <option value="">all events</option>
-          <option value="sync">sync</option>
-          <option value="push">push</option>
-          <option value="ok">ok</option>
-          <option value="fail">fail</option>
-          <option value="error">error</option>
-          <option value="boot">boot</option>
-          <option value="bootloader">bootloader</option>
-          <option value="open">open</option>
-        </select>
-        <span class="grow"></span>
-        <span class="pill">recorded by the server, kept in the database</span>
-      </div>
-      <table class="grid">
-        <thead>
-          <tr><th>Time</th><th>Hex ID</th><th>Alias</th><th>Event</th><th>&times;N</th></tr>
-        </thead>
-        <tbody id="logs-rows"></tbody>
-      </table>
-      <p class="empty" id="logs-empty">
-        Nothing yet. Consecutive identical rows collapse into one with &times;N, like the
-        firmware's own log. The full firmware event log (online / offline / low batt / err) is
-        not implemented yet.
-      </p>
-    </section>
-
-    <!-- ── Stats ───────────────────────────────────────────────────────── -->
-    <section class="screen" data-screen="stats" hidden>
-      <div class="screen-head">
-        <h1>Stats</h1>
-        <span class="grow"></span>
-        <div class="segmented"><button class="on">24h</button><button>7d</button></div>
-      </div>
-      <div class="cards">
-        <article class="card">
-          <h2>Online count</h2>
-          <div class="ph chart-ph">history not recorded yet</div>
-        </article>
-        <article class="card">
-          <h2>Alerts opened vs closed</h2>
-          <div class="ph chart-ph">history not recorded yet</div>
-        </article>
-        <article class="card">
-          <h2>Battery distribution</h2>
-          <div class="ph chart-ph">the firmware does not report battery yet</div>
-        </article>
-      </div>
-      <p class="hint">Nothing here is wired to a database: there is no <code>fleet_stats</code>
-        rollup and no event history to chart. These panels are placeholders for it.</p>
-    </section>
-
-    <!-- ── Hub ─────────────────────────────────────────────────────────── -->
-    <section class="screen" data-screen="hub" hidden>
-      <div class="screen-head">
-        <h1>Hub</h1>
-        <span class="grow"></span>
-        <button disabled title="Not implemented yet">Upload firmware (.bin)</button>
-        <button disabled title="Not implemented yet">Restart</button>
+        <h1 id="settings-title">Settings</h1>
+        <p class="screen-note">Saved on this computer with the rest of ShelfKit's data, so every
+          browser that opens the page sees the same values.</p>
       </div>
 
-      <div class="cards">
-        <article class="card">
-          <h2>Serial link</h2>
-          <dl class="kv" id="hub-serial"></dl>
-          <button id="hub-open-serial" class="link">Open the serial ports in Console</button>
-        </article>
-        <article class="card">
-          <h2>Firmware</h2>
-          <dl class="kv">
-            <dt>Version</dt><dd class="dim">&mdash; <span class="chip">soon</span></dd>
-            <dt>Uptime</dt><dd class="dim">&mdash; <span class="chip">soon</span></dd>
-          </dl>
-        </article>
-        <article class="card">
-          <h2>Panel mirror</h2>
-          <div class="ph epd-ph small">no EPD mirror over serial yet</div>
-        </article>
-      </div>
+      <form id="settings-form" class="settings" novalidate>
+        <section class="setting-group" aria-labelledby="set-timing">
+          <h2 id="set-timing">When a tag counts as quiet</h2>
+          <p class="hint">Tags check in about every 2 minutes, slow to 5 when idle, and to 10 on a
+            weak link. Keep these above those rates or healthy tags will look quiet.</p>
+          <div class="setting-fields">
+            <label>Late after (minutes)
+              <input id="set-late" type="number" min="1" max="120" step="0.5" inputmode="decimal">
+            </label>
+            <label>Silent after (minutes)
+              <input id="set-silent" type="number" min="2" max="240" step="0.5" inputmode="decimal">
+            </label>
+            <label>Offer to forget after (minutes)
+              <input id="set-forget" type="number" min="5" max="1440" step="1" inputmode="decimal">
+            </label>
+          </div>
+        </section>
 
-      <section class="console-tail">
-        <div class="console-head">
-          <h2>Serial console</h2>
-          <span class="pill warn">read only &mdash; do not paste commands here</span>
-          <span class="grow"></span>
-          <button id="hub-console-link" class="link">open the two-pane console</button>
+        <section class="setting-group" aria-labelledby="set-battery">
+          <h2 id="set-battery">Battery</h2>
+          <div class="setting-fields">
+            <label>Warn below (volts)
+              <input id="set-battery-v" type="number" min="2" max="3.2" step="0.05" inputmode="decimal">
+            </label>
+          </div>
+          <p class="hint">A CR2450 starts to fail around 2.5 V. Tags below this value get a red
+            battery reading and show up under Needs attention.</p>
+        </section>
+
+        <section class="setting-group" aria-labelledby="set-display">
+          <h2 id="set-display">Fleet screen</h2>
+          <fieldset>
+            <legend>Layout</legend>
+            <div class="segmented radios" id="set-view">
+              <label><input type="radio" name="set-view" value="wall"><span>Shelf</span></label>
+              <label><input type="radio" name="set-view" value="table"><span>Table</span></label>
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend>Tag size on the shelf</legend>
+            <div class="segmented radios" id="set-size">
+              <label><input type="radio" name="set-size" value="full"><span>Actual size</span></label>
+              <label><input type="radio" name="set-size" value="half"><span>Half</span></label>
+            </div>
+          </fieldset>
+        </section>
+
+        <section class="setting-group" aria-labelledby="set-ports-title">
+          <h2 id="set-ports-title">Serial ports</h2>
+          <div class="setting-fields">
+            <label>Hub port
+              <input id="set-hub-port" type="text" list="port-options" spellcheck="false"
+                     autocomplete="off" placeholder="COM4">
+            </label>
+            <label>Tag debug port
+              <input id="set-tag-port" type="text" list="port-options" spellcheck="false"
+                     autocomplete="off" placeholder="COM5">
+            </label>
+          </div>
+          <label class="check"><input id="set-show-tag" type="checkbox">
+            Show the tag debug port on the Hub screen</label>
+          <p class="hint">The ports are remembered and opened on the Hub screen. Hiding the tag
+            port closes it, but it stays available as a target on the Flash screen. The hub and
+            the tag can't share a port.</p>
+        </section>
+
+        <section class="setting-group" aria-labelledby="set-axsdb-title">
+          <h2 id="set-axsdb-title">USB debugger (AXSDB)</h2>
+          <div class="setting-fields">
+            <label>Location of axsdb.exe, or the folder that holds it
+              <input id="set-axsdb" class="wide" type="text" spellcheck="false" autocomplete="off"
+                     placeholder="C:\Program Files (x86)\ON Semiconductor\AXSDB\bin">
+            </label>
+          </div>
+          <p id="set-axsdb-state" class="hint"></p>
+          <p class="hint">Leave it empty to use the default install. The Flash screen runs it from
+            that folder with --eraseall and --flashprog.</p>
+        </section>
+
+        <div class="setting-actions">
+          <button id="settings-save" class="primary" type="submit" disabled>Save settings</button>
+          <button id="settings-reset" type="button">Restore defaults</button>
+          <span id="settings-note" class="hint" role="status"></span>
         </div>
-        <div class="log" id="hub-tail"></div>
+      </form>
+
+      <section class="setting-group settings" aria-labelledby="set-aliases">
+        <h2 id="set-aliases">Aliases, notes and shelf positions</h2>
+        <p class="hint">A CSV with the columns hex_id, alias, notes, shelf and slot. Importing sets
+          every tag in the file, including tags the hub hasn't heard yet, and a blank cell clears
+          that field.</p>
+        <div class="row">
+          <a id="aliases-export" class="button" href="/api/aliases.csv" download="shelfkit-aliases.csv">Export CSV</a>
+          <button id="aliases-import" type="button">Import CSV</button>
+          <input id="aliases-file" type="file" accept=".csv,text/csv" hidden>
+        </div>
+        <p id="aliases-result" class="hint" role="status"></p>
       </section>
-    </section>
 
-    <!-- ── Console (the original two-pane view) ────────────────────────── -->
-    <section class="screen console" data-screen="console" hidden>
-      <div class="screen-head">
-        <h1>Console</h1>
-        <span class="dim">both boards over their serial ports</span>
-        <span class="grow"></span>
-        <button id="copy-logs" class="ghost">Copy logs</button>
-        <a id="save-log" class="ghost" href="/api/log" download="shelfkit-log.txt">Save log</a>
-      </div>
-      <div id="panes" class="panes"></div>
-    </section>
-
-    <!-- ── Settings ────────────────────────────────────────────────────── -->
-    <section class="screen" data-screen="settings" hidden>
-      <div class="screen-head">
-        <h1>Settings</h1>
-        <span class="grow"></span>
-        <span class="pill soon">none of this is stored yet</span>
-      </div>
-
-      <div class="cards">
-        <article class="card">
-          <h2>Alias map</h2>
-          <p class="hint">CSV of <code>hex_id,alias,notes</code>.</p>
-          <div class="row">
-            <button disabled>Import CSV</button>
-            <button disabled>Export CSV</button>
-          </div>
-        </article>
-        <article class="card">
-          <h2>Defaults</h2>
-          <label class="group soon"><span class="legend">Fit mode <span class="chip">soon</span></span>
-            <select disabled><option>Cover</option><option>Contain</option><option>Stretch</option></select>
-          </label>
-          <label class="group soon"><span class="legend">Dither <span class="chip">soon</span></span>
-            <select disabled><option>Floyd-Steinberg</option><option>Threshold</option><option>Bayer 4&times;4</option></select>
-          </label>
-        </article>
-        <article class="card">
-          <h2>ID display on the EPD</h2>
-          <p class="hint">All-or-nothing: alias mode needs every tag to have an alias.</p>
-          <label><input type="radio" name="logids" checked disabled> Hex</label>
-          <label><input type="radio" name="logids" disabled> Alias</label>
-        </article>
-        <article class="card">
-          <h2>Rotation</h2>
-          <label class="group soon"><span class="legend">Slot duration (min) <span class="chip">soon</span></span>
-            <input type="number" value="20" disabled>
-          </label>
-          <p class="hint">The firmware does not rotate content between tags yet.</p>
-        </article>
-        <article class="card">
-          <h2>Fleet map grid</h2>
-          <div class="row">
-            <label class="soon">Rows <input type="number" value="0" disabled></label>
-            <label class="soon">Cols <input type="number" value="0" disabled></label>
-          </div>
-          <p class="hint">Until this is configured, the Map view stays hidden.</p>
-        </article>
-      </div>
+      <section class="setting-group settings" aria-labelledby="set-hubpanel">
+        <h2 id="set-hubpanel">The hub's own panel</h2>
+        <p class="hint">Which tags the hub lists on its display is set on the
+          <a href="#hub">Hub screen</a>, and is also saved.</p>
+      </section>
     </section>
   </main>
 
-  <!-- tag drilldown -->
-  <aside id="drawer" class="drawer" hidden>
-    <div class="drawer-head">
-      <span id="drawer-hex" class="mono big"></span>
-      <span class="grow"></span>
-      <button id="drawer-close" class="ghost">&times;</button>
+  <!-- Tag inspector -->
+  <aside id="inspector" class="inspector" aria-labelledby="inspector-id" hidden>
+    <div class="inspector-head">
+      <div id="inspector-id" class="inspector-id"></div>
+      <p id="inspector-alias" class="inspector-alias"></p>
+      <button id="inspector-close" class="quiet" type="button" aria-label="Close tag details">Close</button>
     </div>
-    <div class="drawer-body">
-      <dl class="kv" id="drawer-info"></dl>
 
-      <h3>Tag details</h3>
-      <label class="group">
-        <span class="legend">Alias</span>
-        <input id="drawer-alias" maxlength="24" placeholder="e.g. S03-P4" spellcheck="false">
-      </label>
-      <label class="group">
-        <span class="legend">Notes</span>
-        <input id="drawer-notes" maxlength="120" placeholder="free text" spellcheck="false">
-      </label>
-      <div class="row">
-        <button id="drawer-save" class="primary">Save tag</button>
-        <button id="drawer-service"
-                title="Draw a label with this tag's id, alias and notes, and push it">Service image</button>
+    <div class="inspector-body">
+      <div class="inspector-top">
+        <div class="tag-case small-case">
+          <div class="glass" id="inspector-glass"></div>
+        </div>
+        <dl class="facts" id="inspector-facts"></dl>
       </div>
-      <p class="hint">The service image shows the wireless id in large type, the alias, the note
-        above and a black/red patch - so a tag in hand can be matched to this row. Sent wirelessly,
-        like any other image.</p>
 
-      <h3>Flash read-back</h3>
-      <div class="row">
-        <button id="drawer-read"
-                title="Read the metadata pages back over the radio">Read flash</button>
-        <span id="drawer-read-status" class="dim"></span>
-      </div>
-      <div id="drawer-read-info" class="dump-lines"></div>
-      <div class="row" id="drawer-read-files" hidden>
-        <a id="drawer-read-bin" class="ghost" download>download .bin</a>
-        <a id="drawer-read-txt" class="ghost" download>download .txt</a>
-      </div>
-      <p class="hint">0x0000-0x2FFF: the OTA header, the identity record and the reserved
-        sector. Takes a few seconds per 4 KiB page.</p>
-
-      <h3>Wireless identity</h3>
-      <div class="row">
-        <input id="drawer-newid" class="mono" maxlength="6" placeholder="next free"
-               spellcheck="false" title="new node id in hex; leave empty for the next free one">
-        <button id="drawer-assign">Assign</button>
-      </div>
-      <p class="hint">Sent to the tag over the hub port, which stores it in SPI flash and moves
-        its radio address. The tag keeps this id across firmware updates. Leave the field empty
-        to take the next free id.</p>
-
-      <h3>Firmware update</h3>
-      <div class="row">
-        <select id="drawer-fw"></select>
-        <button id="drawer-flash" title="Send the selected firmware to this tag">Reflash</button>
-      </div>
-      <p class="hint">Sent over the wireless link: the tag stores it in SPI flash, verifies the
-        CRC and resets; the bootloader programs it and starts it. The tag keeps its id. It only
-        listens for a few seconds after each poll, so a transfer can take up to a minute to
-        start.</p>
-      <span id="drawer-fw-status" class="dim"></span>
+      <p id="inspector-alert" class="warning" hidden></p>
 
       <div class="row">
-        <button id="drawer-forget" class="primary cancel"
-                title="Delete the server's record of this tag">Forget tag</button>
-        <button id="drawer-wipe" class="primary cancel"
-                title="Wipe the tag's flash and reset it">Factory reset</button>
+        <button id="inspector-push" class="primary" type="button">Push image</button>
+        <button id="inspector-service" type="button"
+                title="Draw a label with this tag's ID, alias and notes, then send it">Send service label</button>
       </div>
-      <p class="hint">Forget only drops the server's row; the tag keeps its id and comes back if
-        it polls. Factory reset also tells the tag to erase its flash: it returns with a new random
-        id and no pending firmware.</p>
 
-      <h3>History <span class="chip">soon</span></h3>
-      <p class="hint">Per-tag bitmap history needs a content store per tag; the last frame is kept
-        and shown above.</p>
-      <h3>Log</h3>
-      <p class="hint">This tag's events are in the <b>Logs</b> screen, filterable by hex id.</p>
-    </div>
-    <div class="drawer-foot">
-      <button id="drawer-push" class="primary">Push content</button>
+      <form id="inspector-form" class="inspector-form">
+        <label>Alias
+          <input id="inspector-alias-input" maxlength="24" placeholder="S03-P4" spellcheck="false">
+        </label>
+        <label>Notes
+          <input id="inspector-notes" maxlength="120" spellcheck="false">
+        </label>
+        <div class="row form-pair">
+          <label>Shelf
+            <input id="inspector-row" type="number" min="1" step="1">
+          </label>
+          <label>Slot
+            <input id="inspector-col" type="number" min="1" step="1">
+          </label>
+        </div>
+        <button id="inspector-save" type="submit" disabled>Save tag</button>
+      </form>
+
+      <details class="tool">
+        <summary>Wireless ID</summary>
+        <div class="row">
+          <input id="inspector-newid" class="id-input" maxlength="6" spellcheck="false"
+                 aria-label="New ID in hex. Leave empty for the next free one">
+          <button id="inspector-assign" type="button">Assign ID</button>
+        </div>
+        <p class="hint">The tag stores its ID in flash and keeps it across firmware updates. Leave
+          the field empty to use the next free ID.</p>
+      </details>
+
+      <details class="tool">
+        <summary>Firmware update</summary>
+        <div class="row">
+          <select id="inspector-fw" aria-label="Firmware file"></select>
+          <button id="inspector-flash" type="button">Update firmware</button>
+        </div>
+        <p class="hint">The tag stores the file, checks it and restarts with the same ID. It may
+          take up to the next check-in to begin.</p>
+        <p id="inspector-fw-status" class="hint"></p>
+      </details>
+
+      <details class="tool">
+        <summary>Flash read-back</summary>
+        <div class="row">
+          <button id="inspector-read" type="button">Read flash</button>
+          <span id="inspector-read-status" class="hint"></span>
+        </div>
+        <div id="inspector-read-info" class="dump-lines"></div>
+        <div class="row" id="inspector-read-files" hidden>
+          <a id="inspector-read-bin" class="button quiet" download>Download .bin</a>
+          <a id="inspector-read-txt" class="button quiet" download>Download .txt</a>
+        </div>
+        <p class="hint">Reads 0x0000 to 0x2FFF over the radio: the update header, the identity
+          record and the reserved sector.</p>
+      </details>
+
+      <details class="tool danger-zone">
+        <summary>Remove this tag</summary>
+        <div class="row">
+          <button id="inspector-forget" class="danger" type="button">Forget tag</button>
+          <button id="inspector-wipe" class="danger" type="button">Factory reset</button>
+        </div>
+        <p class="hint">Forget deletes the server's record only, and the tag returns when it next
+          checks in. Factory reset also erases the tag's flash, and it returns with a new random ID.</p>
+      </details>
     </div>
   </aside>
 
-  <!-- image picker -->
-  <div id="picker" class="modal" hidden>
-    <div class="dialog">
-      <div class="dialog-head">
-        <button id="picker-up" class="ghost" title="Parent folder">&uarr;</button>
-        <span id="picker-dir" class="path"></span>
-      </div>
-      <div id="picker-list" class="picker-list"></div>
-      <div class="dialog-foot">
-        <span class="dim">folders open, images are picked</span>
-        <span class="grow"></span>
-        <button id="picker-cancel" class="ghost">Cancel</button>
-      </div>
+  <!-- Image picker -->
+  <dialog id="picker" class="picker" aria-labelledby="picker-title">
+    <div class="picker-head">
+      <h2 id="picker-title">Pick an image</h2>
+      <button id="picker-cancel" class="quiet" type="button">Cancel</button>
     </div>
-  </div>
+    <div class="picker-path">
+      <button id="picker-up" type="button">Up one folder</button>
+      <span id="picker-dir" class="path"></span>
+    </div>
+    <div id="picker-list" class="picker-list"></div>
+  </dialog>
 
   <datalist id="port-options"></datalist>
-  <div id="toasts" class="toasts"></div>
+  <div id="toasts" class="toasts" aria-live="polite"></div>
   <script src="/app.js"></script>
 </body>
 </html>

@@ -17,7 +17,16 @@ tag announces itself and its file is new or changed since the last successful pu
 --rotate, default 90 = a 296x152 landscape source) and sent. The tag refreshes its panel
 (~15 s) at the end of the transfer.
 
+show: draw an image on the HUB's own panel (needs a hub built with img_rx, banner "show=1").
+stats: render this machine's CPU/RAM/disk as a frame and show it on the hub.
+    python ShelfKit-Server/shelfkit/hubhost.py COM4 show pic.png
+    python ShelfKit-Server/shelfkit/hubhost.py COM4 stats
+The server holds the serial port while it runs: stop it first, or use another port.
+The host must stay silent while the hub refreshes (~15 s) - on this board a serial byte
+is a reset pulse on the panel (PB5 is both), see HUB_EPD_RST_PULSE in the hub's shelf_config.h.
+
 Hub command channel (115200 8N1, one line per command, hex only):
+    D<img msg><chk:2>                 -> OK img   (SM_OP_IMG_* for the hub's own panel)
     P                                 -> PONG
     S<addr:4><payload><chk:2>         -> SENT <addr> ok|fail att=N     (reliable DATA frame)
 chk = two's complement of the byte sum, so addr+payload+chk adds up to 0 mod 256.
@@ -40,9 +49,25 @@ except ImportError:
 
 BAUD = 115200
 OP_BEGIN, OP_CHUNK, OP_END = 1, 2, 3
+OP_ZCHUNK, OP_ZEND = 11, 12  # an ECO-compressed plane (shelfmsg.h, shelfkit/eco.py)
+ECO_MAX = 2560              # SM_ECO_MAX: the tag's buffer for one compressed plane
+# After ZEND the tag decodes the plane into the panel (8 passes over the file) and
+# answers nothing meanwhile. The time grows with the file: estimated ~0.3 s for a
+# 0.5 KB label, over a second for a full 2.5 KB buffer - the tag logs the real figure
+# ("img zplane <n>B <s>s"), tune these from it. The batch retry covers a miss.
+DECODE_SETTLE_S = 0.5
+DECODE_S_PER_BYTE = 0.0008
+
+
+def decode_settle(zend):
+    """Seconds to wait after a ZEND frame before the next frame."""
+    return DECODE_SETTLE_S + DECODE_S_PER_BYTE * (zend[2] | (zend[3] << 8))
 PLANE_BW, PLANE_RED = 0, 1
 CHUNK = 28                  # SM_IMG_CHUNK
-BEGIN_SETTLE_S = 5.0        # the tag resets the panel after acknowledging BEGIN and answers nothing meanwhile
+BEGIN_SETTLE_S = 2.0        # the tag resets the panel after acknowledging BEGIN and answers nothing meanwhile.
+                            # Measured ~0.9 s (power rail, reset, booster); the tag's receiver is on for
+                            # all of this wait, so 5 s cost ~0.01 mAh per image. A slower (cold) panel is
+                            # covered by the batch retry.
 END_SETTLE_S = 20.0         # ... and refreshes it after acknowledging END
 # The hub answers SENT only after all SL_MAX_ATTEMPTS (4) have run out, which
 # takes ~4.5 s when the tag is asleep. Waiting 3 s meant the server gave up in the
@@ -88,13 +113,45 @@ def build_line(cmd, addr, payload=b""):
     return f"{cmd}{(body + bytes([chk])).hex()}"
 
 
-def image_messages(bw, red):
-    """Yield the DATA payloads of one image transfer, BEGIN first, END last."""
+def image_messages(bw, red, chunk=CHUNK, compress=True):
+    """Yield the DATA payloads of one image transfer, BEGIN first, END last.
+
+    With compress, each plane goes as ECO chain code (ZCHUNKs + ZEND) when that is
+    smaller and fits the tag's buffer - a label is ~0.5-0.8 KB instead of 5.6 KB -
+    and as plain CHUNKs otherwise (dithered photos). The hub's own panel (`D` lines)
+    does not decode ECO: it is fed with compress=False."""
     yield bytes([OP_BEGIN])
     for plane, data in ((PLANE_BW, bw), (PLANE_RED, red)):
-        for off in range(0, len(data), CHUNK):
-            yield bytes([OP_CHUNK, plane, off & 0xFF, off >> 8]) + bytes(data[off:off + CHUNK])
+        data = bytes(data)
+        packed = None
+        if compress:
+            try:
+                from . import eco
+            except ImportError:         # run as a script: shelfkit/ is on sys.path
+                import eco
+            packed = eco.compress(data)
+            if len(packed) > ECO_MAX or len(packed) >= len(data):
+                packed = None
+        if packed is not None:
+            for off in range(0, len(packed), chunk):
+                yield bytes([OP_ZCHUNK, plane, off & 0xFF, off >> 8]) + packed[off:off + chunk]
+            yield bytes([OP_ZEND, plane, len(packed) & 0xFF, len(packed) >> 8])
+        else:
+            for off in range(0, len(data), chunk):
+                yield bytes([OP_CHUNK, plane, off & 0xFF, off >> 8]) + data[off:off + chunk]
     yield bytes([OP_END])
+
+
+# Serial chunks for the hub's own panel are not limited by the radio frame.
+SER_CHUNK = 128
+SHOW_BEGIN_TIMEOUT_S = 15.0     # panel rail cycle + init
+SHOW_END_TIMEOUT_S = 120.0      # the refresh blocks the hub (~15 s, up to a minute cold)
+
+
+def build_img_line(payload):
+    """The 'D' line carrying one SM_OP_IMG_* message for the hub's own panel."""
+    body = bytes(payload)
+    return "D" + (body + bytes([(-sum(body)) & 0xFF])).hex()
 
 
 class Hub:
@@ -164,6 +221,31 @@ class Hub:
             time.sleep(CMD_RETRY_PAUSE_S)
         return False
 
+    def show_image(self, bw, red, progress=None):
+        """Draw an image on the hub's own panel. True once the refresh finished."""
+        msgs = list(image_messages(bw, red, SER_CHUNK, compress=False))
+        self.ser.reset_input_buffer()
+        self.buf = b""
+        for i, msg in enumerate(msgs):
+            last = i == len(msgs) - 1
+            timeout = SHOW_BEGIN_TIMEOUT_S if i == 0 else SHOW_END_TIMEOUT_S if last else 2.0
+            tries = 1 if i == 0 or last else 5      # a repeated chunk is ignored by the hub
+            line = (build_img_line(msg) + "\n").encode("ascii")
+            res = None
+            for _ in range(tries):
+                self.ser.write(line)
+                res = self.wait_for(lambda l: l if l == "OK img" or l.startswith("ERR") else None,
+                                    timeout)
+                if res == "OK img":
+                    break
+                time.sleep(0.2)
+            if res != "OK img":
+                print(f"  hub: gave up at message {i + 1}/{len(msgs)} (answer: {res or 'none'})")
+                return False
+            if progress and i % 10 == 0:
+                progress(i, len(msgs))
+        return True
+
     def send_image(self, addr, bw, red, progress=None):
         msgs = list(image_messages(bw, red))
         for i, msg in enumerate(msgs):
@@ -172,6 +254,8 @@ class Hub:
                 return False
             if i == 0:
                 time.sleep(BEGIN_SETTLE_S)
+            elif msg[0] == OP_ZEND:
+                time.sleep(decode_settle(msg))
             if progress and i % 50 == 0:
                 progress(i, len(msgs))
         time.sleep(END_SETTLE_S)
@@ -186,6 +270,31 @@ def planes_for(path, rotate, dither):
     except ImportError:                # run directly: python shelfkit/hubhost.py
         import png2epd
     return png2epd.load_planes(path, rotate, dither)
+
+
+def cmd_show(hub, args):
+    bw, red = planes_for(args.png, args.rotate, args.dither)
+    return show_planes(hub, bw, red)
+
+
+def show_planes(hub, bw, red):
+    start = time.monotonic()
+    ok = hub.show_image(bw, red, lambda i, n: print(f"  {i}/{n}", flush=True))
+    print(("shown" if ok else "FAILED") + f" in {time.monotonic() - start:.1f} s")
+    return 0 if ok else 1
+
+
+def cmd_stats(hub, args):
+    try:
+        from . import stats_image, png2epd
+    except ImportError:
+        import stats_image, png2epd
+    img = stats_image.render().convert("RGBA")
+    if args.save:
+        img.convert("RGB").save(args.save)
+        print(f"saved {args.save}")
+    bw, red = png2epd.to_planes(img, False)
+    return show_planes(hub, bw, red)
 
 
 def cmd_send(hub, args):
@@ -245,6 +354,12 @@ def main():
             p.add_argument("folder")
         p.add_argument("--rotate", type=int, default=90, choices=[0, 90, 180, 270])
         p.add_argument("--dither", action="store_true")
+    p = sub.add_parser("show", help="draw an image on the hub's own panel")
+    p.add_argument("png")
+    p.add_argument("--rotate", type=int, default=90, choices=[0, 90, 180, 270])
+    p.add_argument("--dither", action="store_true")
+    p = sub.add_parser("stats", help="show this machine's CPU/RAM/disk on the hub's panel")
+    p.add_argument("--save", help="also save the rendered frame as a PNG")
     sub.add_parser("ping")
     ap.add_argument("--list", action="store_true", help="list serial ports and exit")
     args = ap.parse_args()
@@ -254,7 +369,7 @@ def main():
             print(f"{p.device}  {p.description}")
         return 0
     if not args.port or not args.cmd:
-        ap.error("port and a command (send, serve, ping) are required")
+        ap.error("port and a command (send, serve, show, stats, ping) are required")
 
     hub = Hub(args.port)
     if not hub.ping():
@@ -264,7 +379,8 @@ def main():
         print("PONG")
         return 0
     try:
-        return {"send": cmd_send, "serve": cmd_serve}[args.cmd](hub, args)
+        return {"send": cmd_send, "serve": cmd_serve, "show": cmd_show,
+                "stats": cmd_stats}[args.cmd](hub, args)
     except KeyboardInterrupt:
         return 0
 

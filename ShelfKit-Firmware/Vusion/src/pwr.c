@@ -37,8 +37,19 @@ static uint8_t pwr_on_level(void)
     return l;
 }
 
+void pwr_park_u5(void)
+{
+    /* PA2 has no pull resistor: released, it holds a stray level and can leave U5 on.
+     * The vendor start-up leaves it an analog input, which is why a normal boot is
+     * fine, but nothing guarantees that after a wake. Output low = U5 off. */
+    ANALOGA &= (uint8_t)~0x04;
+    PORTA &= (uint8_t)~0x04;
+    DIRA |= 0x04;
+}
+
 void pwr_init(void)
 {
+    pwr_park_u5();
     DIRA |= pwr_mask();         /* selected pins become outputs */
     pwr_off();
 }

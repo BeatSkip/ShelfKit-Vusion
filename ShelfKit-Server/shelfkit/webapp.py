@@ -6,6 +6,16 @@ long-lived poll connection per browser tab. The API is small and boring:
     GET  /                     the page
     GET  /app.js /style.css    its assets
     GET  /api/state            everything the UI needs to draw itself
+    GET  /api/flash            the flash status and log, plus the .hex files in Release/
+    POST /api/flash            {"method": "debugger"|"serial", "path": "...hex", "pane": "tag",
+                               "allow_partial": false}  start flashing (one at a time)
+    POST /api/flash/cancel     stop it (the chip may be left half-programmed)
+    GET  /api/aliases.csv      every tag's alias, notes, shelf and slot as a CSV download
+    POST /api/aliases          {"csv": "hex_id,alias,..."}  apply a CSV (blank cells clear)
+    POST /api/prefs            {"late_after_s": 330, ...}  page settings, validated and stored
+    GET  /api/hub-display      the hub panel's tag list: config, ids on the glass, last result
+    POST /api/hub-display      {"enabled": true, "timeout_s": 300, "min_interval_s": 60,
+                               "title": "...", "show_alias": true, "refresh": true}
     GET  /api/poll?c=a:1:12&e=0  new log lines per pane, new events, and the state
     GET  /api/files?dir=...    one folder's sub-directories and image files
     GET  /api/log              both logs merged, as plain text (copy/download)
@@ -114,6 +124,16 @@ class Handler(BaseHTTPRequestHandler):
             return self._serve_asset(ASSETS[path])
         if path == "/api/state":
             return self._json(self.app.state())
+        if path == "/api/hub-display":
+            return self._json(self.app.hubdisp.info())
+        if path == "/api/flash":
+            from . import flasher
+            from .app import REPO_ROOT
+            return self._json({"flash": self.app.flash.info(full=True),
+                               "files": flasher.hex_files(REPO_ROOT / "Release")})
+        if path == "/api/aliases.csv":
+            return self._send(HTTPStatus.OK, self.app.aliases_csv().encode("utf-8"),
+                              "text/csv; charset=utf-8")
         if path == "/api/poll":
             cursors = parse_cursors((query.get("c") or [""])[0])
             try:
@@ -150,6 +170,12 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802 - base class name
         path = unquote(urlparse(self.path).path)
+        # A page on another site can POST here too (a plain form needs no permission), and
+        # this server drives serial ports and runs the flasher. Browsers always say which
+        # site a POST came from, so refuse one that is not this page.
+        origin = self.headers.get("Origin")
+        if origin and urlparse(origin).netloc != self.headers.get("Host"):
+            return self._error("cross-site request refused", HTTPStatus.FORBIDDEN)
         body = self._body()
         parts = [part for part in path.split("/") if part]
         # every endpoint is /api/<something>
@@ -180,6 +206,27 @@ class Handler(BaseHTTPRequestHandler):
                     "image", addr, image.name, path=str(image),
                     fit=self.app.fit, dither=self.app.dither)
                 return self._json({"result": result, "state": self.app.state()})
+            if parts == ["api", "flash"]:
+                result = self.app.flash.start(
+                    str(body.get("method") or ""), str(body.get("path") or ""),
+                    body.get("pane"), bool(body.get("allow_partial")))
+                status = HTTPStatus.OK if result["ok"] else HTTPStatus.CONFLICT
+                return self._json({**result, "state": self.app.state()}, status)
+            if parts == ["api", "flash", "cancel"]:
+                return self._json({**self.app.flash.cancel(), "state": self.app.state()})
+            if parts == ["api", "prefs"]:
+                result = self.app.set_prefs(body)
+                status = HTTPStatus.OK if result["ok"] else HTTPStatus.BAD_REQUEST
+                return self._json({**result, "state": self.app.state()}, status)
+            if parts == ["api", "aliases"]:
+                result = self.app.import_aliases(str(body.get("csv") or ""))
+                return self._json({"result": result, "state": self.app.state()})
+            if parts == ["api", "hub-display"]:
+                # {"enabled": true, "timeout_s": 300, "min_interval_s": 60, "title": "...",
+                #  "show_alias": true, "refresh": true (redraw now)}
+                self.app.hubdisp.configure(refresh=bool(body.get("refresh")), **{
+                    k: v for k, v in body.items() if k != "refresh"})
+                return self._json(self.app.hubdisp.info())
             if parts == ["api", "cancel"]:
                 self.app.cancel()
                 return self._json(self.app.state())

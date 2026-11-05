@@ -190,8 +190,10 @@ source entries and no longer reports a failed link.
 1. **Long-run loss test**: leave `ShelfKit-Server` attached and watch the Console and Logs screens for hours;
    then repeat at distance / through walls. Expect near-0 % loss at short range; failures show up as
    `att=2+` or `FAILED`.
-2. **PA2/PA5 transistor lines** are unidentified and off by default (`SHELF_POWER_LINES 0` in
-   `shelf_config.h`). They may be an RF switch / PA supply; compare RSSI/range with them on.
+2. **PA2/PA5 transistor lines**: PA5 (U4) is the panel supply and has nothing to do with the radio;
+   PA2 (U5) is a switched load that changed nothing we could see in the radio's registers or
+   noise floor, and is parked low ([pa2-pa5-findings.md](pa2-pa5-findings.md)). Still open: whether
+   U5 is in the RF path - needs a second board sending while PA2 toggles on the receiver.
 3. **LED polarity**: the pin map says active low, the firmware assumes active high
    (`SHELFHW_LED_ACTIVE_HIGH`). Confirm which LED lights and flip the define if inverted.
 4. **Clock**: switch wtimer0 to the 32 kHz crystal for accurate intervals.

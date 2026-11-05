@@ -48,7 +48,7 @@ Everything tag-specific is in one header:
 | `SHELF_NET_ID` | Network id, must match the hub (`0x5A`). The node id is not here — it lives in the tag's SPI flash |
 | `SHELF_POLL_INTERVAL_S` | Seconds between polls (default 5; mind the 1 % duty cycle of the 868.3 MHz sub-band) |
 | `SHELF_STATS_EVERY` | Print link statistics every N polls |
-| `SHELF_POWER_LINES` | Drive the unidentified PA2/PA5 lines before the radio starts — the panel rail is separate and handled around each image |
+| `SHELF_POWER_LINES` | Hold the panel supply (U4, PA5) on from boot. Not a radio setting; leave off — the image path powers the panel around each image. PA2 (U5) is always parked low |
 
 ## Building and flashing
 
@@ -288,4 +288,39 @@ Other consequences:
 - Partial refresh and rotation slots; today every update is a full ~15-second flash.
 - Battery voltage is reported per poll; fuller telemetry (temperature, per-day history) is not.
 - The NFC chip and the serial flash have chip selects and a flash driver, but no NFC driver.
-- U5 (PA2) is still unidentified and left alone.
+- U5 (PA2) is still unidentified, but measured: active high, no pull, a load on the supply, nothing we use improves with it on. It is parked low at boot (`pwr_park_u5()`). See [pa2-pa5-findings.md](../../Documentation/pa2-pa5-findings.md).
+
+## Listen window and burst polling
+
+- A reply that says "nothing queued" parks the radio at once (`SHELF_LISTEN_QUIET_MS 0`);
+  a lost reply keeps a short `SHELF_LISTEN_GRACE_MS` (250 ms, was 700). So a push only
+  reaches the tag when the hub was pre-armed (`Q<id>`) before the poll, which makes the
+  reply say "data follows". ShelfKit-Server arms on queueing, after a hub reset and after
+  a hub-display redraw. Set `SHELF_LISTEN_QUIET_MS 250` if you push without the server.
+- A reply that says "data follows" switches the tag to `SHELF_POLL_ACTIVE_S` (30 s). Once the
+  hub goes quiet it polls at `SHELF_POLL_COOLDOWN_S` (180 s) for `SHELF_COOLDOWN_POLLS` polls,
+  then at `SHELF_POLL_IDLE_S` (300 s). `SHELF_ACTIVE_MAX_POLLS` caps a stuck data flag.
+  Link failures and weak-link backoff still apply on top. See Documentation/power-deepdive.md.
+
+## Panel power during an image update
+
+- END starts the refresh and returns; a 100 ms timer watches BUSY. About 100 ms later the radio
+  is parked (the END acknowledgement has left by then) and the MCU sleeps between ticks, so the
+  12-15 s waveform costs the panel's ~8 mA instead of ~22 mA. `poll_cb` wakes the radio for the
+  next poll. The log line `img done busy=<n> <s>s` is unchanged.
+- A transfer that is abandoned (30 s without a frame) or ends incomplete now puts the panel to
+  sleep and cuts its rail. A refresh that did not report done (busy=0 or 2) leaves the panel
+  powered only until the next poll, which then does the same.
+- The server waits 2 s (was 5 s) after BEGIN; the tag needs ~1 s to power and reset the panel.
+
+## Compressed images (ECO)
+
+Each plane may arrive ECO-compressed (chain coding, Documentation/ECO-ESL-ImageCompression.pdf):
+`ZCHUNK`s fill a 2,560-byte buffer (`SM_ECO_MAX`), and `ZEND` decodes it straight into the panel
+(src/eco_rx.c). The 5,624-byte plane never exists in RAM: it is rebuilt in 760-byte bands (40 rows),
+re-running the decoder from the top for each band, because chains only walk downward. A label is
+~0.5-0.8 KB per plane instead of 5.6 KB, so ~30 frames instead of 404. The log shows
+`img zplane <bytes>B <s>s` per plane; `img zplane bad/short` means the plane was not drawn and the
+image ends "incomplete". Plain `CHUNK`s still work (the server uses them when a plane does not
+compress below the buffer, e.g. dithered photos). Old firmware does not understand ZCHUNK/ZEND:
+flash all tags before pushing with this server.

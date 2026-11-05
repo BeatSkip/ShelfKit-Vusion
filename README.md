@@ -9,17 +9,17 @@ built from source with SDCC — no vendor cloud, no gateway subscription, nothin
 
 ![ShelfKit fleet view](Documentation/screenshots/fleet.png)
 
-*Fleet — every tag that announced itself, its state, and the last frame pushed to it (thumbnails are
-the real render, not a mockup).*
+*Fleet — every tag that announced itself, at true panel size on its shelf, with its state and the last
+frame pushed to it (the frames are the real render, not a mockup).*
 
 ![ShelfKit editor](Documentation/screenshots/editor.png)
 
 *Editor — pick an image, choose fit and dither, and see exactly what the glass will show, including a
 4× zoom.*
 
-![ShelfKit console](Documentation/screenshots/console.png)
+![ShelfKit hub screen](Documentation/screenshots/console.png)
 
-*Console — every serial line from both boards, with the handshake lines and a reset button per pane.*
+*Hub — every serial line from both boards, with the handshake lines and a reset button per pane.*
 
 Every screen has a light and a dark palette: the button in the top bar switches between them and the
 choice is remembered, or `?theme=light` / `?theme=dark` forces one for a link or a capture.

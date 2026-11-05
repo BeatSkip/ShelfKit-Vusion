@@ -58,7 +58,15 @@
  * A push needs ~200 ms to render and start, so 700 ms is 3x margin; the receiver
  * is 9.5 mA and this window is almost the whole power budget, so it is sized to
  * the job rather than to a bad case. A miss costs one poll, not the push. */
-#define SHELF_LISTEN_GRACE_MS   700
+#define SHELF_LISTEN_GRACE_MS   250
+/* How long to keep listening after a reply that *did* arrive and said "nothing
+ * queued": 0 parks the radio at once, the biggest battery saving there is.
+ * It needs the host to pre-arm every push (hub `Q<id>`, which makes the reply say
+ * "data follows"); ShelfKit-Server does that when a command is queued, when the hub
+ * resets and after the hub display redraws. A push started only after the reply
+ * (the old behaviour, or hubhost.py's `send` without a pre-arm) is missed; set this
+ * to 250 to catch those again, at ~2.5x the poll cost. */
+#define SHELF_LISTEN_QUIET_MS   0
 
 /* 1 = a falling edge on PB3 (the NFC chip's field-detect output, shared with the
  * bootloader's BOOT strap) wakes the tag, flashes the blue LED and makes it poll.
@@ -92,6 +100,17 @@
 #define SHELF_LOST_DAY_S        7200UL   /* ... every two hours after a day ... */
 #define SHELF_LOST_2DAY_S       86400UL  /* ... once a day from the day after */
 
+/* ── burst polling when the hub has data for us ───────────────────────────
+ * A reply that says "data follows" means the hub is busy with this tag (a queue of
+ * images, a firmware push), so the next check-in comes quickly. Once the hub goes
+ * quiet the rate drops well below the old fixed 120 s: a short cool-down, then idle. */
+#define SHELF_POLL_ACTIVE_S       30     /* while replies keep saying "data follows" */
+#define SHELF_ACTIVE_MAX_POLLS    20     /* safety: ~10 min of burst, then cool down
+                                          * (a stuck data flag must not drain the cell) */
+#define SHELF_POLL_COOLDOWN_S     180    /* first quiet polls after data ... */
+#define SHELF_COOLDOWN_POLLS      3      /* ... this many of them ... */
+#define SHELF_POLL_IDLE_S         300    /* ... then the idle rate */
+
 /* Print the link statistics every this many polls */
 #define SHELF_STATS_EVERY       2   /* one power summary every 2 polls */
 
@@ -108,10 +127,10 @@
  * bootloader overwrite this application on the next reset. Costs ~0.5 s once. */
 #define SHELF_WIPE_FIRST_BOOT   1
 
-/* 1 = drive the unidentified transistor lines PA2/PA5 on (see src/pwr.h) before the radio
- * starts. Left off by default; try it if the range turns out poor.
- * This is about the radio only: the e-paper supply is transistor U4 on PA5, and
- * src/img_rx.c drives it on itself around every image (independent of this switch). */
+/* 1 = switch the panel supply (U4 on PA5) on at boot and leave it on. It has NOTHING to do
+ * with the radio: measured on hardware, PA5 only powers the e-paper panel, and PA2 (U5) is
+ * never switched on (it is parked low at boot whatever this says). Leave it 0; the image
+ * path powers the panel itself around each image. See Documentation/pa2-pa5-findings.md. */
 #define SHELF_POWER_LINES   0
 
 #endif /* SHELF_CONFIG_H */

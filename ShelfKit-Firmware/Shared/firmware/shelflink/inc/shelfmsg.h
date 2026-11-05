@@ -61,6 +61,22 @@
 #define SM_IMG_CHUNK        28      /* SL_MAX_PAYLOAD - SM_IMG_HDR */
 
 /*
+ * Compressed planes (ECO chain coding, Documentation/ECO-ESL-ImageCompression.pdf;
+ * encoder ShelfKit-Server/shelfkit/eco.py, decoder Vusion/src/eco_rx.c). Either
+ * plane may come compressed instead of as CHUNKs; the order stays BW, then RED.
+ *
+ *   ZCHUNK : [1] plane, [2..3] offset in the compressed file (LE), [4..] data
+ *   ZEND   : [1] plane, [2..3] compressed length (LE) - the tag decodes the file
+ *            straight into the panel (~0.5 s, it answers nothing meanwhile)
+ *
+ * A compressed plane may be at most SM_ECO_MAX bytes (the tag's buffer); the
+ * server sends larger ones (dithered photos) as plain CHUNKs.
+ */
+#define SM_OP_IMG_ZCHUNK    11
+#define SM_OP_IMG_ZEND      12
+#define SM_ECO_MAX          2560
+
+/*
  * Firmware update (hub -> tag), also carried in DATA frames, one frame per
  * chunk and in order (the hub waits for each ACK as it does for images).
  * The tag writes the chunks into its SPI flash and only commits them, with a

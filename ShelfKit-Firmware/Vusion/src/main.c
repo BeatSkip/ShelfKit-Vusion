@@ -51,6 +51,11 @@ static uint8_t __xdata radio_asleep;
 static uint16_t __xdata fails;
 static uint32_t __xdata poll_due_s;
 static uint32_t __xdata ap_delay_s;     /* delay the hub asked for, seconds */
+/* burst polling: the last reply said "data follows" (data_pending), how many polls
+ * in a row did (active_polls), and how many cool-down polls are left after it */
+static uint8_t __xdata data_pending;
+static uint8_t __xdata active_polls;
+static uint8_t __xdata cooldown_left;
 
 /* Arm the next check-in `seconds` from now, capped to one timer arm. */
 static void arm_poll(uint32_t seconds) __reentrant
@@ -87,9 +92,18 @@ static uint32_t next_interval(void) __reentrant
             if (interval > SHELF_POLL_MAX_S)
                 interval = SHELF_POLL_MAX_S;
         }
+    } else if (data_pending && active_polls < SHELF_ACTIVE_MAX_POLLS) {
+        /* the hub is feeding this tag: come back soon for the next item */
+        interval = SHELF_POLL_ACTIVE_S;
+    } else if (cooldown_left) {
+        /* data just ended: drop to a slow rate, then to idle */
+        cooldown_left--;
+        interval = SHELF_POLL_COOLDOWN_S;
     } else if (last_hub_rssi < SHELF_WEAK_RSSI_DBM) {
         /* the hub hears us badly: retrying costs more than waiting */
         interval = SHELF_POLL_MAX_S;
+    } else {
+        interval = SHELF_POLL_IDLE_S;
     }
 
     if (ap_delay_s > interval)          /* the hub asked for a longer gap */
@@ -174,17 +188,40 @@ static void listen_cb(struct wtimer_desc __xdata *desc)
 #endif
 }
 
+/* on_done's working values live in XRAM: the tag's internal RAM is full to the byte, and
+ * a single extra local here is enough to make the link fail ("11 consecutive bytes in
+ * internal RAM for area OSEG"). */
+static uint8_t __xdata rsp_ok;          /* this poll got a full reply */
+static uint8_t __xdata rsp_data;        /* ... and it says data follows */
+static uint16_t __xdata listen_ms;
+#define RSP  (done->rsp)
+
+#if SHELF_RADIO_SLEEP
+/* The radio is not needed for the next seconds (the panel is refreshing): park it now
+ * rather than at the end of a listening window. poll_cb() wakes it for the next poll. */
+void tag_radio_park(void)
+{
+    wtimer0_remove(&listen_timer);
+    if (!radio_asleep) {
+        log_puts("sleep\r\n");
+        shelfhw_radio_sleep();
+        radio_asleep = 1;
+    }
+}
+#else
+void tag_radio_park(void) {}
+#endif
+
 static void on_done(const struct sl_done __xdata *done)
 {
-    uint8_t attempts = done->attempts;
-    const struct sl_rx __xdata *rsp = done->rsp;
-
     /* a frame from the flash read-back: handled there, and not a poll result */
     if (fw_dump_done(done->result))
         return;
 
     polls_done++;
-    last_attempts = attempts;
+    last_attempts = done->attempts;
+    rsp_ok = (done->result == SL_OK && RSP->len >= SM_RSP_LEN);
+    rsp_data = (rsp_ok && RSP->payload[SM_RSP_CMD] == SM_CMD_DATA);
 
     /* The normal case is silent: green means "an image is starting" now, and a
      * per-poll flash (or a latched level) kept an LED lit almost permanently,
@@ -192,23 +229,34 @@ static void on_done(const struct sl_done __xdata *done)
     if (done->result == SL_OK) {
         fails = 0;
         log_puts("poll ok att=");
-        log_dec(attempts);
+        log_dec(done->attempts);
         log_puts(" rssi=");
-        log_sdec(rsp->rssi);
-        if (rsp->len >= SM_RSP_LEN) {
-            last_hub_rssi = (int8_t)rsp->payload[SM_RSP_RSSI];
-            ap_delay_s = (uint32_t)rsp->payload[SM_RSP_DELAY] * 10UL;
+        log_sdec(RSP->rssi);
+        if (rsp_ok) {
+            last_hub_rssi = (int8_t)RSP->payload[SM_RSP_RSSI];
+            ap_delay_s = (uint32_t)RSP->payload[SM_RSP_DELAY] * 10UL;
             log_puts(" hubrssi=");
             log_sdec(last_hub_rssi);
         } else {
             ap_delay_s = 0;
         }
         log_nl();
+        if (rsp_data) {
+            data_pending = 1;
+            if (active_polls < 255)
+                active_polls++;
+            cooldown_left = SHELF_COOLDOWN_POLLS;
+        } else {
+            data_pending = 0;
+            active_polls = 0;
+        }
     } else {
+        data_pending = 0;
+        active_polls = 0;
         if (fails != 0xFFFF)
             fails++;
         log_puts("poll FAILED after ");
-        log_dec(attempts);
+        log_dec(done->attempts);
         log_puts(" attempts");
         log_nl();
         shelfhw_led_pulse(SHELFHW_LED_RED, SHELFHW_LED_PULSE_MS);
@@ -224,26 +272,44 @@ static void on_done(const struct sl_done __xdata *done)
      * before the poll was even sent - and on hardware that polled fine, was told
      * cmd=01, and then never received the first frame of the push. */
     {
-        uint32_t ms = (rsp->len >= SM_RSP_LEN &&
-                       rsp->payload[SM_RSP_CMD] == SM_CMD_DATA)
-                      ? (uint32_t)SHELF_LISTEN_WINDOW_S * 1000u
-                      : (uint32_t)SHELF_LISTEN_GRACE_MS;
+        if (data_pending)
+            listen_ms = (uint16_t)SHELF_LISTEN_WINDOW_S * 1000u;
+        else if (rsp_ok)
+            listen_ms = SHELF_LISTEN_QUIET_MS;     /* the hub said nothing follows */
+        else
+            listen_ms = SHELF_LISTEN_GRACE_MS;     /* no usable reply: be patient */
 
         wtimer0_remove(&listen_timer);
-        listen_timer.time = (uint16_t)((ms * SHELFHW_TICKS_PER_S + 500u) / 1000u);
+        /* ms -> ticks in 16 bits: ms * tps / 1000 = (ms/8) * (tps/8) * 2 / 31.25, i.e.
+         * within ~1 % and never above 40000 - 32-bit maths here costs internal RAM the
+         * tag does not have */
+        listen_timer.time = (uint16_t)(((listen_ms >> 3) * (SHELFHW_TICKS_PER_S >> 3) * 2u) / 31u);
+        if (!listen_timer.time)
+            listen_timer.time = 1;          /* sleep on the next tick, not never */
         wtimer0_addrelative(&listen_timer);
     }
 #endif
 
     arm_poll(next_interval());
 }
+#undef RSP
 
 static void on_rx(const struct sl_rx __xdata *rx)
 {
     if (rx->type != SL_T_DATA)
         return;
-    /* firmware opcodes start at SM_OP_FW_BEGIN; image opcodes are below them */
-    if (rx->len && rx->payload[0] >= SM_OP_FW_BEGIN)
+    /* A push that started after the poll reply (the server sends when it sees the
+     * poll, so CMD_DATA was not set): the hub is feeding us, so poll again soon
+     * instead of waiting out the idle gap armed a moment ago. Once per burst. */
+    if (!data_pending) {
+        data_pending = 1;
+        active_polls = 0;
+        cooldown_left = SHELF_COOLDOWN_POLLS;
+        arm_poll(SHELF_POLL_ACTIVE_S);
+    }
+    /* image opcodes are below SM_OP_FW_BEGIN, plus the compressed-plane pair */
+    if (rx->len && rx->payload[0] >= SM_OP_FW_BEGIN
+        && rx->payload[0] != SM_OP_IMG_ZCHUNK && rx->payload[0] != SM_OP_IMG_ZEND)
         (void)fw_rx_data(rx->payload, rx->len);
     else
         (void)img_rx_data(rx->payload, rx->len);
@@ -264,10 +330,11 @@ static void poll_cb(struct wtimer_desc __xdata *desc)
         return;
     }
     poll_due_s = 0;
+    img_rx_idle();                  /* a panel left powered is put to sleep here */
 
     /* a transfer or a read-back owns the link: try again shortly */
     if (img_rx_active() || fw_rx_active() || fw_dump_active()) {
-        arm_poll(SHELF_POLL_INTERVAL_S);
+        arm_poll(SHELF_POLL_ACTIVE_S);
         return;
     }
 
@@ -402,7 +469,7 @@ void main(void)
 #endif
         if (fw_dump_active())
             fw_dump_step();
-        if (img_rx_active() || fw_rx_active() || fw_dump_active())
+        if ((img_rx_active() && !img_rx_refreshing()) || fw_rx_active() || fw_dump_active())
             shelfhw_poll_awake();
         else
             shelfhw_poll();

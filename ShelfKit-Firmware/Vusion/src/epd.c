@@ -173,6 +173,19 @@ uint8_t epd_refresh(void)
     return epd_cmd_wait(0x12, 3000, 60000);     /* display refresh */
 }
 
+static uint8_t __xdata refresh_idle;
+
+void epd_refresh_begin(void)
+{
+    refresh_idle = EPD_BUSY;
+    epd_cmd(0x12);
+}
+
+uint8_t epd_busy_active(void)
+{
+    return EPD_BUSY != refresh_idle;
+}
+
 void epd_clear(uint8_t bw_byte, uint8_t red_byte)
 {
     uint16_t i;

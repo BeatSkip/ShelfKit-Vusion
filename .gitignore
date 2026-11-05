@@ -30,3 +30,5 @@ ShelfKit-Server/data/
 
 # Ready-to-flash HEX files from ShelfKit-Firmware/Tooling/build-all.py
 Release/
+Shakedown/
+dump.hex

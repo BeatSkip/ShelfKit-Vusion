@@ -1,10 +1,8 @@
 # ShelfKit-Server — browser UI and image push for the ShelfKit hub and tags
 
-A local web app over the hub's serial port. The screen layout follows
-[docs/web-interface-implementation.md](docs/web-interface-implementation.md): a **Fleet** table as the
-home view, an **Editor** with the three-pane preview stack, plus **Queue**, **Logs**, **Stats**,
-**Hub**, **Console** and **Settings**. Only some of that is backed by a server — the rest is
-interface, clearly marked, so the shape of the finished tool is visible without pretending.
+A local web app over the hub's serial port, with seven screens: **Fleet** (home), **Editor**, **Queue**,
+**Logs**, **Hub**, **Flash** and **Settings**. Clicking a tag anywhere opens its inspector. Every control on the page does
+something real; screens that were only placeholders are gone.
 
 ```
 ShelfKit-Server/
@@ -73,11 +71,11 @@ and read image files on this machine, so it is not meant to be reachable from el
 Two ways:
 
 - **On the command line** — `hub=COM4 tag=COM3` opens those two at startup, which is the usual way.
-- **In the page** — the **Console** tab holds the two panes: type or pick the port, set the baud,
-  press **Open** on each. **DTR**, **Reset** and **Clear** sit on the same row.
+- **In the page** — the **Hub** screen holds the two panes: type or pick the port, set the baud,
+  press **Open** on each. **DTR**, **Reset** and **Clear log** sit on the same row.
 
-Fleet and Hub both tell you when a pane is still closed and give you a button that jumps to the
-Console, so an empty fleet table never looks like a broken page.
+The top bar always shows the hub port's state. When the port is closed, Fleet says so in its headline
+and offers a button that opens it, so an empty shelf never looks like a broken page.
 
 ### Light and dark theme
 
@@ -92,25 +90,93 @@ Both palettes are the same layout with a different token set — `:root` holds t
 `[data-theme="light"]` overrides the colours, so no rule hard-codes a colour outside those two
 blocks. `color-scheme` is set per theme too, which keeps scrollbars and native controls in step.
 
-## What is real, and what is only interface
+## The screens
 
-| Screen | Working today | Interface only (marked in the page) |
+The page uses the panel's own inks: black, white and red on shelf-steel grey. Red only ever means
+"this needs you". State is also carried by shape, so it reads without colour. Tag IDs are drawn in a
+small bitmap font, and tags stay paper-coloured in both themes because they are physical objects.
+
+| Screen | What it does |
+|---|---|
+| **Fleet** | A headline saying how many tags are checking in and what needs you. **Shelf** view: each tag at true panel size (or half) with the frame last pushed to it, on rails grouped by the shelf and slot you set in the inspector. A tag's panel plays a refresh when a new frame lands. **Table** view: sortable, for larger fleets. Search covers IDs, aliases and notes. Filter by status, select tags, then push an image, send service labels or forget them |
+| **Inspector** | Opens from any tag, on any screen. The tag's frame and facts; alias, notes, shelf and slot; push and service label; then wireless ID, firmware update, flash read-back, forget and factory reset, folded away until wanted |
+| **Editor** | Browse this machine's folders, then choose **fit** and **dither**. Three previews from the server's render: source, the frame as the tag shows it, and a 4× loupe that follows the pointer or arrow keys. A midtone warning. Push to **one tag or several**; Push stays disabled until a preview is rendered |
+| **Queue** | Every outbound command (image, firmware, ID, factory reset, service label, flash read) waits here until its tag checks in. Live state and frame progress per command, and **Cancel all** |
+| **Logs** | Events recorded by the server (`push`, `ok`, `fail`, `error`, `boot`, `bootloader`, `open`, ...), identical neighbours collapsed into `×N`, filtered by tag or event, **kept across restarts**. Check-ins (`sync`) are hidden unless you ask for them, because every poll makes one |
+| **Hub** | Both serial panes (port, baud, Open/Close, DTR, Reset, Clear log, live log), Copy logs and Save log, the features the hub's firmware reports, and the settings for the hub's own panel. The port and baud you used come back next run. `#console` links land here |
+| **Flash** | Put firmware on a chip from the page, with the **USB debugger** (AXSDB) or the **serial bootloader**. Pick the file from `Release/`, press Start, press again to confirm. Four steps (find the chip, erase, write, start) show as they happen, with the tool's own output underneath. See [Flashing](#flashing-from-the-page) |
+| **Settings** | When a tag counts as late or silent, when to offer to forget it, the low-battery voltage, and the Fleet layout and tag size. A CSV of aliases, notes, shelf and slot can be exported and imported. Saved by the server (the `prefs` setting in the state database), so every browser and every restart sees the same values; an impossible combination is refused with a message and nothing is stored |
+
+### Tag status
+
+Tags check in every 2 minutes, back off to 5 when idle and to 10 on a weak link, so "online" is
+judged against those rates. The times below are the defaults; change them in **Settings**.
+
+| Status | Meaning |
+|---|---|
+| **Online** | heard in the last 5½ minutes |
+| **Late** | heard in the last 10½ minutes: slower than the idle rate, within the weak-link rate |
+| **Silent** | not heard for longer than that |
+| **Waiting** | a command is queued for its next check-in |
+| **Sending** | a command is running now |
+
+**Needs attention** is separate: a battery below the Settings voltage (2.5 V by default), or a last
+command that failed.
+
+### Flashing from the page
+
+**Flash** → pick a method and a file → **Start flashing**, then press again to confirm (it erases).
+
+| | USB debugger | Serial bootloader |
 |---|---|---|
-| **Fleet** | Tag table from every `POLL src=<id>` the hub prints: 4-char hex id, **alias**, status dot (online if heard in the last 30 s, pending while an image is in flight, else offline), last-push age **with a thumbnail of the frame that was pushed**, search, status chips, column sort, row selection with bulk actions (push, **forget**), tag drilldown drawer that edits the alias and notes, **assigns the tag's wireless id** and **forgets the tag** | battery, reflash/clear, map view (hidden until a grid is configured) |
-| **Editor** | Browse this machine's folders, pick the image and the target tag, **fit mode** (cover/contain/stretch), **dither** (threshold/Floyd-Steinberg/Bayer 4×4), the **three previews** — colour original, 1:1 on-device frame, and a 4× zoom that follows a drag — a midtone warning, and Push / Cancel with live frame progress. Push is only enabled once a preview has been rendered | templates, plain text, QR, multi-target push, the content library, the render → confirm → queue split |
-| **Queue** | Every outbound command — image, firmware, id, factory reset, service label, flash read — waits here until its tag polls, then runs. Live state per command (`pending` / `running` / `done` / `failed` / `cancelled`), the running frame progress, and **Cancel all** | attempts/retry, reordering, scheduling |
-| **Logs** | Event table recorded by the server (`sync`, `push`, `ok`, `fail`, `error`, `boot`, `bootloader`, `open`), consecutive duplicates collapsed into `×N`, filtered by tag or event, **kept across restarts** | the firmware's own event stream (low batt / err) and the per-tag log |
-| **Stats** | — | all three charts (needs the stats rollup and battery reporting) |
-| **Hub** | Serial link facts (port, state, baud, line count, DTR/RTS) and a read-only tail of the hub's console | firmware version, uptime, EPD mirror, OTA upload, restart |
-| **Console** | The two-pane serial view: per-pane port, baud, Open/Close, DTR, Reset, Clear, both logs, Copy logs, Save log. The port and baud you used come back next run | — |
-| **Settings** | — | alias CSV import/export, default fit/dither, `LOG_IDS` mode, rotation slots, fleet grid |
+| Needs | the AXSDB debugger on USB; set where `axsdb.exe` is in **Settings** (found by itself in the default install) | a serial adapter with DTR on the chip's BOOT pin and RTS on its reset, on one of the two panes |
+| Runs | `axsdb.exe --eraseall --flashprog <file>`, from AXSDB's own `bin` folder | the protocol of `ShelfKit-Firmware/Tooling/axsem-flasher.py`, in the server: banner, erase, HEX lines, run |
+| Steps | `Programming Serial …` → find the chip, `Bulk erase...` → erase, `Flash program...` → write, `Run program...` → start; the exit code decides success | the same four steps, with a line count while writing |
+| Pane | untouched | closed for the transfer at 38400, reopened afterwards |
 
-Everything in the right-hand column is rendered with the real controls, disabled, and a `soon` chip
-or a one-line explanation — no dead ends that leave you wondering whether it is broken.
+**`--eraseall` wipes the whole chip, bootloader included.** The debugger path therefore only accepts a
+`*-full-*.hex` (bootloader and application) unless you tick *Erase the bootloader as well*; the server
+enforces that, not just the page. The serial path erases only the application.
+
+Only one flash runs at a time. The **debugger** never touches the hub, so it runs beside whatever the hub
+is doing. A **serial** flash through the *other* port does too; only a serial flash through the hub's own
+port waits for the hub to be idle (and holds the queue until it is over). **Stop** ends it early, but the chip may be left
+half-programmed; flash again to recover. The page remembers nothing between flashes except the log of
+the last one (kept in memory until the server restarts); each flash also leaves a `flash` row in **Logs**.
+
+### Settings API
+
+```
+POST /api/prefs      {"late_after_s": 330, "silent_after_s": 630, "forget_after_s": 900,
+                      "low_battery_v": 2.5, "fleet_view": "wall", "wall_size": "full",
+                      "axsdb_path": "C:\\Program Files (x86)\\ON Semiconductor\\AXSDB\\bin",
+                      "hub_port": "COM4", "tag_port": "COM5", "show_tag_port": true}
+GET  /api/aliases.csv      hex_id,alias,notes,shelf,slot for every tag
+POST /api/aliases          {"csv": "..."}  apply a CSV; bad rows are reported, good rows applied
+```
+
+`axsdb_path` may be the program or its folder, is checked when saved (it must be an `axsdb.exe`), and is
+stored as the program's path. Empty means "look in the default install". `hub_port` and `tag_port` are the two serial panes' ports (remembered, and reopened if the pane was open);
+they can't be equal, and the hub's can't change mid-transfer. `show_tag_port: false` hides the tag debug
+pane and closes it. Any subset of the keys can be sent. The current values are in `GET /api/state` under `prefs`. A
+value outside its range, or times that are not in order (late < silent < forget), returns 400 with
+the reason and changes nothing. The code is in `shelfkit/prefs.py`.
+
+```
+GET  /api/flash          the flash state and its output, plus the .hex files in Release/
+POST /api/flash          {"method": "debugger"|"serial", "path": "...hex", "pane": "tag", "allow_partial": false}
+POST /api/flash/cancel   stop it
+```
+
+`POST /api/flash` answers 409 with the reason when it can't start (`needs_confirm: true` for a
+debugger flash of an image without the bootloader). The code is in `shelfkit/flasher.py`.
+
+Every POST is refused with 403 when its `Origin` is another site: a page you happen to have open can
+send a form to `127.0.0.1`, and this server drives serial ports and runs the flasher.
 
 ## The working parts, in detail
 
-### Console (the original two-pane view)
+### The serial panes (Hub screen)
 
 One pane per port, each with its own port field (type it, or pick a detected port from the list), baud
 rate, **Open/Close**, **DTR**, **Reset**, **Clear**, and its log below.
@@ -196,12 +262,12 @@ that is still polling simply reappears as a fresh row (with no alias) on its nex
 
 | Where | What it does |
 |---|---|
-| Drawer → **Forget tag** | deletes that one tag, its stored metadata and its log lines |
+| Inspector → **Forget tag** | deletes that one tag, its stored metadata and its log lines |
 | Fleet → select rows → **Forget** | the same for a selection |
-| Fleet → **Forget silent** | deletes every tag not heard for 10 minutes (a sleeping tag polls once a minute, so it stays) |
-| Fleet **Battery** column | the tag's supply voltage **and a CR2450 percentage** from each poll, red below 2.5 V (older firmware leaves it "—") |
-| Drawer → **Read flash** | reads the tag's metadata pages back over the radio and offers the `.bin`/`.txt` |
-| Drawer → **Factory reset** | sends the tag a wipe command: it erases its SPI flash, resets and comes back with a **new random id**; the old row is dropped |
+| Fleet → **Forget tags silent for 15 minutes** | deletes every tag not heard for 15 minutes, which is longer than the slowest poll interval (10 minutes). Only offered when such a tag exists |
+| Fleet battery reading | the tag's supply voltage and a cell gauge from each poll, with the **CR2450 percentage** in its tooltip and the inspector, red below 2.5 V (older firmware shows "No battery reading") |
+| Inspector → **Read flash** | reads the tag's metadata pages back over the radio and offers the `.bin`/`.txt` |
+| Inspector → **Factory reset** | sends the tag a wipe command: it erases its SPI flash, resets and comes back with a **new random id**; the old row is dropped |
 
 Each delete arms itself: the first click turns the button into **Really forget?**, the second
 commits, and it disarms again after four seconds. A tag that is mid-transfer is skipped.
@@ -214,9 +280,9 @@ identity assignment.
 ### Updating a tag's firmware over the air
 
 **Fleet** → click a tag → under **Firmware update** pick one of the HEX files from `Release/`
-(written by `ShelfKit-Firmware/Tooling/build-all.py`), then **Reflash**. The `*-full-*.hex` (`vusion-full-latest.hex`)
+(written by `ShelfKit-Firmware/Tooling/build-all.py`), then **Update firmware**. The `*-full-*.hex` (`vusion-full-latest.hex`)
 bundles are filtered out on purpose: they carry the bootloader as well and cannot go over the
-air.
+air. So are the hub and bootloader images, which are not tag applications.
 
 The transfer is the same reliable DATA path images use, with the firmware opcodes
 (`SM_OP_FW_BEGIN`/`CHUNK`/`END`):
@@ -237,7 +303,7 @@ disagree about the opcodes or the CRC.
 
 ### Service labels
 
-**Fleet** → click a tag → **Service image**. The server draws a label at panel size
+**Fleet** → click a tag → **Send service label**, or select several tags and use the bar that appears. The server draws a label at panel size
 and pushes it over the wireless link, like any other image — no serial connection to
 the tag is involved, only the hub port.
 
@@ -328,10 +394,10 @@ reserved sector: blank
 The default range is `0x0000..0x2FFF` — the OTA header, the identity record and the
 reserved sector, i.e. everything the firmware writes. The result is saved to
 `data/dumps/flash-<id>-<timestamp>.bin` plus a hexdump `.txt`, and both are offered
-as downloads straight from the drawer (`/api/dump.bin`, `/api/dump.txt`). A page
-takes a few seconds; progress shows in the drawer while it runs.
+as downloads straight from the inspector (`/api/dump.bin`, `/api/dump.txt`). A page
+takes a few seconds; progress shows in the inspector while it runs.
 
-The drawer checks the hub's boot banner first: a hub without `dump=1` disables the
+The inspector checks the hub's boot banner first: a hub without `dump=1` disables the
 button and says why, because that firmware relays the frames but drops their bytes.
 If a read does fail with *"the hub is dropping the payload"*, the hub is running firmware
 from before the read-back existed: the tag answers, the hub prints `DATA src=…` but
@@ -352,9 +418,9 @@ image fits the whole fleet and the id survives updates. A brand new tag generate
 16-bit id at first boot and logs it (`id? 3F2A new`); the hub prints it as `POLL src=3f2a …`
 like any other tag.
 
-To give it a proper id: click the row in **Fleet**, then under **Wireless identity** either
-type a hex id or leave the field empty to take the lowest free one, and press **Assign**. The
-server sends one DATA frame (`SM_OP_SET_ID`) over the hub port the Console already has open;
+To give it a proper id: click the tag in **Fleet**, then under **Wireless ID** either
+type a hex id or leave the field empty to take the lowest free one, and press **Assign ID**. The
+server sends one DATA frame (`SM_OP_SET_ID`) over the hub port that is already open;
 the tag writes the id, reads it back and moves its radio address, so a successful ACK means
 the id will still be there after a reset. The server then moves everything it knew about that
 tag — alias, notes, map position, counters, last frame — to the new row, so the fleet shows
@@ -365,12 +431,13 @@ The same thing from a shell, without the UI:
 
 ### Pushing an image
 
-In the **Editor**: **Browse…** opens a picker over this machine's folders (it starts in `Resources/`)
-and lists only folders and image files; click a folder to go in, click an image to use it. Pick the
-target under **Target tag** — the list is every node id that announced itself — then **Push to 1
-tag**. The button turns into **Cancel** while a transfer runs and stops after the frame in flight.
+In the **Editor**: **Browse this computer** opens a picker over this machine's folders (it starts in
+`Resources/`) and lists only folders and image files; click a folder to go in, click an image to use
+it. Tick one or more tags under **Send to**, then **Push**: each tag gets its own queued command, sent
+when it next checks in. **Cancel all** on the Queue screen drops what is waiting and stops the running
+transfer after the frame in flight.
 
-The push goes over the serial port the Console pane already has open — it sends the hub's `S`/`P`
+The push goes over the serial port the hub pane already has open — it sends the hub's `S`/`P`
 commands and reads the `SENT`/`PONG` answers out of that pane's own log. That is deliberate: closing
 and reopening the port for a transfer re-applies DTR and RTS, and on this board a glitch on RTS is a
 reset pulse. Nothing is reopened, the console keeps printing during the transfer, and the frames
@@ -497,5 +564,51 @@ the console needs 200 ms because it is a live UART tail, and only the diff comes
 endpoint list is in the docstring of [`shelfkit/webapp.py`](shelfkit/webapp.py).
 
 The screens keep the spec's vocabulary on purpose: hex ids are always 4 uppercase characters with no
-prefix, the status colours are the same five everywhere, and `image-rendering: pixelated` is already
-on the preview surfaces for when they hold real bitmaps.
+prefix, the status marks are the same everywhere, and `image-rendering: pixelated` keeps the preview
+surfaces true to the panel's pixels.
+
+## Hub display: connected tags
+
+The hub's own e-paper panel can list the serial numbers (node ids) of the tags that are
+currently connected. A tag stays on the list while its last POLL is younger than the
+timeout (5 minutes by default) and drops off after that. The panel is redrawn only when
+the set changes, and at most once per minute: a refresh takes ~15 s, during which the hub
+cannot answer polls, and the server writes nothing to the hub (its serial line is also the
+panel's reset, see [Vusion-Hub](../ShelfKit-Firmware/Vusion-Hub/README.md)).
+
+Off by default; needs a hub built with the serial image command (banner ends in `show=1`).
+
+```
+python shelfkit-server.py hub=COM4 --hub-display
+python shelfkit-server.py hub=COM4 --hub-display --hub-display-timeout 600 --hub-display-interval 120 --hub-display-title "Aisle 4"
+```
+
+or at runtime, persisted in the settings table:
+
+```
+GET  /api/hub-display
+POST /api/hub-display   {"enabled": true, "timeout_s": 300, "min_interval_s": 60,
+                         "title": "ShelfKit hub", "show_alias": true, "refresh": true}
+```
+
+Tags poll every 2 minutes and stretch that to 10 on a weak link, so keep `timeout_s` above
+the slowest poll interval you expect or those tags will flap on and off the list.
+The display code is in `shelfkit/hub_display.py`; `hubhost.py PORT show|stats` does the
+one-off version without the server.
+
+## Pre-arming (needed by the low-power tag firmware)
+
+A tag whose poll reply says "nothing queued" goes to sleep at once, so a push only lands if the
+hub was told beforehand (`Q<id>`, which makes the reply say "data follows"). The server arms a tag
+when a command is queued or a direct send starts, and re-arms every pending tag when the hub
+resets (banner seen), after the hub display redraws, and when a tag's second command is still
+waiting. The hub holds 4 tags at once. A push that was not armed fails once, is deferred and is
+armed again for the tag's next poll.
+
+## Image compression
+
+Pushes compress each plane with ECO chain coding (`shelfkit/eco.py`, after Kim, Kim & Cho, IEEE
+Access 2021, in Documentation/). A plane that does not fit the tag's 2,560-byte buffer or does not
+get smaller goes out raw. `eco.decode()` follows the tag's banded decoder exactly, and the smoke test
+checks every push decodes back to the rendered planes. Needs tag firmware with `eco_rx.c`; the
+hub's own panel is still fed raw.

@@ -18,7 +18,7 @@ host knows about the fleet arrives on this board's UART.
 
 Same board as [`../Vusion`](../Vusion) — SES-imagotag Vusion 2.6", AX8052F143 + GDEW026Z39 — but
 wired to a PC by serial cable instead of running on a shelf. It keeps the e-paper driver so the hub
-can show something itself later; it does not receive images.
+can show something itself later; it can also show an image the host sends over serial (below).
 
 ## What it does
 
@@ -48,7 +48,7 @@ The protocol, the frame format, the retry rules and the exact log lines are in
 |---|---|
 | `SHELF_NODE_ID` | Must stay `SL_NODE_HUB` (`0x0001`) — tags address the hub, not a node id |
 | `SHELF_NET_ID` | Network id, must match every tag in the fleet (`0x5A`) |
-| `SHELF_POWER_LINES` | Drive the unidentified PA2/PA5 lines before the radio starts; left off |
+| `SHELF_POWER_LINES` | Hold the panel supply (U4, PA5) on from boot. Not a radio setting; leave off. PA2 (U5) is always parked low |
 
 ## Building and flashing
 
@@ -93,3 +93,22 @@ python ../../ShelfKit-Server/shelfkit/hubhost.py COM4 serve images/     # push n
   command channel is in use, and the pin conflict is the reason.
 - A full image is 404 DATA frames of 28 payload bytes; the transfer is reliable per frame, so a slow
   link shows up as `att=N` on individual frames, not as a corrupted panel.
+
+## Showing an image on the hub's own panel
+
+`D<msg><chk:2>` carries the same `SM_OP_IMG_BEGIN/CHUNK/END` messages a tag receives over
+the air, and feeds them to the tag's `img_rx.c` (copied here with `epd.c`). The hub answers
+`OK img` per message; `END` answers only after the refresh (~15 s), during which the hub
+keeps its radio but the host must not send. Chunks can be up to 128 bytes. The banner
+advertises it as `show=1`.
+
+```
+python ../../ShelfKit-Server/shelfkit/hubhost.py COM4 show pic.png
+python ../../ShelfKit-Server/shelfkit/hubhost.py COM4 stats       # CPU/RAM/disk of this PC
+```
+
+**PB5 is both the panel's RST and the serial RX.** With `HUB_EPD_RST_PULSE 0` (default,
+`include/shelf_config.h`) the hub never drives PB5 and resets the panel by cycling its supply
+rail, but while the trace is connected every byte the host sends is still a reset pulse on
+the panel. If the picture is garbled or stops half way, cut the trace between PB5 and the
+panel's RST pin: the rail cycle is then the only reset.

@@ -85,6 +85,12 @@ void epd_upload(uint8_t cmd, const uint8_t *plane, uint16_t len);
  * EPD_BUSY_* code; only EPD_BUSY_DONE means the image is on the glass. */
 uint8_t epd_refresh(void);
 
+/* The same refresh without the wait: epd_refresh_begin() sends 0x12 and notes the idle
+ * level of BUSY, epd_busy_active() then says whether the waveform is running. The caller
+ * polls it from a timer, so the MCU can sleep for the 12-15 s instead of spinning. */
+void epd_refresh_begin(void);
+uint8_t epd_busy_active(void);
+
 /* Convenience: upload both planes and refresh. Both buffers must exist
  * at the same time - on this panel use epd_upload() twice instead. */
 void epd_display(const uint8_t *bw_plane, const uint8_t *red_plane);

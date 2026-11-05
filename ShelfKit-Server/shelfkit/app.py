@@ -20,7 +20,9 @@ from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 
-from . import hubhost
+from . import hubhost, prefs as prefs_mod
+from .flasher import Flasher, axsdb_problem, resolve_axsdb
+from .hub_display import HubDisplay
 from .serial_link import DEFAULT_BAUD, PortSpec, SerialWorker, available_ports
 
 MAX_LOG_LINES = 5000
@@ -175,12 +177,16 @@ class Pane:
 class App:
     """The two panes plus the image push, safe to call from request threads."""
 
-    def __init__(self, specs: list[PortSpec], auto_open: bool = False, store=None) -> None:
+    def __init__(self, specs: list[PortSpec], auto_open: bool = False, store=None,
+                 display_opts: dict | None = None) -> None:
         self.lock = threading.RLock()
         self._arrivals = itertools.count(1)
         self.status = "ready"
         self.image: Path | None = None
         self.sending = False
+        # True while the hub redraws its own panel: its serial line is also the panel's
+        # reset, so nothing may be written to it until the refresh is done.
+        self.display_busy = False
         self.progress = ""
         self.tags: dict[int, int] = {}
         # Editor: how the image is fitted and dithered, plus the last preview.
@@ -213,6 +219,8 @@ class App:
         self.boot_state = False
         self._reset_at: tuple[str, float] | None = None   # (pane key, deadline)
         self.store = store                      # shelfkit.store.Store, or None
+        self.prefs = dict(prefs_mod.DEFAULTS)   # the Settings screen's values
+        self.flash = Flasher(self)              # firmware flashing: debugger or bootloader
         self.keys: list[str] = []
         self.panes: dict[str, Pane] = {}
         for i, spec in enumerate(specs):
@@ -220,8 +228,12 @@ class App:
             self.keys.append(key)
             self.panes[key] = Pane(key, spec, on_line=lambda text, k=key: self._on_line(k, text))
         self._restore()
+        self.hubdisp = HubDisplay(self, display_opts)
+        self.hubdisp.start()
         if auto_open:
             for key in self.keys:
+                if key == self.tag_key() and not self.prefs["show_tag_port"]:
+                    continue                 # hidden in Settings: leave that port alone
                 self.open_pane(key)
 
     # ── persistence ────────────────────────────────────────────────────────
@@ -230,6 +242,9 @@ class App:
         if self.store is None:
             return
         saved = self.store.settings()
+        stored_prefs = saved.get(prefs_mod.SETTING_KEY)
+        if isinstance(stored_prefs, dict):
+            self.prefs, _ = prefs_mod.clean(stored_prefs)
         try:                                   # one source of truth for the options
             from . import preview
             fits, dithers = preview.FIT_MODES, preview.DITHERS
@@ -278,6 +293,102 @@ class App:
     def _save_setting(self, key: str, value) -> None:
         if self.store is not None:
             self.store.set_setting(key, value)
+
+    # ── page settings ─────────────────────────────────────────────────────
+    def set_prefs(self, options: dict) -> dict:
+        """Validate and store the Settings screen's values. Nothing is stored on error."""
+        with self.lock:
+            merged, problems = prefs_mod.clean(options, self.prefs)
+            if "axsdb_path" in options and not problems:
+                why = axsdb_problem(merged["axsdb_path"])
+                if why:
+                    problems.append(why)
+                elif merged["axsdb_path"]:
+                    # keep the program itself, not the folder it was found in
+                    merged["axsdb_path"] = resolve_axsdb(merged["axsdb_path"])[0] or ""
+            changes, port_problems = self._plan_ports(options)
+            problems += port_problems
+            if problems:
+                return {"ok": False, "error": "; ".join(problems), "prefs": self._prefs_view()}
+            hiding = self.prefs["show_tag_port"] and not merged["show_tag_port"]
+            self.prefs = merged
+        self._save_setting(prefs_mod.SETTING_KEY, merged)
+        for key, port in changes.items():
+            self._set_pane_port(key, port)
+        tag = self.tag_key()
+        if hiding and tag and not (self.flash.active and self.flash.pane == tag):
+            self.close_pane(tag)             # nobody can see it, so don't hold the port
+        return {"ok": True, "prefs": self._prefs_view()}
+
+    def _prefs_view(self) -> dict:
+        """The stored prefs plus the two ports, which live with the panes."""
+        with self.lock:
+            view = dict(self.prefs)
+            hub, tag = self.hub_key(), self.tag_key()
+            view["hub_port"] = self.panes[hub].spec.port if hub in self.panes else ""
+            view["tag_port"] = self.panes[tag].spec.port if tag in self.panes else ""
+            return view
+
+    def _plan_ports(self, options: dict) -> tuple[dict, list[str]]:
+        """The ports in `options` that would change, as {pane key: port}, and why not."""
+        hub, tag = self.hub_key(), self.tag_key()
+        wanted: dict[str, str] = {}
+        problems: list[str] = []
+        for name, key in (("hub_port", hub), ("tag_port", tag)):
+            if name not in options or key is None:
+                continue
+            value = options[name]
+            if not isinstance(value, str) or len(value.strip()) > 200:
+                problems.append(f"{name} must be text of at most 200 characters")
+                continue
+            wanted[key] = value.strip().strip('"')
+        final = [wanted.get(key, self.panes[key].spec.port) for key in (hub, tag) if key]
+        used = [port.casefold() for port in final if port]
+        if len(used) != len(set(used)):
+            problems.append("The hub and the tag can't use the same port")
+        changes = {key: port for key, port in wanted.items()
+                   if port != self.panes[key].spec.port}
+        for key in changes:
+            name = self.panes[key].spec.name
+            if self.flash.active and self.flash.pane == key:
+                problems.append(f"{name} is being used to flash. Wait for it to finish")
+            if key == hub and (self.sending or self.display_busy or self.dump.get("active")
+                               or any(job["state"] == "running" for job in self.queue)):
+                problems.append("The hub is busy with a transfer. Wait for it before "
+                                "changing its port")
+        return changes, problems
+
+    def _set_pane_port(self, key: str, port: str) -> None:
+        """Point a pane at another port, keeping it open if it was open."""
+        pane = self.panes[key]
+        was_open = pane.worker.is_open
+        if was_open:
+            pane.worker.close()
+        with self.lock:
+            pane.spec.port = port
+            pane.worker.spec.port = port
+        self._save_setting(f"pane.{key}.port", port)
+        self._event("settings", None, f"{pane.spec.name} port: {port or 'none'}")
+        if was_open and port:
+            self.open_pane(key)
+
+    def aliases_csv(self) -> str:
+        with self.lock:
+            rows = [{"hex": f"{addr:04X}", **(self.tag_meta.get(addr) or {})}
+                    for addr in sorted(self.tags)]
+        return prefs_mod.aliases_to_csv(rows)
+
+    def import_aliases(self, text: str) -> dict:
+        """Apply a CSV of aliases. Tags not yet heard get a row, so the file can be
+        loaded before the shelf is powered up; a blank cell clears that field."""
+        entries, problems = prefs_mod.parse_aliases(text)
+        for entry in entries:
+            hex_id = entry.pop("hex")
+            self.set_tag(hex_id, **entry)
+        if entries:
+            self._event("import", None, f"{len(entries)} tag(s) from a CSV")
+        return {"ok": bool(entries) or not problems, "imported": len(entries),
+                "problems": problems}
 
     def _event(self, event: str, hex_id: str | None = None, detail: str | None = None) -> None:
         if self.store is not None:
@@ -353,6 +464,7 @@ class App:
         learn = None
         event: tuple[str, str | None, str | None] | None = None
         counted: int | None = None
+        hub_booted = False
         with self.lock:
             pane = self.panes.get(key)
             if pane is None:
@@ -374,12 +486,16 @@ class App:
             elif RE_FIRMWARE.match(text):
                 self._reset_at = None      # the firmware came up: nothing to learn
                 event = ("boot", None, text.strip()[:48])
+                hub_booted = key == self.hub_key()
         if counted is not None and self.store is not None:
             # The store owns the counter, so a restart continues the same number.
             self.tags[counted] = self.store.touch_tag(f"{counted:04X}")
         if counted is not None:
             # the tag is listening right now: hand it its next queued command
             self._pump_queue(counted)
+            self._rearm_pending(only=counted)   # a second command for it is still waiting
+        if hub_booted:
+            self._rearm_pending()               # a reset hub forgot every pre-arm
         if event is not None:
             self._event(*event)
         if learn:
@@ -415,6 +531,11 @@ class App:
                 if self.panes[key].worker.rx_lines:
                     return key
             return self.keys[0]
+
+    def tag_key(self) -> str | None:
+        """The other pane: the optional serial link to a tag's debug UART."""
+        hub = self.hub_key()
+        return next((key for key in self.keys if key != hub), None)
 
     def _port_list(self) -> list[list[str]]:
         """The detected ports, cached: this is an OS enumeration and the page asks
@@ -474,6 +595,9 @@ class App:
                 "dump": self.dump,
                 "queue": self.queue_jobs(),
                 "hub_caps": self.hub_capabilities(),
+                "hub_display": self.hubdisp.info(),
+                "prefs": self._prefs_view(),
+                "flash": self.flash.info(),
                 "editor": {
                     "fit": self.fit,
                     "dither": self.dither,
@@ -517,6 +641,10 @@ class App:
     def open_pane(self, key: str, port: str | None = None, baud=None) -> None:
         pane = self.panes.get(key)
         if pane is None:
+            return
+        if self.flash.active and self.flash.pane == key:
+            with self.lock:
+                self.status = f"{pane.spec.name} is being used to flash, wait for it to finish"
             return
         with self.lock:
             if port is not None and port.strip():
@@ -953,14 +1081,15 @@ class App:
     def _scan_caps(self, pane) -> dict:
         with self.lock:
             lines = [entry[3] for entry in pane.log]
-        dump = batch = banner = None
+        dump = batch = banner = show = None
         for line in reversed(lines):
             if "*** ShelfKit hub" in line:
                 banner = line.strip()
                 dump = "dump=1" in line
                 batch = "batch=1" in line
+                show = "show=1" in line
                 break
-        return {"key": pane.key, "dump": dump, "batch": batch, "banner": banner}
+        return {"key": pane.key, "dump": dump, "batch": batch, "show": show, "banner": banner}
 
     def hub_capabilities(self, probe: bool = False) -> dict:
         """What the flashed hub can do, read off its boot banner.
@@ -973,7 +1102,7 @@ class App:
         key = self.hub_key()
         pane = self.panes.get(key)
         if pane is None:
-            return {"key": key, "dump": None, "batch": None, "banner": None}
+            return {"key": key, "dump": None, "batch": None, "show": None, "banner": None}
         caps = self._scan_caps(pane)
         if caps["banner"] is None and probe:
             # The banner is printed once, at boot. If the server started later it
@@ -1360,7 +1489,7 @@ class App:
 
     def _interloper_step(self, key: str, inter: dict, step: int, cancel) -> bool:
         """One batch of the interloper. False when it is finished or dead."""
-        group = inter["frames"][inter["sent"]:inter["sent"] + step]
+        group = _cut_at_zend(inter["frames"][inter["sent"]:inter["sent"] + step])
         if not group:
             return False
         ok = self._send_batch(key, inter["addr"], group, cancel)
@@ -1510,14 +1639,73 @@ class App:
         return {"ok": True, "queued": job["id"], "addr": f"{addr:04X}",
                 "label": label, "state": "pending"}
 
+    RE_IMG_ANSWER = re.compile(r"^(OK img|ERR \w+)")
+
+    def show_on_hub(self, bw, red) -> tuple[bool, str]:
+        """Draw two planes on the hub's own panel over the open hub port.
+
+        The caller holds `display_busy`. A repeated chunk is harmless (the hub ignores
+        a chunk that is not the next one), BEGIN and END are sent once: BEGIN resets the
+        panel and END blocks the hub for the whole refresh.
+        """
+        key = self.hub_key()
+        pane = self.panes[key]
+        if not pane.worker.is_open:
+            return False, "the hub port is closed"
+        if not self._ping_hub(key, threading.Event()):
+            return False, "the hub did not answer P"
+        if not self.hub_capabilities(probe=True).get("show"):
+            return False, "the hub firmware has no serial image command (banner lacks show=1)"
+        msgs = list(hubhost.image_messages(bw, red, hubhost.SER_CHUNK, compress=False))
+        for i, msg in enumerate(msgs):
+            edge = i == 0 or i == len(msgs) - 1
+            timeout = (hubhost.SHOW_BEGIN_TIMEOUT_S if i == 0
+                       else hubhost.SHOW_END_TIMEOUT_S if edge else 2.0)
+            line = (hubhost.build_img_line(msg) + "\n").encode("ascii")
+            answer = None
+            for _attempt in range(1 if edge else 5):
+                with self.lock:
+                    start = pane.seq
+                if not pane.worker.write(line):
+                    return False, "the hub port closed during the transfer"
+                match = self._wait_line(key, self.RE_IMG_ANSWER, start, timeout)
+                answer = match.group(1) if match else None
+                if answer == "OK img":
+                    break
+                time.sleep(0.2)
+            if answer != "OK img":
+                return False, f"message {i + 1}/{len(msgs)}: {answer or 'no answer'}"
+        return True, ""
+
     def _prearm(self, addr: int) -> None:
         """Tell the hub that data is queued for addr, so its next poll reply says
         "stay listening". Best effort: an older hub just answers ERR cmd."""
         with self.lock:
             pane = self.panes.get(self.hub_key())
-            ok = pane is not None and pane.worker.is_open
+            ok = pane is not None and pane.worker.is_open and not self.display_busy
         if ok:
             pane.worker.write(f"Q{addr:04x}\n".encode("ascii"))
+
+    PREARM_SLOTS = 4        # the hub remembers this many tags at once (PREARM_SLOTS in its main.c)
+
+    def _rearm_pending(self, only: int | None = None) -> None:
+        """Make sure the hub still has a pre-arm for every tag with a pending command.
+
+        The tag parks its radio the moment a poll reply says nothing is queued, so a
+        push can only reach it if the reply says "data follows" - and that needs the
+        hub to hold a pre-arm when the poll arrives. A pre-arm is lost when the hub
+        resets, when it was sent while the hub display owned the port, and when a
+        tag's second queued command is still waiting after the first one started.
+        Called for those moments; `only` limits it to one tag."""
+        with self.lock:
+            addrs: list[int] = []
+            for job in self.queue:
+                if job["state"] == "pending" and job["addr"] not in addrs:
+                    addrs.append(job["addr"])
+        if only is not None:
+            addrs = [a for a in addrs if a == only]
+        for addr in addrs[:self.PREARM_SLOTS]:
+            self._prearm(addr)
 
     def queue_jobs(self) -> list[dict]:
         with self.lock:
@@ -1551,7 +1739,8 @@ class App:
     def _pump_queue(self, addr: int) -> None:
         """The tag at addr just polled: start its next pending command."""
         with self.lock:
-            if self.sending or self.dump.get("active"):
+            if (self.sending or self.dump.get("active") or self.display_busy
+                    or self.flash.blocks_hub):
                 return
             now = time.time()
             job = next((j for j in self.queue
@@ -1649,6 +1838,9 @@ class App:
             if self.sending:
                 self.status = "a transfer is already running"
                 return False
+            if self.display_busy:
+                self.status = "the hub is redrawing its display, try again in a moment"
+                return False
             image = Path(image_path) if image_path else self.image
             if image is None:
                 self.status = "pick an image first"
@@ -1738,6 +1930,7 @@ class App:
             if not self._ping_hub(key, cancel):
                 self.note(key, "# hub did not answer P - right port, hub flashed?")
                 return
+            self._prearm(addr)      # the tag only listens past its poll when the reply says so
             caps = self.hub_capabilities(probe=True)
             step = hubhost.BATCH_FRAMES if caps.get("batch") else 1
             self.note(
@@ -1771,7 +1964,7 @@ class App:
                 with self.lock:
                     self.progress = f"1/{len(frames)}"
             while sent < len(frames):
-                group = frames[sent:sent + step]
+                group = _cut_at_zend(frames[sent:sent + step])
                 if step > 1:
                     ok = self._send_batch(key, addr, group, cancel)
                 else:
@@ -1791,6 +1984,8 @@ class App:
                         )
                     return
                 sent += len(group)
+                if group[-1] and group[-1][0] == hubhost.OP_ZEND:
+                    cancel.wait(hubhost.decode_settle(group[-1]))
                 with self.lock:
                     self.progress = f"{sent}/{len(frames)}"
                 # take turns: let another tag that is listening advance by a batch
@@ -1837,6 +2032,15 @@ class App:
                 except Exception as exc:  # noqa: BLE001 - storage must not break a push
                     self.note(key, f"# storage: {exc}")
                 self._event("ok" if ok else "fail", f"{addr:04X}", path.name)
+
+
+def _cut_at_zend(group: list[bytes]) -> list[bytes]:
+    """A ZEND closes its batch: the tag decodes the plane right after it and cannot
+    acknowledge frames that would follow in the same batch."""
+    for k, frame in enumerate(group):
+        if frame and frame[0] == hubhost.OP_ZEND:
+            return group[:k + 1]
+    return group
 
 
 def _split_cursor(value: str | None) -> tuple[int, int]:

@@ -25,12 +25,7 @@
 #include "epd.h"
 #include "spi.h"
 #include "board.h"
-
-/* BUSY polarity: all GDEW026Z39-on-imagotag references poll BUSY == LOW
- * while busy (the IL0373 datasheet says HIGH, and bare Good Display
- * modules are usually HIGH - the tag board inverts the line). Flip this
- * define if epd_wait_busy() returns too early and refreshes corrupt. */
-#define EPD_BUSY_ACTIVE_HIGH 0
+#include "shelf_config.h"
 
 /* ── low level ────────────────────────────────────────────────────────── */
 
@@ -50,17 +45,6 @@ static void epd_data(uint8_t data)
     spi_deselect(SPI_DEV_EPD);
 }
 
-static void epd_wait_busy(void)
-{
-#if EPD_BUSY_ACTIVE_HIGH
-    while (EPD_BUSY)
-        ;
-#else
-    while (!EPD_BUSY)
-        ;
-#endif
-}
-
 /* libmf's delay() takes microseconds and tops out at ~65 ms per call. */
 static void epd_delay_ms(uint16_t ms)
 {
@@ -68,18 +52,49 @@ static void epd_delay_ms(uint16_t ms)
         delay(1000);
 }
 
+/* Send a command that makes the panel busy and wait it out. Polarity-agnostic and
+ * bounded, like the boot demo that is proven on this hardware: the idle level is
+ * sampled before the command, then BUSY must leave it (up to start_ms) and come
+ * back (up to done_ms). An unbounded wait here hangs the whole tag, which then
+ * stops acknowledging the image frames that follow BEGIN.
+ *
+ * The return value says what the panel did, which is the difference between
+ * "refreshed" and "never had power" and is logged by the caller:
+ *   0 = BUSY never left idle, the panel did not react at all
+ *   1 = BUSY pulsed and came back, the command really ran
+ *   2 = BUSY stayed asserted, the wait ran out (long refresh, do not power off) */
+static uint8_t epd_cmd_wait(uint8_t cmd, uint16_t start_ms, uint16_t done_ms)
+{
+    uint8_t idle = EPD_BUSY;
+    uint16_t t;
+
+    epd_cmd(cmd);
+    for (t = start_ms; EPD_BUSY == idle; t--) {
+        if (!t)
+            return EPD_BUSY_NONE;
+        delay(1000);
+    }
+    for (t = done_ms; EPD_BUSY != idle; t--) {
+        if (!t)
+            return EPD_BUSY_TIMEOUT;
+        delay(1000);
+    }
+    return EPD_BUSY_DONE;
+}
+
 /* ── public API ───────────────────────────────────────────────────────── */
 
-void epd_init(void)
+void epd_open(void)
 {
     /* Control pins: DC out, RST out, BUSY in. CS (PA1) is set up by
      * spi_init(). NOTE: RST shares PB5 with the UART RX function - the
      * UART must not be enabled while the panel is being driven (the boot
      * demo in main.c therefore does not init UART0). */
     DIRA |= 0x01;                       /* DC on PA0, output */
-    DIRB |= 0x20;                       /* RST on PB5, output */
     DIRB &= (uint8_t)~0x04;             /* BUSY on PB2, input */
     EPD_DC = 1;
+#if HUB_EPD_RST_PULSE
+    DIRB |= 0x20;                       /* RST on PB5, output */
     EPD_RST = 1;
 
     /* Hardware reset: 100 ms low, then 100 ms settle */
@@ -87,6 +102,11 @@ void epd_init(void)
     epd_delay_ms(100);
     EPD_RST = 1;
     epd_delay_ms(100);
+#else
+    /* Hub: PB5 is the serial RX, so it is left alone. The panel is reset by
+     * power-cycling its rail instead (img_rx.c panel_power_on). */
+    epd_delay_ms(100);
+#endif
 
     /* Booster soft start */
     epd_cmd(0x06);
@@ -95,8 +115,7 @@ void epd_init(void)
     epd_data(0x17);
 
     /* Power on, then wait for the booster */
-    epd_cmd(0x04);
-    epd_wait_busy();
+    (void)epd_cmd_wait(0x04, 300, 2500);
 
     /* Panel setting: LUT from OTP, BWR format */
     epd_cmd(0x00);
@@ -111,16 +130,33 @@ void epd_init(void)
     /* VCOM and data interval */
     epd_cmd(0x50);
     epd_data(0x77);
+}
+
+void epd_init(void)
+{
+    epd_open();
 
     /* Start with a clean white screen */
     epd_clear(0xFF, 0xFF);
 }
 
+void epd_stream_begin(uint8_t cmd)
+{
+    epd_cmd(cmd);
+}
+
+void epd_stream_write(const uint8_t __xdata *data, uint8_t len)
+{
+    spi_select(SPI_DEV_EPD);
+    while (len--)
+        spi_transfer(*data++);
+    spi_deselect(SPI_DEV_EPD);
+}
+
 void epd_sleep(void)
 {
-    epd_cmd(0x02);                      /* power off */
-    epd_wait_busy();
-    epd_cmd(0x07);                      /* deep sleep */
+    (void)epd_cmd_wait(0x02, 500, 2500);    /* power off */
+    epd_cmd(0x07);                          /* deep sleep */
     epd_data(0xA5);
 }
 
@@ -133,11 +169,15 @@ void epd_upload(uint8_t cmd, const uint8_t *plane, uint16_t len)
     spi_deselect(SPI_DEV_EPD);
 }
 
-void epd_refresh(void)
+uint8_t epd_refresh(void)
 {
-    epd_cmd(0x12);                      /* display refresh */
-    delay(100);
-    epd_wait_busy();
+    /* A BWR refresh takes ~15 s at room temperature and distinctly longer when
+     * the panel is cold, so the ceiling has to be generous: giving up early is
+     * not just a lost wait, the caller would then power the panel off in the
+     * middle of the waveform and the glass would keep the old image. 60000 is
+     * the largest value the uint16_t parameter can express; libmf's delay() is
+     * only roughly calibrated, so treat it as "up to a minute, and bounded". */
+    return epd_cmd_wait(0x12, 3000, 60000);     /* display refresh */
 }
 
 void epd_clear(uint8_t bw_byte, uint8_t red_byte)
@@ -156,12 +196,12 @@ void epd_clear(uint8_t bw_byte, uint8_t red_byte)
         spi_transfer(red_byte);
     spi_deselect(SPI_DEV_EPD);
 
-    epd_refresh();
+    (void)epd_refresh();
 }
 
 void epd_display(const uint8_t *bw_plane, const uint8_t *red_plane)
 {
     epd_upload(0x10, bw_plane, EPD_PLANE_BYTES);
     epd_upload(0x13, red_plane, EPD_PLANE_BYTES);
-    epd_refresh();
+    (void)epd_refresh();
 }

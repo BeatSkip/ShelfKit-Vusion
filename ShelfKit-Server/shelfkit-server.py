@@ -84,6 +84,14 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument(
         "--no-store", action="store_true", help="run without persistence (nothing is written)"
     )
+    ap.add_argument("--hub-display", action="store_true",
+                    help="show the connected tags' serial numbers on the hub's own panel "
+                         "(needs a hub built with the serial image command, banner show=1)")
+    ap.add_argument("--hub-display-timeout", type=int, metavar="SECONDS",
+                    help="drop a tag from the hub panel after this much silence (default 300)")
+    ap.add_argument("--hub-display-interval", type=int, metavar="SECONDS",
+                    help="shortest time between two redraws of the hub panel (default 60)")
+    ap.add_argument("--hub-display-title", metavar="TEXT", help="header of the hub panel")
     ap.add_argument("--list", action="store_true", help="list serial ports and exit")
     args = ap.parse_args(argv)
 
@@ -104,7 +112,16 @@ def main(argv: list[str] | None = None) -> int:
                   file=sys.stderr)
 
     specs, auto_open = build_specs(args.ports, args.baud)
-    app = App(specs, auto_open, store=store)
+    display = {}
+    if args.hub_display:
+        display["enabled"] = True
+    if args.hub_display_timeout:
+        display["timeout_s"] = args.hub_display_timeout
+    if args.hub_display_interval:
+        display["min_interval_s"] = args.hub_display_interval
+    if args.hub_display_title:
+        display["title"] = args.hub_display_title
+    app = App(specs, auto_open, store=store, display_opts=display or None)
 
     try:
         server = webapp.make_server(app, args.host, args.port)
