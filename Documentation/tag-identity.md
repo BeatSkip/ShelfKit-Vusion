@@ -118,4 +118,4 @@ picture of the metadata in one file.
   `Tooling/set-id.py` both send the same `SM_OP_SET_ID` frame; neither batches.
 - **No id change while a poll is in flight**: the assignment frame's ACK is sent
   by the link layer before the handler runs, exactly like image and OTA frames.
-- **Untested on hardware**, like the OTA path it sits next to.
+- Identity generation, assignment over the air and survival across OTA updates have run on real tags.

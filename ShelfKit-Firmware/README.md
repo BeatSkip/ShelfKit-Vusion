@@ -9,16 +9,16 @@ new target adds a project without copying 140 MB of vendor code.
 
 | Folder | Target | What it does |
 |---|---|---|
-| `Vusion/` | Tag | Polls the hub every few seconds, receives an image straight into the panel controller, refreshes, sleeps |
-| `Vusion-Hub/` | Hub | Always listening, answers every poll, relays host images to the tag that just spoke, speaks a line protocol on UART |
-| `Tooling/` | Host scripts | The two-board flasher and `build-all.py`, which builds every target into `Release/` (see [Tooling/README.md](Tooling/README.md)) |
-| `Bootloader/` | AX8052 serial bootloader | Flash-resident UART bootloader (Axsem V1.1, converted 1-to-1 from the Code::Blocks reference) that erases and programs the application area and jumps to it |
+| `Vusion/` | Tag | Polls the hub every couple of minutes (adaptive), receives an image (raw or compressed) straight into the panel controller, refreshes, sleeps; takes OTA firmware updates and a wireless id |
+| `Vusion-Hub/` | Hub | Always listening, answers every poll, relays host frames (single and batched) to the tag that just spoke, can draw on its own panel, speaks a line protocol on UART at 115200 |
+| `Tooling/` | Host scripts | The flasher, `build-all.py` (every target into `Release/`), the OTA sender, `set-id.py` and `flash-read.py` (see [Tooling/README.md](Tooling/README.md)) |
+| `Bootloader/` | AX8052 serial bootloader | Flash-resident UART bootloader (Axsem V1.1, 38400 baud, at `0xD800`) that erases and programs the application area and jumps to it, and applies an over-the-air image staged in the tag's SPI flash |
 
 Vusion is the SES-imagotag 2.6" BWR label (UU340 variant): AX8052F143 — an 8051 core plus a
 sub-GHz radio at 26 MHz — a Good Display **GDEW026Z39** panel (296×152, black/white/red, IL0373),
 an NFC chip and a serial flash. `Vusion/` and `Vusion-Hub/` run on identical hardware; they differ
-in their `src/main.c`, their `include/shelf_config.h` and, in the hub's case, not having the image
-receiver.
+in their `src/main.c` and their `include/shelf_config.h`; the tag adds the OTA, identity and
+compressed-image receivers, the hub keeps a smaller image receiver for its own panel.
 
 ## Building one target
 
@@ -53,9 +53,10 @@ not board-specific:
 1. **Copy an existing target**: `Vusion/` for another tag, `Vusion-Hub/` for a second hub.
 2. **Rename it** in `sdcc-project.json`: `name`, and `build.output_name` if you want a distinct hex
    (default `firmware`).
-3. **Give it an identity** in `include/shelf_config.h`: a unique `SHELF_NODE_ID`, the fleet-wide
-   `SHELF_NET_ID`, and its own `SHELF_POLL_INTERVAL_S` (watch the 1 % duty cycle of the 868.3 MHz
-   sub-band). The hub must keep `SL_NODE_HUB`; every tag needs its own address.
+3. **Give it an identity** in `include/shelf_config.h`: the fleet-wide `SHELF_NET_ID` and its own
+   `SHELF_POLL_INTERVAL_S` (watch the 1 % duty cycle of the 868.3 MHz
+   sub-band). The hub must keep `SL_NODE_HUB`; a tag's own node id is generated on first boot and stored in its
+   SPI flash (see [tag-identity.md](../Documentation/tag-identity.md)), not set here.
 4. **Choose the panel.** `src/epd.c` is the GDEW026Z39 driver: geometry in `epd.h` (`EPD_W`,
    `EPD_H`, `EPD_PLANE_BYTES`), the init sequence and the BUSY handling in `epd.c`. For a different
    panel, add the driver to `Shared/firmware/` — that is where code earns its place once a second

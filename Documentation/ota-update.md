@@ -103,9 +103,9 @@ Serial flashing is unchanged, and it still works if the OTA image is broken.
 
 | Region | Range | Use |
 |---|---|---|
-| application | `0x0000–0xD7FD` | up to 55,038 B in flash; as an OTA image it must fit the `0x3000–0xD7FE` window, i.e. 43,006 B |
+| application | `0x0000–0xD7FD` | up to 55,038 B in flash; as an OTA image it must fit the `0x3000–0xD7FE` window, i.e. 43,006 B (currently 40,921 B) |
 | jump vector | `0xD7FE–0xD7FF` | the application entry, written when one is flashed |
-| bootloader | `0xD800–0xFBFF` | 9,216 B region, 8,314 B used, 902 B free |
+| bootloader | `0xD800–0xFBFF` | 9,216 B region, 8,819 B used, 397 B free |
 | reserved | `0xFC00–0xFFFF` | not in the bootloader's CRC range; nothing links into it |
 
 The bootloader moved from `0xE400` to `0xD800` for this feature: at `0xE400` it had
@@ -153,13 +153,13 @@ the panel). Only an update is indicated, all with 500 ms pulses:
 ### Which firmware is on the board
 
 Both boards print a capability marker at the end of their boot banner:
-`*** ShelfKit hub, node 0001 net 5a dump=1`. `dump=1` means the build can forward tag
+`*** ShelfKit hub, node 0001 net 5a dump=1 batch=1 show=1` (`batch` accepts multi-frame lines, `show` draws on the hub's own panel). `dump=1` means the build can forward tag
 DATA payloads, which the flash read-back needs; a hub without it will relay the frames
 but drop their bytes, and the server says so rather than showing an empty dump.
 
 ## Using it
 
-From the server: **Fleet** → click the tag → **Firmware update** → pick the HEX → **Reflash**.
+From the server: **Fleet** → click the tag → **Firmware update** → pick the HEX → **Update firmware** (it joins the **Queue** and starts when the tag next checks in).
 
 From a shell:
 
@@ -169,8 +169,8 @@ python ShelfKit-Firmware/Tooling/ota-send.py Release/vusion-…​.hex --addr 01
 ```
 
 `ota-send.py` converts the Intel HEX to the binary the tag wants (gap-filling with
-0xFF), prints the entry address and CRC, then sends BEGIN, 1451 chunks and END.
-A 40 KB image is ~2 minutes at the current radio settings. The tag's log shows
+0xFF), prints the entry address and CRC, then sends BEGIN, ~1,460 chunks and END.
+A 40 KB image is ~1,460 chunks and takes a couple of minutes; the transfer waits for the tag's next poll first (up to 5 minutes when it is idle, less when pre-armed). The tag's log shows
 `fw begin len=… crc=…`, then `fw stored, resetting`, and after the reboot the
 bootloader prints `OTA image len=… crc=…` and `OTA ok, booting`.
 
@@ -180,99 +180,20 @@ every real transfer. It also refuses an image that would not fit the window
 
 ### Headroom
 
-The image window is 43,006 bytes and the application is now **31,694**, so there are
-**11,312 bytes** free. Until recently there were 64: `src/epd_image.c` — a
-compiled-in boot logo worth 11,248 bytes — was linked into both radio images while
-nothing referenced it any more (the boot demo it belonged to was replaced by the
-shelf-link main). It was deleted from both targets, which also shrank the hub from
-37,775 to 26,210 bytes.
+The image window is 43,006 bytes (`0x3000–0xD7FE`; the sender caps it at 43,000, `OTA_MAX_IMAGE`). The
+current application is **40,921 bytes**, so about **2 KB** is left. That is thin: ECO decoding,
+batched receive and the low-power work took the room that deleting the compiled-in boot logo
+(11 KB) had freed earlier. The next sizeable feature has to make room first.
 
-### The reset after an update
+The bootloader region is 9,216 bytes and the bootloader takes 8,819 of them, leaving 397.
 
-`cpu_reset()` writes `PCON |= 0x10` (SWRESET) instead of jumping to `0x0000`. A jump
-does not reset the peripherals: the bootloader inherited the application's SPI and
-oscillator state and hung on its first flash read, so the tag stored the image and
-then sat there until it was reset by hand. SWRESET restarts the core and peripherals
-exactly like a power-on.
+## Status
 
-The commit header write is checked too: if programming it fails the tag logs
-`fw header FAILED` and keeps running the firmware it already has, rather than
-resetting into a boot that has nothing to apply.
-
-### The reset vector is part of the bootloader
-
-The bootloader only runs if `0x0000` holds `ljmp 0xD838`. That is what
-`Release/vusion-full-*.hex` writes, together with the application entry at
-`0xD7FE`. Flashing the application hex on its own puts `ljmp 0x021B` at `0x0000`,
-which starts the application directly: the OTA image is stored in SPI flash and
-never applied, because nothing ever looks at it. The build script's "Tag:" line
-always names the full image.
-
-### Indications
-
-The bootloader shows nothing on a normal boot (the LEDs are driven off before
-anything else, so a stray level from the application cannot leave one lit behind
-the panel). Only an update is indicated, all with 500 ms pulses:
-
-| LED | when |
-|---|---|
-| blue | a committed image was found and is being programmed |
-| green | programming finished, the new application is about to boot |
-| red | programming failed (`OTA ERR crc` / `entry` / `erase`), the old app still boots |
-
-### Which firmware is on the board
-
-Both boards print a capability marker at the end of their boot banner:
-`*** ShelfKit hub, node 0001 net 5a dump=1`. `dump=1` means the build can forward tag
-DATA payloads, which the flash read-back needs; a hub without it will relay the frames
-but drop their bytes, and the server says so rather than showing an empty dump.
-
-## Using it
-
-From the server: **Fleet** → click the tag → **Firmware update** → pick the HEX → **Reflash**.
-
-From a shell:
-
-```
-python ShelfKit-Firmware/Tooling/build-all.py                  # Release/vusion-<date>-<hash>.hex
-python ShelfKit-Firmware/Tooling/ota-send.py Release/vusion-…​.hex --addr 0100 -p COM4
-```
-
-`ota-send.py` converts the Intel HEX to the binary the tag wants (gap-filling with
-0xFF), prints the entry address and CRC, then sends BEGIN, 1451 chunks and END.
-A 40 KB image is ~2 minutes at the current radio settings. The tag's log shows
-`fw begin len=… crc=…`, then `fw stored, resetting`, and after the reboot the
-bootloader prints `OTA image len=… crc=…` and `OTA ok, booting`.
-
-`--dry-run` parses and checksums without touching the radio — worth doing before
-every real transfer. It also refuses an image that would not fit the window
-(`0x3000–0xD7FE`, 43,006 bytes).
-
-### Headroom
-
-The image window is 43,006 bytes and the application is 42,117, so there are
-**889 bytes** left (635 under the sender's 0xA700 cap). That is thin — the next
-feature that needs a kilobyte will not fit in an OTA image even though it fits in
-the tag's flash.
-
-The cheapest way to buy space back, when it comes to that: `src/epd_image.c` is a
-compile-time boot picture worth **11,248 bytes** of the image (two 5,624-byte
-planes, `_epd_image_bw` at `0x7158` and `_epd_image_red` at `0x8750` in the current
-map). Painting it from the panel's own default, or storing it in the SPI flash,
-would free a quarter of the window. Trimming the bootloader or moving it up
-(`0xD7FE` → `0xD9FE`) only buys ~512 B and shrinks it to a few hundred spare.
-
-## Not verified on hardware yet
-
-- The whole path is untested on a real tag: no transfer has been sent, no image
-  flashed. The build is verified (all three targets, sizes above) and the host
-  tool's parser and CRC are verified (check value `0x29B1`), but that is all.
-- `run_application()` reads the jump vector with `MOVX`, i.e. through the external
-  data space, while the vector is written as flash. This is the reference
-  bootloader's own mechanism; it needs to be confirmed on the chip before anything
-  relies on it.
-- Erase/program timings of the actual SPI flash part, and whether the 2-minute
-  transfer holds up over the air, are unknown.
+The whole path **runs on real tags**: the server's **Update firmware** button and `ota-send.py` have sent images,
+the tag verified and stored them, reset (`PCON.SWRESET`), and the bootloader programmed the
+application and started it, with the tag keeping its id. Tuning is still open: a transfer's duration
+depends on the radio settings and on how many polls a tag misses, and the numbers in this document
+(chunk counts, "about 2 minutes") are from the early runs, not a benchmark.
 
 ## Known gaps
 

@@ -1,6 +1,6 @@
 # Vusion — the tag target
 
-The battery tag half of ShelfKit: it **polls the hub** every few seconds and, when the hub has
+The battery tag half of ShelfKit: it **polls the hub** every couple of minutes and, when the hub has
 content for it, **receives an image and refreshes the panel**. It drives nothing else — the hub
 drives, the tag listens.
 
@@ -46,8 +46,13 @@ Everything tag-specific is in one header:
 | Setting | Meaning |
 |---|---|
 | `SHELF_NET_ID` | Network id, must match the hub (`0x5A`). The node id is not here — it lives in the tag's SPI flash |
-| `SHELF_POLL_INTERVAL_S` | Seconds between polls (default 5; mind the 1 % duty cycle of the 868.3 MHz sub-band) |
-| `SHELF_STATS_EVERY` | Print link statistics every N polls |
+| `SHELF_POLL_INTERVAL_S` | Base seconds between polls (default 120; one wake-up-timer arm is 128 s at 512 Hz, longer gaps are walked down). Mind the 1 % duty cycle of the 868.3 MHz sub-band |
+| `SHELF_LISTEN_WINDOW_S`, `SHELF_LISTEN_GRACE_MS`, `SHELF_LISTEN_QUIET_MS` | How long the receiver stays open after a poll: 2 s when data is coming, 250 ms after a lost reply, 0 after a "nothing queued" reply |
+| `SHELF_POLL_ACTIVE_S`, `SHELF_POLL_COOLDOWN_S`, `SHELF_POLL_IDLE_S` | Burst (30 s), cool-down (180 s) and idle (300 s) intervals, see [Listen window and burst polling](#listen-window-and-burst-polling) |
+| `SHELF_STATS_EVERY` | Print the `pow …` link/power summary every N polls (2) |
+| `SHELF_RADIO_SLEEP`, `SHELF_RADIO_DEEPSLEEP`, `SHELF_MCU_SLEEP`, `SHELF_XTAL_OFF` | The low-power switches (all but `SHELF_XTAL_OFF` are on), see [Power](#power) |
+| `SHELF_NFC_POLL`, `SHELF_NFC_RAIL_HOLD`, `SHELF_NFC_PROBE` | The parked NFC wake-on-field work (all 0) |
+| `SHELF_FLASH_POWER_ON`, `SHELF_WIPE_FIRST_BOOT` | Switch the flash rail around every flash access; wipe the owned flash sectors on a first boot |
 | `SHELF_POWER_LINES` | Hold the panel supply (U4, PA5) on from boot. Not a radio setting; leave off — the image path powers the panel around each image. PA2 (U5) is always parked low |
 
 ## Building and flashing
@@ -68,8 +73,9 @@ $flags = @('-mmcs51','--model-small','--iram-size','256','--xram-size','8192','-
 # … the rest of src/*.c, then link with ../Shared/lib/*.lib
 ```
 
-The build prints the memory report: 40,622 B of code and 1,084 B of XRAM out of the 59,389 B / 8,192 B
-the memory model allows. Internal RAM is at the wall — new code has to keep its locals out of the
+The current release build is about 40.9 KB of code and about 7 KB of XRAM (the ECO decode buffer alone is
+2.5 KB) out of the 59,389 B / 8,192 B the memory model allows; build it for exact figures, the report is
+printed by `build-all.py`. Internal RAM is at the wall — new code has to keep its locals out of the
 overlay (the OTA receiver uses `__xdata` statics, and the shared CRC/header helpers are `__reentrant`).
 
 ## First boot on a used tag
@@ -89,7 +95,7 @@ walked down by waking to step a counter, so the CPU stays asleep the whole time:
 
 | last result | next check-in |
 |---|---|
-| answered | `SHELF_POLL_INTERVAL_S` (16 s as configured) |
+| answered | `SHELF_POLL_INTERVAL_S` (120 s), or the burst / cool-down / idle rate below |
 | answered, but the hub heard us below `SHELF_WEAK_RSSI_DBM` (-95) | 10 min |
 | 1, 2, 3, 4, 5 misses | 32 s, 64 s, 2 min, 4 min, 8 min |
 | 6–13 misses | 10 min (`SHELF_POLL_MAX_S`) |
@@ -160,17 +166,20 @@ The tag polls as above. Between polls:
 | radio | `AXRADIO_MODE_DEEPSLEEP` (`SHELF_RADIO_DEEPSLEEP`): the AX5043's own deep sleep, 26 MHz XTAL stopped, woken over SPI by `ax5043_wakeup_deepsleep()`. The wake changes mode **first** and only then settles ~4 ms - waiting first left the first frame after a sleep off-frequency | ~50 uA |
 | MCU | Sleep (`wtimer_idle(WTFLAG_CANSLEEPCONT)`, `SHELF_MCU_SLEEP`), `PCON.XRAMKEEP` keeping both XRAM halves | ~2 uA |
 | wake-up timer | 32.768 kHz crystal, prescaler **7** = **512 Hz** (`SHELF_WAKE_LPXOSC` in `sdcc-project.json`) | 0.7 uA |
-| listening window | 2 s after a poll, but **closed after 500 ms** unless the hub's reply said data is coming (`SM_CMD_DATA`); it re-arms while a transfer or a flash read-back is running | 9.5 mA only while open |
+| listening window | 2 s after a poll, but **closed at once** when the hub's reply said "nothing queued" (`SHELF_LISTEN_QUIET_MS 0`), and after 250 ms when no reply arrived at all; it stays open when the reply said data is coming (`SM_CMD_DATA`) and re-arms while a transfer or a flash read-back is running | 9.5 mA only while open |
 | panel, flash rails | off unless a refresh or a flash access needs them | - |
 
-Estimated average and CR2450 life (datasheet figures, not measurements):
+**None of the figures here are measurements.** They are datasheet-class estimates, and the tag has
+no shunt, so the first real number will come from a meter or a PPK2 on a battery board. The
+history of the model, from the first low-power build to now (each step shrinks the receive window,
+which was ~95 % of the energy):
 
-| configuration | average | CR2450 |
+| configuration | modelled average | CR2450 |
 |---|---|---|
-| 60 s poll, 2 s window, crystal-on radio, standby (before this round) | 0.65 mA | 40 days |
-| + radio deep sleep | 0.40 mA | 64 days |
-| **+ the 500 ms grace on idle polls (what is shipped)** | **0.17 mA** | **~150 days** |
-| MCU sleep as well, if the resume worked | 0.09 mA | 300 days |
+| 60 s poll, 2 s window, crystal-on radio, standby | 0.65 mA | ~40 days |
+| + radio deep sleep | 0.40 mA | ~64 days |
+| + 0.7 s grace on idle polls, 120 s poll | 0.07 mA | ~400 days |
+| **shipped now:** receiver closed at once on a "nothing queued" reply, 250 ms grace on a lost one, 300 s idle poll | below the previous row; see [power-deepdive.md](../../Documentation/power-deepdive.md) (option 1 + 3 ≈ 45 months modelled) | unmetered |
 
 **Why the tag can boot-loop, and why it must never write `PCON` per poll.** The first
 low-power build booted, ran one poll and restarted, forever, but only after an OTA - a
@@ -205,7 +214,7 @@ The radio deep sleep is still the least proven step. If a tag stops making its p
 ### Measuring power without a meter
 
 There is no shunt on the board, so the firmware counts **time in each state** and prints
-the estimate itself, every `SHELF_STATS_EVERY` polls (5, so every 5 minutes) on the tag's
+the estimate itself, every `SHELF_STATS_EVERY` polls (2) on the tag's
 own serial port:
 
 ```
@@ -221,26 +230,18 @@ pow awake=1600ms radio=1500ms asleep=58s avg=322uA life=80d
 | `life` | days on a 620 mAh CR2450 at that average | - |
 
 The window is the whole story: 1.5 s of a 60 s cycle at 12.5 mA (MCU + receiver) is
-0.3 mA average on its own, while the sleep current is irrelevant. Hence:
-
-| configuration | average | CR2450 |
-|---|---|---|
-| 1.5 s grace, 60 s poll | 0.30 mA | ~86 days |
-| 0.7 s grace, 60 s poll | 0.16 mA | ~160 days |
-| **0.7 s grace, 120 s poll (current)** | **0.07 mA** | **~400 days** |
-
-The receiver window is ~98 % of the budget at these intervals, so those two knobs are
-the whole story: the sleep chain below is worth about 1 uA of the 70.
+0.3 mA average on its own, while the sleep current is irrelevant. Closing the window when the hub
+says nothing is queued, and polling less often, are therefore the two knobs that matter.
 
 Read the line like this:
 
-- `asleep` ≈ 58 s per 60 s cycle → it really is sleeping; the cost is the window.
+- `asleep` nearly equal to the elapsed time (e.g. ~118 s per 120 s cycle) → it really is sleeping; the cost is the window.
 - `asleep` well below that → something keeps it awake (a stuck transfer, a queue that
   re-arms the window every poll).
 - `radio` much larger than the window → the receiver is not being parked; check that
   `listen_cb` runs.
-- `avg` moving between ~320 and ~430 uA is normal: it tracks how many polls carried a
-  queued command and therefore opened the full 2 s window.
+- `avg` moving around is normal: it tracks how many polls carried a queued command and
+  therefore opened the full 2 s window.
 
 The second, slower cross-check is the `vdd=` value each poll already carries: plot it
 over days. A CR2450's curve is flat in the middle, so hours prove nothing, but a day

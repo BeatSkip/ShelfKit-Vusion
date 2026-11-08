@@ -4,16 +4,21 @@ Hub (`ShelfKit-Firmware/Vusion-Hub`) and tag (`ShelfKit-Firmware/Vusion`) run on
 `ShelfKit-Firmware/Shared/firmware/`. This document records what was found, how the link works, what was verified on
 hardware, and what is left.
 
-## Status (2026-10-05)
+## Status (2026-11-08)
 
-Verified on two real boards (hub on COM4, tag on COM3, a few cm apart):
+The link has run on real boards since the first bring-up (hub and tag a few cm apart, RSSI −33…−38 dBm,
+polls acknowledged on the first attempt), and since then carries everything the system does:
 
-- Both boards detect the on-chip AX5043 radio (`pll rng=10`).
-- The tag polls every ~5.6 s with the main loop in standby (see [Timing](#timing)); the hub answers each poll.
-  14 consecutive polls: all acknowledged on the **first attempt**, RSSI −33…−38 dBm on both sides.
+- **Polls** every 2 minutes by default, adaptive (30 s while the hub has data, 3 min cool-down, 5 min
+  idle, 10 min on a weak link, then hourly / daily with no hub) — see the tag README.
+- **Images**, raw (404 frames) or ECO-compressed (~30 frames), batched by the hub, to several tags with
+  alternating transfers.
+- **OTA firmware**, **id assignment**, **flash read-back** and **factory reset** over the same DATA path.
+- Tags sleep (radio deep sleep + MCU sleep) between polls, so the hub is *pre-armed* (`Q<id>`) before a
+  command: the poll reply then says "data follows" and the tag keeps its receiver open.
 
-Not yet measured: packet loss over a long run, range, behaviour with retries (never needed so far),
-the effect of the PA2/PA5 transistor lines on range, LED polarity.
+Still not measured: packet loss over a long run, range, and the effect of the PA2/PA5 transistor lines
+on range. The tag's poll interval is no longer the ~5.6 s of the early bring-up (see [Timing](#timing)).
 
 ## Findings
 
@@ -86,14 +91,17 @@ Network id `0x5A` (both ends must match).
 
 ### Application payloads (`shelfmsg.h`)
 
-- POLL (tag→hub, 4 B): uptime s (u16 LE), attempts the previous poll needed, RSSI of the hub's previous answer (i8).
-- POLL_RSP (hub→tag, 2 B): command (`SM_CMD_NONE` for now), RSSI the hub measured (i8).
+- POLL (tag→hub, 6 B): uptime s (u16 LE), attempts the previous poll needed, RSSI of the hub's previous answer (i8), supply voltage (u16 LE, volts×256; older firmware sends 4 B without it).
+- POLL_RSP (hub→tag, 3 B): command (`SM_CMD_NONE`, or `SM_CMD_DATA` = "data follows, stay awake"), RSSI the hub measured (i8), and a delay hint in 10 s units (`SM_RSP_DELAY`) that makes the tag wait at least that long.
+- DATA opcodes: `IMG_BEGIN/CHUNK/END` (1–3), `FW_BEGIN/CHUNK/END` (4–6), `SET_ID` (7), `WIPE` (8), `FLASH_DUMP`/`FLASH_DATA` (9/10), `IMG_ZCHUNK`/`IMG_ZEND` (11/12).
 
 ### Timing
 
-wtimer0 runs from the on-chip LPOSC, nominally 640 Hz. Measured poll interval is ~5.56 s for a nominal
-5 s, i.e. the LPOSC runs ~10 % slow. Not a problem for polling; use the 32 kHz crystal (`LOWFREQ_QUARZ`
-style, 8192 Hz) for anything time-critical. Wall-clock timestamps from the monitor are the reference.
+The tag's wake-up timer now runs from the 32.768 kHz crystal with prescaler 7, i.e. **512 Hz**
+(`SHELF_WAKE_LPXOSC=1` in `Vusion/sdcc-project.json`; `SHELFHW_TICKS_PER_S` = 512), measured on hardware
+(prescaler 6 gave ~1024 Hz). The early builds used the on-chip LPOSC at a nominal 640 Hz, which ran
+~10 % slow; removing that define falls back to it. One timer arm holds 128 s, longer gaps are walked
+down by waking to step a counter.
 
 ## Image push (host -> hub -> tag)
 
@@ -136,10 +144,16 @@ Host: `python ShelfKit-Server/shelfkit/hubhost.py COM4 serve images/` pushes `im
 file is new or changed (state in `images/.sent.json`); `send <addr> <png>` pushes once; `ping` checks the channel.
 `ShelfKit-Server/shelfkit-server.py` does the same from a two-pane web UI.
 
-**Status: builds and links for both targets (SDCC 3.6.0, hub 37.5 KB, tag 37.2 KB, tag internal RAM no worse than before)
-and the host-side framing is checked, but this has not been run on hardware.** To verify on the boards: (1) `hubhost.py COM4 ping`
-- if there is no PONG the PB5 receive setup (`host_rx_init`, input + pull-up, no PALTB bit) is the first suspect; (2) `send` an
-image to a tag and watch the tag's `img begin / img refresh / img done` log lines.
+**Status: working on hardware.** If a push does not start: `hubhost.py COM4 ping` — no PONG means the PB5
+receive setup (`host_rx_init`, input + pull-up, no PALTB bit) is the first suspect; then `send` an image to a
+tag and watch the tag's `img begin / img refresh / img done` log lines.
+
+**Compressed planes.** A plane may instead arrive as `ZCHUNK` frames (up to `SM_ECO_MAX` = 2,560 bytes) and a
+`ZEND`, which the tag decodes in bands straight into the panel (`eco_rx.c`); a label is ~0.5–0.8 KB per
+plane. The host falls back to plain `CHUNK`s for a plane that does not compress. **Batches:** a hub that
+advertises `batch=1` accepts `B<addr><count>(<len><payload>)…<chk>` lines of up to 16 frames and sends
+them back to back. **Pre-arm:** `Q<id>` flags that tag's next poll reply, `L<hh>` asks every tag to wait
+`hh*10` s.
 ## Debug output and tools
 
 Both firmwares log on UART0 TX (PB4, 115200 8N1).
@@ -170,12 +184,12 @@ POLL src=0100 seq=09 rssi=-36 up=6s att=1 hubrssi=-35
 
 | Tool | Use |
 |---|---|
-| `ShelfKit-Server/shelfkit-server.py hub=COM4 tag=COM3 [--baud N]` | Local web UI: one pane per port (own log, baud rate, Open/Close, Clear, DTR and Reset), the two logs merged onto the clipboard on demand, and a bar that pushes an image to a tag picked from the ones that announced themselves. |
+| `ShelfKit-Server/shelfkit-server.py hub=COM4 tag=COM3 [--baud N]` | Local web UI: Fleet, Editor, Queue, Logs, Hub (a pane per port with its own log, baud rate, Open/Close, DTR and Reset), Flash and Settings. |
 | `ShelfKit-Server/shelfkit/hubhost.py COM4 serve\|send\|ping ...` | The same image push without a UI, plus `ping` for the hub's command channel. |
 | `ShelfKit-Firmware/Tooling/axsem-flasher.py <hex> -p COMx` | Flash over the AX8052 serial bootloader (works). |
 | `Data/flashdump.py COMx` | Capture the parked dump firmware's hexdump of the SPI flash. |
 
-Build memory (SDCC 3.6.0): hub ≈ 36.8 KB, tag ≈ 37.0 KB of 59 389 B code; XRAM ≈ 1.1 KB of 8 KB;
+Build memory (SDCC 3.6.0, release build): hub 30.8 KB, tag 40.9 KB of 59,389 B code; XRAM 4.9 KB (hub) and 7.0 KB (tag) of 8 KB;
 **internal RAM is tight** — 137–154 B of stack left, "no spare internal RAM" on the tag. Watch this when
 adding features (put buffers in `__xdata`).
 
@@ -187,7 +201,7 @@ source entries and no longer reports a failed link.
 
 ## Open questions / next steps
 
-1. **Long-run loss test**: leave `ShelfKit-Server` attached and watch the Console and Logs screens for hours;
+1. **Long-run loss test**: leave `ShelfKit-Server` attached and watch the Hub and Logs screens for hours;
    then repeat at distance / through walls. Expect near-0 % loss at short range; failures show up as
    `att=2+` or `FAILED`.
 2. **PA2/PA5 transistor lines**: PA5 (U4) is the panel supply and has nothing to do with the radio;
@@ -196,16 +210,10 @@ source entries and no longer reports a failed link.
    U5 is in the RF path - needs a second board sending while PA2 toggles on the receiver.
 3. **LED polarity**: the pin map says active low, the firmware assumes active high
    (`SHELFHW_LED_ACTIVE_HIGH`). Confirm which LED lights and flip the define if inverted.
-4. **Clock**: switch wtimer0 to the 32 kHz crystal for accurate intervals.
-5. **Tag power**: receiver is always on. Planned model is tag-initiated (wake, POLL, short RX window, sleep).
-   Needs `MCU_SLEEP`-style deep sleep and radio power-down between polls.
+4. ~~Clock~~: done, the wake-up timer runs from the 32 kHz crystal.
+5. **Tag power**: done as tag-initiated polling with radio deep sleep and MCU sleep between polls; what is left
+   is metering it ([power-deepdive.md](power-deepdive.md)).
 6. **Duty cycle**: 868.3 MHz is in the 1 % sub-band. A ~14-byte frame at 100 kbit/s is only a few ms of air
    time (plus 112-bit preamble), so 5 s polling is far inside the limit, but retries and many tags must be budgeted.
 7. **Hub RX→TX→RX turnaround** against the tag's 60 ms window has not been measured (works at 1 attempt so far).
-8. Tag identity is a compile-time define; several tags need distinct `SHELF_NODE_ID` (0x0100+), and the hub
-   must answer many sources (duplicate table holds 8).
-9. READMEs (root and both targets) still say "2.4 GHz" and describe the old e-paper demo as `main.c`. The e-paper
-   demo `main.c` was replaced (it is in git history, commit `69eb9fe`); the e-paper drivers are still in
-   `Shelfkit-*/src` and compiled but unused by `main.c`.
-10. Nothing is committed yet. `WirelessDemo/` is untracked and was left unmodified as the vendor reference.
-    `ShelfKit-Firmware/Tooling/__pycache__/` should be git-ignored.
+8. Tag identity is no longer a compile-time define: it lives in SPI flash ([tag-identity.md](tag-identity.md)). The hub's duplicate table still holds only 8 sources, which bounds how many tags it can filter at once.

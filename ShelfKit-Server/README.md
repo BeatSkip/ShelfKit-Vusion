@@ -4,17 +4,32 @@ A local web app over the hub's serial port, with seven screens: **Fleet** (home)
 **Logs**, **Hub**, **Flash** and **Settings**. Clicking a tag anywhere opens its inspector. Every control on the page does
 something real; screens that were only placeholders are gone.
 
+![Fleet](../Documentation/screenshots/fleet.png)
+
+More captures (Editor, Queue, Hub, Flash, Settings, the inspector) are in the
+[top-level README](../README.md); all of them are the running app against simulated serial data.
+
 ```
 ShelfKit-Server/
   shelfkit-server.py     the app - the only thing you run
   shelfkit/              supporting modules, imported by it
-    app.py                 panes, logs, tags, the image push (no UI)
+    app.py                 panes, logs, tags, the command queue, the image push (no UI)
     serial_link.py         ports, handshake lines, the reader thread
     store.py               the SQLite state file: settings, tags, bitmaps, events
+    prefs.py               the Settings values and their validation
     webapp.py              the HTTP/JSON layer over app.py
     static/                the page itself: index.html, app.js, style.css
     hubhost.py             hub command channel, image framing, and its own CLI
+    eco.py                 ECO chain-coding compression of the two planes
+    preview.py             fit / dither / quantise, shared by preview and push
     png2epd.py             PNG -> the two 1-bit planes the panel streams
+    firmware.py            HEX -> OTA image, opcodes and CRC (shared with ota-send.py)
+    flashdump.py           tag flash read-back framing (shared with flash-read.py)
+    flasher.py             the Flash screen: AXSDB and serial-bootloader programming
+    service_image.py       the service label a tag can be told to show
+    hub_display.py         the connected-tags list on the hub's own panel
+    stats_image.py         the host-stats picture (hubhost.py show / stats)
+  tests/smoke.py         end-to-end check against fake serial ports
   docs/                  the interface spec this layout follows
   requirements.txt       pyserial, pillow
 ```
@@ -294,7 +309,7 @@ The transfer is the same reliable DATA path images use, with the firmware opcode
    clears the magic; the tag comes back with the **same id** and its aliases intact.
 
 Progress and Cancel are shared with image pushes, so the Queue screen shows either. The tag
-only listens for `SHELF_LISTEN_WINDOW_S` (3 s) after each poll, so a transfer started at a
+only listens for `SHELF_LISTEN_WINDOW_S` (2 s) after each poll, so a transfer started at a
 random moment may wait up to a minute for the next window; the frames are retried for 90 s,
 which covers it.
 
@@ -328,7 +343,7 @@ explicitly).
 ### The command queue
 
 Nothing is sent to a tag at the moment you click. The tag listens for only
-`SHELF_LISTEN_WINDOW_S` (3 s) after each poll, so a command fired at an arbitrary
+`SHELF_LISTEN_WINDOW_S` (2 s) after each poll, so a command fired at an arbitrary
 moment would usually be lost and would have to be retried by hand. Instead every
 outbound command is **queued for its tag**, and the server delivers the next pending
 one the moment that tag announces itself:
@@ -365,8 +380,9 @@ POST /api/tags/<hex>/assign  ->  {"ok": true, "queued": 7, ...}     (pending)
   (~7.5 kB, with a 4 KB ring), 48 and 64 do not. It also buys less than it looks: the total
   serial volume is the same whatever the batch size, and the measured 37 ms/frame is the
   tag's flash write plus the radio turn-around, not the batching.
-- `hubhost.CMD_RETRY_WINDOW_S` is 180 s, longer than a tag's 120 s poll interval:
-  shorter and a missed push is abandoned before the tag ever polls again.
+- `hubhost.CMD_RETRY_WINDOW_S` is 180 s, longer than a tag's 2-minute base poll
+  interval (its 5-minute idle interval is covered by pre-arming, below): shorter and a missed push is
+  abandoned before the tag ever polls again.
 - `hubhost.CMD_TIMEOUT_S` is 6 s on purpose: the hub only prints `SENT` after all
   four transmission attempts (~4.5 s), and waiting 3 s made the server give up in the
   middle of them and start a retry cycle, turning one miss into a burst of failed
@@ -447,8 +463,9 @@ The rotation is chosen for you: a 296×152 landscape source is rotated 90 (the l
 a 152×296 portrait source is sent as it is, and the angle used is logged. Only an image that fits
 neither way is refused, since the panel would show garbage.
 
-The spec's two-step flow (render a preview → confirm → queue a job) is deliberately not faked: today
-Push sends immediately, and the Editor says so.
+Push queues the command: it goes out when that tag next checks in (see **Queue**), with the frames
+already rendered at click time from the same pipeline as the preview, so what you confirmed is what is
+sent.
 
 A tag refreshes its panel (~15 s) at the end of the transfer and logs `img done busy=1 14.6s`; the
 protocol, the frame format and the meaning of the log lines are in

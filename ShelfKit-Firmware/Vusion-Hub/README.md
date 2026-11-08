@@ -1,15 +1,3 @@
-## The serial link is the fragile part
-
-Host commands arrive on UART0 RX (PB5) and the radio log goes out on UART0 TX (PB4), at
-38.4 kbaud. The AX8052's UART has a **one byte** receive buffer, and the hub prints a
-`SENT` line for every frame of an image push - so a command that arrived while a line
-was printing lost bytes and came back as `ERR chk` / `ERR len`. That is what stalled a
-push when another tag polled at the same moment.
-
-`log_putc()` now collects receive bytes while it waits for the transmitter, into a 64
-byte ring that `host_rx_getc()` drains first. Keep that in mind when adding logging: the
-more the hub says per frame, the less headroom there is for the host's next command.
-
 # Vusion-Hub — the hub target
 
 The hub half of ShelfKit: it listens permanently, **answers every tag poll** (the answer *is* the
@@ -30,10 +18,15 @@ radio: always in receive
       and logs: SENT <addr> ok|fail att=N
 ```
 
-- **`src/main.c`** — the radio loop plus the **host command channel** on UART0 (115200 8N1):
-  `P` → `PONG` (are you there?), `S<addr:4><payload><chk:2>` → send one reliable frame and answer
-  `SENT <addr> ok|fail att=N`. The reply goes out before anything is logged, because the tag only
-  waits `SL_RSP_TIMEOUT_MS`.
+- **`src/main.c`** — the radio loop plus the **host command channel** on UART0 (115200 8N1), one hex
+  line per command: `P` → `PONG`; `S<addr:4><payload><chk:2>` → send one reliable frame and answer
+  `SENT <addr> ok|fail att=N`; `B…` → the same for up to 16 frames in one line (the hub sends them back
+  to back); `Q<id>` → **pre-arm** that tag, so its next poll reply says "data follows" and the tag keeps
+  listening; `L<hh>` → ask every tag to wait `hh*10` s; `D…` → draw on the hub's own panel (below). The
+  reply goes out before anything is logged, because the tag only waits `SL_RSP_TIMEOUT_MS`. The boot
+  banner (`*** ShelfKit hub, node 0001 net 5a dump=1 batch=1 show=1`) advertises what this build can do:
+  `dump` relays a tag's flash read-back payloads, `batch` accepts `B` lines, `show` accepts `D`.
+- **`src/img_rx.c`** — the hub's copy of the image receiver, fed by `D` lines instead of the radio.
 - **`src/epd.c`**, **`src/spi.c`**, **`src/flash.c`**, **`src/pwr.c`**, **`src/board.c`** — the panel
   driver and hardware helpers, shared in spirit with the tag (same hardware pin map).
 - The `POLL src=…` line is the whole fleet view: the server parses it, and every tag that ever
@@ -68,8 +61,9 @@ $flags = @('-mmcs51','--model-small','--iram-size','256','--xram-size','8192','-
 # … the rest of src/*.c, then link with ../Shared/lib/*.lib
 ```
 
-The build prints the memory report: 37,675 B of code and 1,130 B of XRAM out of the 59,389 B / 8,192 B
-the memory model allows, which leaves 137 B of stack.
+The current release build is about 30.8 KB of code and 4.9 KB of XRAM (most of it the 2 KB host receive
+ring and the batch line buffer) out of the 59,389 B / 8,192 B the memory model allows; internal RAM is
+tight, with roughly 137 B of stack left.
 
 ## Talking to it from the host
 
@@ -86,13 +80,13 @@ python ../../ShelfKit-Server/shelfkit/hubhost.py COM4 serve images/     # push n
 - **DTR/RTS are not what the docs say on every adapter.** On this board a *released* DTR at reset
   starts the application and an *asserted* one starts the AX8052 serial bootloader — the flasher
   asserts DTR to flash, which is why it works while the reset recipe in the vendor notes fails. The
-  server learns the polarity instead of assuming it (`Reset` in the Console pane).
+  server learns the polarity instead of assuming it (`Reset` in the Hub screen's port pane).
 - **An RTS glitch is a reset pulse.** Opening a serial port re-applies the modem lines, so the server
   opens the port once and pushes images over it, rather than reopening per transfer.
 - UART0 RX is PB5, which is also the panel reset line — the hub's panel is not touched while the
   command channel is in use, and the pin conflict is the reason.
-- A full image is 404 DATA frames of 28 payload bytes; the transfer is reliable per frame, so a slow
-  link shows up as `att=N` on individual frames, not as a corrupted panel.
+- A full raw image is 404 DATA frames of 28 payload bytes (a compressed label is ~30); the transfer is
+  reliable per frame, so a slow link shows up as `att=N` on individual frames, not as a corrupted panel.
 
 ## Showing an image on the hub's own panel
 
@@ -112,3 +106,15 @@ python ../../ShelfKit-Server/shelfkit/hubhost.py COM4 stats       # CPU/RAM/disk
 rail, but while the trace is connected every byte the host sends is still a reset pulse on
 the panel. If the picture is garbled or stops half way, cut the trace between PB5 and the
 panel's RST pin: the rail cycle is then the only reset.
+
+## The serial link is the fragile part
+
+Host commands arrive on UART0 RX (PB5) and the radio log goes out on UART0 TX (PB4), at
+115200 baud. The AX8052's UART has a **one byte** receive buffer, and the hub prints a
+`SENT` line for every frame of an image push - so a command that arrived while a line
+was printing lost bytes and came back as `ERR chk` / `ERR len`. That is what stalled a
+push when another tag polled at the same moment.
+
+`log_putc()` now collects receive bytes while it waits for the transmitter, into a 64
+byte ring that `host_rx_getc()` drains first. Keep that in mind when adding logging: the
+more the hub says per frame, the less headroom there is for the host's next command.

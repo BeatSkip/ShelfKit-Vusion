@@ -1,11 +1,11 @@
 # Vusion 2.6" tag — context
 
 **Device:** SES-imagotag Vusion 2.6" BWR shelf label (UU340), battery powered.
-**MCU:** Axsem AX8052F143 — 8051 core + AX5043 sub-GHz radio, 26 MHz. 256 B IRAM, 8 KB XRAM, 59,389 B code space, ~150 B of stack left.
+**MCU:** Axsem AX8052F143 — 8051 core + AX5043 sub-GHz radio, 26 MHz. 256 B IRAM, 8 KB XRAM (~7 KB used), 59,389 B code space (~41 KB used), ~150 B of stack left.
 **Panel:** Good Display GDEW026Z39 — 296×152 native, black/white/red, IL0373, SPI, OTP waveform. Driven rotated (152 wide × 296 tall) as two 5,624-byte planes.
 **Also on board:** NFC (FM11NT081DS), SPI NOR flash.
-**Toolchain:** SDCC 3.6.0 (`-mmcs51 --model-small`), VS Code + SDCC-MDF extension. Flashed over the AX8052 UART bootloader at 115200 8N1 (BOOT pin held by the adapter's DTR).
-**Firmware:** polls a hub every 60 s on 868.3 MHz (network id 0x5A, hub node 0x0001) with reliable, retried frames, then sleeps for the rest of the minute (radio in `AXRADIO_MODE_OFF`, 3 s listening window after each poll); an image arrives in 28-byte chunks straight into the panel controller (no frame buffer in RAM), then a ~15 s full refresh and deep sleep.
+**Toolchain:** SDCC 3.6.0 (`-mmcs51 --model-small`), VS Code + SDCC-MDF extension. Flashed over the AX8052 UART bootloader at 38400 8N1 (BOOT pin held by the adapter's DTR); the applications themselves talk at 115200.
+**Firmware:** polls a hub on 868.3 MHz (network id 0x5A, hub node 0x0001) with reliable, retried frames — every 2 min by default, 30 s while the hub has data, 5 min when idle, longer on a weak link — then sleeps (radio in the AX5043's deep sleep, MCU in Sleep). The receiver closes immediately after a "nothing queued" reply, so the server pre-arms the hub before a push. An image arrives in 28-byte chunks (raw) or as ECO-compressed planes straight into the panel controller (no frame buffer in RAM), then a ~15 s full refresh and deep sleep. Node id lives in SPI flash; OTA updates go through the bootloader.
 
 **Gotchas:**
 - PA5 (transistor U4) is the panel supply, **active low** — without it the panel accepts a frame and never refreshes.

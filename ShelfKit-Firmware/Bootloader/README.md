@@ -42,14 +42,15 @@ The reference project's placement is reproduced with two project flags in `sdcc-
 |---|---|---|
 | `__interrupt_vect` | `0x0000` | the reset vector, `ljmp __sdcc_gsinit_startup` — three bytes of the VECTOR area |
 | `__sdcc_gsinit_startup` | `0x0D838` | high byte **0xD8** is what the erase loop and the banner CRC calculate from |
-| `_bootloader` | `0x0E204` | entered from the startup, because `crtstart.asm` ends with `ljmp _bootloader` (there is no `main`) |
+| `_bootloader` | `0x0E37F` | entered from the startup, because `crtstart.asm` ends with `ljmp _bootloader` (there is no `main`) |
 | `_jmp_vector` | `0x0D7FE` | the application's entry address (low byte first), in the two bytes just below the bootloader; written at run time, never baked into the image |
-| code end | `0x0F876` | 902 bytes short of the top page; the CRC covers `0xD800 … 0xFBFF` (9 KiB) |
+| code end | `0x0FA6F` | 8,819 bytes of code, 397 short of the top page; the CRC covers `0xD800 … 0xFBFF` (9 KiB) |
 
 Verified after the conversion with the real toolchain: `--code-size 65536` wins over the board's
 59389-byte app limit (the last `-C` wins), the image is 205 hex records from `0x0000` to `0xFB92`,
 `_jmp_vector` is *absent* from the image (so the slot stays `0xFF` until an app is flashed), and the
-first record is `:0300000002E438…` — the reset jump to the startup. 428 B of XRAM, and 902 B free in the region.
+first record is `:0300000002D838…` — the reset jump to the startup. 428 B of XRAM, and 397 B free in the region.
+(The image sizes in this README are from the current build; `build-all.py` prints them.)
 
 ## Sources
 
@@ -68,7 +69,7 @@ Both are compiled exactly as they were: the `.c` with `sdcc`, the `.asm` with `s
 |---|---|
 | `-mmcs51 --model-small --verbose` | `board` (`axsem-8052f143`) supplies the CPU, model, IRAM/XRAM sizes |
 | `--xram-size 8192 --iram-size 256 --code-size 65536` | the board supplies the first two; `--code-size 65536` moved to `build.flags` |
-| `-Wl-bVECTOR=0x0000 -Wl-bHOME=0xe400` | the same, in `build.flags` |
+| `-Wl-bVECTOR=0x0000 -Wl-bHOME=0xe400` (reference) | the same, but moved to `0xd800` to make room for the OTA path, in `build.flags` |
 | `-llibmf` | `libraries: ["../Shared/lib"]` — the linker pulls only what is referenced |
 | include paths from the Code::Blocks install | `include` + `../Shared/sdk/libmf/include` |
 | output `bin/Release/bootloader.hex` | `build/bootloader.hex` (`build.output_name`) |
@@ -89,8 +90,8 @@ python ShelfKit-Firmware/Tooling/build-all.py          # Release/vusion-full-lat
 
 ```
 === one HEX for both ===
-  bootloader 0xD800..0xF876  (8314 bytes)
-  application 0x0003..0xA484  (42088 bytes, entry 0x021B)
+  bootloader 0xD800..0xFA6F  (8819 bytes)
+  application 0x0003..0x9FF5  (40921 bytes, entry 0x021B)
   jump vector 0xD7FE = 1B 02
 ```
 
@@ -111,8 +112,8 @@ Two properties worth knowing:
 
 - The file is **sparse**, like the linker output: only bytes the linker emitted are
   present, so unprogrammed gaps stay erased. Flash it onto an erased chip.
-- It is **not an OTA image** — `ota-send.py` refuses it (63,607 bytes, against the
-  43 KB window), which is the right answer: an OTA image must not carry a bootloader.
+- It is **not an OTA image** — `ota-send.py` refuses it (it reaches `0xFA6F`, against
+  the 43 KB window), which is the right answer: an OTA image must not carry a bootloader.
 
 `--no-bundle` skips it, and it is only produced when both `vusion` and `bootloader`
 are in the built set (`--targets vusion,bootloader`).
@@ -123,7 +124,7 @@ Open **this folder** in VS Code, **Ctrl+Shift+B**, output in `build/`. Or by han
 
 ```powershell
 $flags = @('-mmcs51','--model-small','--iram-size','256','--xram-size','8192','--code-size','65536',
-           '-Wl-bVECTOR=0x0000','-Wl-bHOME=0xe400','-Iinclude','-I../Shared/sdk/libmf/include')
+           '-Wl-bVECTOR=0x0000','-Wl-bHOME=0xd800','-Iinclude','-I../Shared/sdk/libmf/include')
 & 'C:\Program Files\SDCC\bin\sdcc.exe' @flags -c src/main.c -o build/main.rel
 & 'C:\Program Files\SDCC\bin\sdas8051.exe' -plosgffw build/crtstart.rel src/crtstart.asm
 & 'C:\Program Files\SDCC\bin\sdcc.exe' @flags build/crtstart.rel build/main.rel `
@@ -132,7 +133,7 @@ $flags = @('-mmcs51','--model-small','--iram-size','256','--xram-size','8192','-
 
 *SDCC: Flash* runs [`../Tooling/axsem-flasher.py`](../Tooling/axsem-flasher.py), which talks to
 the **mask-ROM** bootloader selected by the BOOT pin (DTR on the adapter) — that is the only thing that
-can write the `0xE400` region, since a flash-resident bootloader cannot erase itself while it runs.
+can write the `0xD800` region, since a flash-resident bootloader cannot erase itself while it runs.
 Once this image is in place, applications can be uploaded over UART0 without touching the BOOT pin.
 
 ## Wireless update (OTA)

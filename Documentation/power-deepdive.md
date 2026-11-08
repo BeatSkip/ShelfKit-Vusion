@@ -1,6 +1,6 @@
 # Vusion tag power deep-dive (CR2450)
 
-Status: **model only, nothing measured yet.** Currents below are datasheet-class
+Status (2026-11-08): **model only, nothing measured yet.** Since this was written options #1 (receiver closed on a "nothing queued" reply, `SHELF_LISTEN_QUIET_MS 0`, with 250 ms grace on a lost reply), #2 and #3 (120 s base, 300 s idle, 30 s burst) have been implemented, together with the radio deep sleep and MCU sleep, so the "baseline" below is the *old* behaviour. Currents below are datasheet-class
 estimates (AX5043 RX ~11 mA, TX 15 dBm ~54.6 mA, MCU active ~4 mA, sleep ~3 uA).
 Step 0 is to meter a real tag; every ranking below should be re-run with measured
 numbers. Usable capacity assumed 620 mAh x 0.85 = 527 mAh (CR2450 datasheets:

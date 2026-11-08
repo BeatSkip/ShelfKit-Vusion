@@ -25,14 +25,14 @@ python ShelfKit-Firmware/Tooling/build-all.py --clean
 ```
 === one HEX for both ===
   Release/vusion-full-latest.hex
-  bootloader 0xD800..0xF876  (8314 bytes)
-  application 0x0003..0xA484  (42088 bytes, entry 0x021B)
+  bootloader 0xD800..0xFA6F  (8819 bytes)
+  application 0x0003..0x9FF5  (40921 bytes, entry 0x021B)
   jump vector 0xD7FE = 1B 02
 
 === ready to flash ===
-  vusion-20261021-12a46fc-dirty.hex      118827 bytes  code 42117/59389, xram 1111/8192
-  vusion-hub-20261021-12a46fc-dirty.hex  106527 bytes  code 37763/59389, xram 1140/8192
-  bootloader-20261021-12a46fc-dirty.hex   23518 bytes  code 8314/65536, xram 428/8192
+  vusion-latest.hex       115544 bytes  code 40950/59389, xram 6972/8192
+  vusion-hub-latest.hex    87016 bytes  code 30822/59389, xram 4949/8192
+  bootloader-latest.hex    24931 bytes  code 8819/65536, xram 428/8192
 ```
 
 `vusion-full-*.hex` holds the bootloader **and** the application, with the
@@ -43,7 +43,7 @@ for a tag that has neither yet. See
 It builds each target exactly the way SDCC-MDF does, because it reads the target's own
 `sdcc-project.json` and the board definition that file names:
 
-- `build.flags` of the project (this is where the bootloader's `-Wl-bHOME=0xe400` and its 64 KB code
+- `build.flags` of the project (this is where the bootloader's `-Wl-bHOME=0xd800` and its 64 KB code
   space live),
 - CPU, memory model and the IRAM/XRAM/code sizes from [`../Shared/boards/`](../Shared/boards),
 - `sources` (directories are walked for `.c` and `.asm`, and every source directory's `inc/` is added
@@ -133,6 +133,6 @@ SDCC must be on `PATH` or in its default Windows install (`C:\Program Files\SDCC
 
 `monitor.py` (a timestamped two-port log merge with a link summary on stdout) and `test_shelflink.py`
 (62 simulator unit checks for the link layer) are gone. The first was superseded by the server's
-Console and Logs screens, which merge the logs, keep them across restarts and add the image push. The
+Hub and Logs screens, which merge the logs, keep them across restarts and add the image push. The
 second lost its test sources (`tooling/tests/*.c`) and could no longer run; if the protocol needs
 regression tests again, they have to be restored from git history first.
