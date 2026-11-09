@@ -1,9 +1,12 @@
 # NFC field detect on the tag
 
-> **Status: parked.** `SHELF_NFC_POLL 0`, `SHELF_NFC_RAIL_HOLD 0`, `SHELF_NFC_PROBE 0`.
-> Everything below is what was learned and what is left. The transport (bit-banged mode
-> 1, UID read, register access) works and is kept; the unresolved part is physical - the
-> field-detect line floats and oscillates whenever the NFC chip has no supply.
+> **Status: enabled** (`SHELF_NFC_POLL 1`, `SHELF_NFC_RAIL_HOLD 1`). Tried with the rail off on a tag: PB3 floated and re-triggered every cycle - the tag polled every 1.8 s until the storm guard was added. Measured with the Shakedown
+> firmware on a powered rail: PB3 idles high, goes low for a phone (bursts of 1-30 ms pulses),
+> and stays quiet otherwise. Not yet confirmed on hardware: the interrupt count (`n6`), waking
+> from standby/sleep (`n7`/`n8`), and whether FD works with the rail off (`r0` + `n4`).
+> Several sections below predate the EEPROM-config finding (the FD source is *not* a register)
+> and the rail result; where they disagree, the sections headed "right datasheet" and the
+> Shakedown tables win.
 
 
 The tag can poll when a reader is held against the label: the NFC chip asserts a pin, the
@@ -133,6 +136,58 @@ The blue LED is the indicator: one pulse per reader arrival, on a battery board 
 nothing plugged in. With a serial adapter attached, DTR drives PB3, so anything observed
 then is a property of the cable, not of the NFC chip.
 
+## Shakedown: the NFC field-detect test sequence
+
+### The right datasheet: the FD pin is configured in EEPROM
+
+`FM11NT081D_ds_chs.pdf` (the earlier `FM11NT0X1_ds_chs.txt` was a different variant - its pin 10
+is a "card selected" output - and is not what is fitted). It says, for the FM11NT081D:
+
+| where | what |
+|---|---|
+| EEPROM `0x38C` (page E3h) bits 1:0, `fdp_conf` | `00` no FD, `01` FD on the first SoF, `10` FD while the tag is **selected**, `11` FD while a **field is present** (factory default) |
+| EEPROM `0x391` (`REGU_CFG`) bit 7, `WIP_FD` | `0` pin = FD (default), `1` pin = "EEPROM being written" flag |
+
+Both are loaded into the chip at power-up. There is **no `NFC_CFG` (0x0D) register** to write
+- that came from Fudan's I2C driver and never worked here (reads 00 before and after). An EEPROM
+write needs the enable sequence `CE 55` + SSN high, the write command (`010_000xx`, address, up
+to 16 bytes) within ~0.7 ms, then SSN high for ~10 ms. The pin is open drain, active low.
+
+The Shakedown firmware therefore **reads 0x38C-0x393 at boot, prints it, and rewrites it only
+if `fdp_conf` is not the wanted mode or `WIP_FD` says WIP** (and the config is not locked). A
+chip taken from an SES-imagotag label may have been reprogrammed away from the default, which
+would explain a pin that never moves. `m3`/`m2`/`m1`/`m0` choose field / selected / first SoF /
+off and write it. VOUT (about 1.5 V while a field is present) is a separate way to see the
+field; whether it is routed to a GPIO on this board is not documented.
+
+Pin states during the tests, the same as the tag firmware uses: **PA2 (U5) is an output driven
+low** (parked, it is a load on the supply), **PA5 (U4) is always driven** - low = switched rail
+on (`r1`, default), high = rail off (`r0`) - never left floating. They are re-applied before
+every test, so a `2h`/`5z` from the older probe commands is undone.
+
+Also from the datasheet: the contact interface needs `SSN` low >= 100 us before the first clock,
+and FD is open drain and wants a pull-up on the MCU side (10 k in the typical circuit, or the
+MCU's internal one - `u1`).
+
+Every phone window is announced by a countdown (`3.. 2.. 1.. GO`, the green LED blinks per count,
+blue at GO, red when the window ends). While running, the radio is asleep so nothing else
+prints. Edges are polled every ~100 us and, in `n6`, also counted by the interrupt, so a
+glitch shorter than that still shows as `irq` > `edges`.
+
+How to read the result:
+
+- **idle HIGH, held LOW, 1 edge, back to HIGH on removal**: the datasheet behaviour
+  (open drain, low-effective, a level) - the production firmware can use the falling edge.
+- **held HIGH**: polarity is inverted, the interrupt edge must be flipped.
+- **edges with no phone (n1)**: the line floats; try the rail on (`r1`) and the pull-up (`u1`),
+  and note which combination is quiet - that is what the tag has to do between polls.
+- **many edges while held**: the phone polls in bursts; debounce in firmware.
+- **`PULSE ONLY`**: the pin pulses when the field arrives; try the other modes with `n3`.
+- **`n6` interrupts = 0 although polled falls > 0**: the EXTIRQ1 mapping is wrong.
+- **`n7` yes / `n8` no**: standby can be woken, sleep cannot, which decides the tag's design.
+
+Results of the first run on hardware are to be recorded here.
+
 ## Resuming this work
 
 The three switches in `shelf_config.h` and what each one costs:
@@ -151,8 +206,9 @@ What is already known, so none of it is rediscovered:
 2. **The command table** (datasheet 4-4): `000_0_<reg>` write register, `001_0_<reg>` read
    register, `010_` / `011_` EEPROM. The I2C driver's `0xFF, 0xF0|reg` is not understood by
    the `...DS` part - that was the `ff` on every register read.
-3. **The chip needs no configuration.** `NFC_CFG` (0x0D) reads `0x00`, bits 5:4 = `00` =
-   field detect, out of the box.
+3. **The FD source is set in EEPROM** (0x38C fdp_conf, 0x391 WIP_FD), not in a register; the
+   register-0x0D idea above was wrong. The default is field detect, but a label-origin chip may
+   differ - the Shakedown boot line shows the real values.
 4. **`EXTIRQ` works**: bits 5:4 = `11` is a falling edge and its default pin is PB3.
 5. **The blocker is electrical.** With the rail off the pin has only the AX8052's weak
    pull-up, and it oscillated at ~4 Hz; every edge also wakes the tag, which measured

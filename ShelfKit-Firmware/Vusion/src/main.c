@@ -40,6 +40,23 @@ static uint16_t __xdata node_id;   /* from the SPI flash record, see shelf_id.c 
  * events in one poll cycle it stops reacting until listen_cb() resets the count. */
 #define SHELF_NFC_BURST_MAX  3
 static uint8_t __xdata nfc_burst;
+/* A pin that is stuck or floating re-triggers every poll cycle, which an in-cycle burst limit
+ * cannot stop: the tag polled every 1.8 s for minutes on hardware with the rail off. So also
+ * count consecutive cycles that were started by an NFC event; after SHELF_NFC_CHAIN_MAX of
+ * them the feature is suspended for SHELF_NFC_HOLDOFF_POLLS normal poll cycles (~1 h). A real
+ * phone visit is one or two cycles. */
+#define SHELF_NFC_CHAIN_MAX     4
+#define SHELF_NFC_HOLDOFF_POLLS 30
+static uint8_t __xdata nfc_src;         /* what woke it: 1 irq, 2 port-change wake */
+static uint8_t __xdata nfc_seen;        /* an NFC event started this cycle */
+static uint8_t __xdata nfc_chain;       /* consecutive such cycles */
+static uint8_t __xdata nfc_hold;        /* cycles left with the feature suspended */
+/* A tap is the user asking for a refresh, but the hub's queue is armed only for the poll
+ * *after* one that found it busy or empty. So a tap polls at once and once more 5 s later:
+ * a second chance for the server to have the transfer ready, paid only on a tap. */
+#define SHELF_NFC_FOLLOW_S      5
+static uint8_t __xdata nfc_follow;      /* the follow-up poll after a tap is still due */
+static uint8_t __xdata nfc_fu;          /* this cycle is a follow-up: not a new trigger */
 #endif
 static struct wtimer_desc __xdata listen_timer;
 static uint8_t __xdata radio_asleep;
@@ -92,6 +109,12 @@ static uint32_t next_interval(void) __reentrant
             if (interval > SHELF_POLL_MAX_S)
                 interval = SHELF_POLL_MAX_S;
         }
+#if SHELF_NFC_POLL
+    } else if (nfc_follow) {
+        interval = SHELF_NFC_FOLLOW_S;     /* a tap: one more try shortly, whatever the reply said */
+        nfc_follow = 0;
+        nfc_fu = 1;
+#endif
     } else if (data_pending && active_polls < SHELF_ACTIVE_MAX_POLLS) {
         /* the hub is feeding this tag: come back soon for the next item */
         interval = SHELF_POLL_ACTIVE_S;
@@ -181,7 +204,23 @@ static void listen_cb(struct wtimer_desc __xdata *desc)
     radio_asleep = 1;
 #if SHELF_NFC_POLL
     nfc_burst = 0;              /* new cycle: a reader is welcome again */
-    shelfhw_nfc_arm();          /* one shot: ready for the next reader */
+    if (nfc_seen) {
+        if (nfc_chain < 255)
+            nfc_chain++;
+    } else if (!nfc_fu) {
+        nfc_chain = 0;          /* a follow-up poll keeps the chain, a quiet cycle ends it */
+    }
+    nfc_seen = 0;
+    nfc_fu = 0;
+    if (nfc_chain >= SHELF_NFC_CHAIN_MAX) {
+        nfc_chain = 0;
+        nfc_hold = SHELF_NFC_HOLDOFF_POLLS;
+        log_puts("nfc storm: pin keeps triggering, off for a while\r\n");
+    }
+    if (nfc_hold)
+        nfc_hold--;             /* suspended: not armed, so neither the interrupt nor the wake */
+    else if (shelfhw_nfc_level())
+        shelfhw_nfc_arm();      /* one shot: ready for the next reader (pin idle high) */
 #endif
 #else
     (void)desc;
@@ -452,14 +491,19 @@ void main(void)
      * so no standby */
     for (;;) {
 #if SHELF_NFC_POLL
-        if (shelfhw_nfc_take()) {
+        nfc_src = shelfhw_nfc_take();
+        if (nfc_src) {
             if (nfc_burst < SHELF_NFC_BURST_MAX) {
                 nfc_burst++;
+                nfc_seen = 1;
+                nfc_follow = 1;         /* and once more 5 s after the tap */
                 /* A reader appeared. The LED is the point: on a battery board with no
                  * serial attached it is the only way to see that the field-detect line
                  * works. Then poll while the phone is still there. */
                 shelfhw_led_pulse(SHELFHW_LED_BLUE, SHELFHW_LED_PULSE_MS);
-                log_puts("nfc field\r\n");
+                log_puts(nfc_src == 2 ? "nfc field (wake) pb3=" : "nfc field (irq) pb3=");
+                log_dec(shelfhw_nfc_level());
+                log_nl();
                 arm_poll(1);
             } else if (nfc_burst == SHELF_NFC_BURST_MAX) {
                 nfc_burst++;    /* one line, then silence until the next poll */

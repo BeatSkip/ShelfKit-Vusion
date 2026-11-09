@@ -69,23 +69,26 @@
 #define SHELF_LISTEN_QUIET_MS   0
 
 /* 1 = a falling edge on PB3 (the NFC chip's field-detect output, shared with the
- * bootloader's BOOT strap) wakes the tag, flashes the blue LED and makes it poll.
+ * bootloader's BOOT strap) wakes the tag, flashes the blue LED and makes it poll: hold a
+ * phone against the tag and it checks in within a second instead of waiting out the interval.
  *
- * The chip is passive: while a reader's field is present it powers itself from it and
- * pulls that open-drain pin low even though the tag's switched rail is off, which is
- * why this can work between polls. The FD mode has to be selected once, over the
- * contact interface, while the rail is up - nfc_cfg_fd() does that at boot, and the
- * "nfc uid ... ok" line proves the transport that carries it. */
-#define SHELF_NFC_POLL          0
-/* Only meaningful with SHELF_NFC_POLL. 1 = leave the switched rail (PA5 / U4) on, so
- * the NFC chip is powered and its
- * open-drain field-detect output is actually driven. Unpowered, that pin has only the
- * weak pull-up, and on hardware it oscillated at ~4 Hz - each edge woke the tag and
- * re-armed a poll, which measured 7.4 mA / 3 days. Holding the rail costs the standby
- * current of whatever else shares it (the flash, and the panel's supply). */
-#define SHELF_NFC_RAIL_HOLD     0
-/* 1 = read the NFC chip's UID and dump its configuration area at boot. Read-only and
- * useful when this work resumes; off so a parked build logs nothing extra. */
+ * Measured with the Shakedown firmware (Documentation/nfc-field-detect.md): idle HIGH, active
+ * LOW, quiet with no phone, and a phone gives bursts of 1-30 ms low pulses for as long as it
+ * is there - so the first edge is the event and SHELF_NFC_BURST_MAX limits the rest.
+ * The chip's FD output mode lives in its EEPROM (0x38C fdp_conf = 11, 0x391 bit 7 = 0);
+ * nfc_cfg_fd() checks it at boot and rewrites it only if it is wrong.
+ * PB3 is also the bootloader's BOOT strap: with a phone in the field at reset the tag
+ * enters the bootloader, and a serial adapter's DTR on PB3 fights the chip, so test with
+ * the BOOT wire disconnected. */
+#define SHELF_NFC_POLL          1
+/* Only meaningful with SHELF_NFC_POLL. 1 = leave the switched rail (PA5 / U4) on, so the NFC
+ * chip is powered and its open-drain output is actually driven. It costs the standby current
+ * of the panel supply and the flash. 0 = the rail is driven off between uses (PA5 high, PA2
+ * parked low): tried on hardware, PB3 then floats and re-triggers every cycle (a poll every
+ * 1.8 s), so the storm guard suspends the feature - i.e. NFC does not work. Keep 1 until
+ * there is a pull-up on PB3 or the chip is powered from an always-on rail. */
+#define SHELF_NFC_RAIL_HOLD     1
+/* 1 = read the NFC chip's UID and dump its configuration area at boot. Read-only. */
 #define SHELF_NFC_PROBE         0
 
 /* ── adaptive check-in (openepaperlink-style backoff) ─────────────────────

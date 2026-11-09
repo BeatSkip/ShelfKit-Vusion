@@ -1597,7 +1597,17 @@ function buildPane(pane) {
       <button class="reset" type="button" title="Pulses the reset line (RTS) for 100 ms">Reset</button>
       <button class="clear quiet" type="button">Clear log</button>
     </div>
-    <div class="log" tabindex="0" role="log" aria-label="${pane.name} serial log"></div>`;
+    <div class="log" tabindex="0" role="log" aria-label="${pane.name} serial log"></div>
+    <form class="pane-send">
+      <input class="send-text" type="text" spellcheck="false" autocomplete="off"
+             placeholder="Send to the port, e.g. P" aria-label="${pane.name} text to send">
+      <label class="send-hex"><input class="send-hex-box" type="checkbox"> Hex</label>
+      <select class="send-eol" aria-label="Line ending">
+        <option value="lf">LF</option><option value="crlf">CR+LF</option>
+        <option value="cr">CR</option><option value="none">none</option>
+      </select>
+      <button class="send-btn" type="submit">Send</button>
+    </form>`;
 
   const view = {
     root,
@@ -1612,7 +1622,37 @@ function buildPane(pane) {
     resetBtn: root.querySelector(".reset"),
     clearBtn: root.querySelector(".clear"),
     log: root.querySelector(".log"),
+    sendForm: root.querySelector(".pane-send"),
+    sendText: root.querySelector(".send-text"),
+    sendHex: root.querySelector(".send-hex-box"),
+    sendEol: root.querySelector(".send-eol"),
+    sendBtn: root.querySelector(".send-btn"),
   };
+
+  // Debug: send what was typed (text or hex bytes) over this pane's port. Up/Down recall history.
+  const sent = [];
+  let recall = 0;
+  view.sendForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const text = view.sendText.value;
+    if (!text && view.sendEol.value === "none") return;
+    try {
+      render(await postJSON(`/api/pane/${pane.key}/send`, {
+        text, hex: view.sendHex.checked, eol: view.sendEol.value,
+      }));
+      if (text && sent[sent.length - 1] !== text) sent.push(text);
+      recall = sent.length;
+      view.sendText.value = "";
+    } catch (err) {
+      toast(`Not sent: ${err.message}`, "bad");
+    }
+  });
+  view.sendText.addEventListener("keydown", (event) => {
+    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+    event.preventDefault();
+    recall = Math.max(0, Math.min(sent.length, recall + (event.key === "ArrowUp" ? -1 : 1)));
+    view.sendText.value = sent[recall] || "";
+  });
 
   view.openBtn.addEventListener("click", () => {
     const verb = view.openBtn.textContent === "Close" ? "close" : "open";
@@ -1707,6 +1747,7 @@ function renderPanes() {
     view.dtrBtn.classList.toggle("on", !!pane.dtr);
     view.dtrBtn.setAttribute("aria-pressed", String(!!pane.dtr));
     view.resetBtn.disabled = !pane.open;
+    view.sendBtn.disabled = !pane.open;
     const error = pane.status.startsWith("error");
     setText(view.statusText, pane.status);
     setClass(view.status, `pane-status${error ? " error" : ""}`);

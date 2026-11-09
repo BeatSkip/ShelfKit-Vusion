@@ -118,7 +118,7 @@ small bitmap font, and tags stay paper-coloured in both themes because they are 
 | **Editor** | Browse this machine's folders, then choose **fit** and **dither**. Three previews from the server's render: source, the frame as the tag shows it, and a 4× loupe that follows the pointer or arrow keys. A midtone warning. Push to **one tag or several**; Push stays disabled until a preview is rendered |
 | **Queue** | Every outbound command (image, firmware, ID, factory reset, service label, flash read) waits here until its tag checks in. Live state and frame progress per command, and **Cancel all** |
 | **Logs** | Events recorded by the server (`push`, `ok`, `fail`, `error`, `boot`, `bootloader`, `open`, ...), identical neighbours collapsed into `×N`, filtered by tag or event, **kept across restarts**. Check-ins (`sync`) are hidden unless you ask for them, because every poll makes one |
-| **Hub** | Both serial panes (port, baud, Open/Close, DTR, Reset, Clear log, live log), Copy logs and Save log, the features the hub's firmware reports, and the settings for the hub's own panel. The port and baud you used come back next run. `#console` links land here |
+| **Hub** | Both serial panes (port, baud, Open/Close, DTR, Reset, Clear log, live log, and a **send box** to write text or hex bytes to the port with a chosen line ending), Copy logs and Save log, the features the hub's firmware reports, and the settings for the hub's own panel. The port and baud you used come back next run. `#console` links land here |
 | **Flash** | Put firmware on a chip from the page, with the **USB debugger** (AXSDB) or the **serial bootloader**. Pick the file from `Release/`, press Start, press again to confirm. Four steps (find the chip, erase, write, start) show as they happen, with the tool's own output underneath. See [Flashing](#flashing-from-the-page) |
 | **Settings** | When a tag counts as late or silent, when to offer to forget it, the low-battery voltage, and the Fleet layout and tag size. A CSV of aliases, notes, shelf and slot can be exported and imported. Saved by the server (the `prefs` setting in the state database), so every browser and every restart sees the same values; an impossible combination is refused with a message and nothing is stored |
 
@@ -195,6 +195,11 @@ send a form to `127.0.0.1`, and this server drives serial ports and runs the fla
 
 One pane per port, each with its own port field (type it, or pick a detected port from the list), baud
 rate, **Open/Close**, **DTR**, **Reset**, **Clear**, and its log below.
+
+Under the log is a **send box** for debugging: type text (or tick **Hex** and type bytes such as `50 0A`),
+pick the line ending (LF, CR+LF, CR, none) and press Send. The bytes go straight to the port, around the
+command queue, and are echoed in the log as `# > ...`; Up/Down recall earlier lines. It is refused while a
+flash owns the port, and it is only enabled while the port is open. On the hub port `P` answers `PONG`.
 
 Both handshake lines start **released** (DTR low, RTS low). On this board DTR is the BOOT pin and RTS
 the RESET line. **DTR** is a level toggle — it holds the boot pin where you put it — while **Reset** is

@@ -26,6 +26,8 @@ long-lived poll connection per browser tab. The API is small and boring:
     POST /api/pane/<key>/line      {"line": "dtr"|"rts", "value": true|false}
     POST /api/pane/<key>/toggle    {"line": "dtr"}
     POST /api/pane/<key>/reset     one 100 ms RTS pulse
+    POST /api/pane/<key>/send      {"text": "P", "hex": false, "eol": "lf"|"cr"|"crlf"|"none"}
+                                   debug: write those bytes to the port, echoed in the log
     POST /api/editor               {"fit": "cover", "dither": "threshold"}
     POST /api/image                {"path": "/abs/or/relative.png"}
     POST /api/preview              render the picked image (does not send)
@@ -324,6 +326,12 @@ class Handler(BaseHTTPRequestHandler):
             self.app.toggle_line(key, line)
         elif action == "reset":
             self.app.pulse_reset(key)
+        elif action == "send":
+            result = self.app.send_raw(
+                key, str(body.get("text") or ""), bool(body.get("hex")), str(body.get("eol") or "lf")
+            )
+            if not result.get("ok"):
+                return self._error(result.get("error") or "not sent")
         else:
             return self._error(f"no action {action}", HTTPStatus.NOT_FOUND)
         return self._json(self.app.state())

@@ -42,8 +42,6 @@
 #define NFC_WAKE_US     200         /* >= 100 us of power-up preparation */
 #define NFC_RESET_US    2           /* SSN high >= 50 ns resets the SPI port */
 
-#define NFC_REG_CFG     0x0D        /* NFC configuration register */
-#define NFC_CFG_FD      0x03        /* bits 5:4 = 00: field detect */
 
 static uint8_t nfc_paltc;           /* PALTC before the pads were taken */
 
@@ -147,42 +145,6 @@ static void nfc_dump(const char *what)
     log_nl();
 }
 
-/* SPI command encoding (datasheet table 4-4): the first byte is the command, the
- * register address lives in its low four bits -
- *
- *   write register  000_0_<reg>
- *   read register   001_0_<reg>
- *   write EEPROM    010_<A9:A8>
- *   read EEPROM     011_<A9:A8>
- *
- * The I2C-style 16-bit address (0xFF, 0xF0|reg) tried before is not understood by the
- * ...DS part, which is why every register read returned 0xff while EEPROM reads worked. */
-#define NFC_CMD_WR_REG  0x00
-#define NFC_CMD_RD_REG  0x20
-
-static uint8_t nfc_reg_read(uint8_t reg)
-{
-    uint8_t v;
-
-    NFC_CS = 0;
-    delay(NFC_WAKE_US);
-    (void)nfc_bb_xfer((uint8_t)(NFC_CMD_RD_REG | (reg & 0x0F)));
-    v = nfc_bb_xfer(0x00);
-    NFC_CS = 1;
-    delay(NFC_RESET_US);
-    return v;
-}
-
-static void nfc_reg_write(uint8_t reg, uint8_t val)
-{
-    NFC_CS = 0;
-    delay(NFC_WAKE_US);
-    (void)nfc_bb_xfer((uint8_t)(NFC_CMD_WR_REG | (reg & 0x0F)));
-    (void)nfc_bb_xfer(val);
-    NFC_CS = 1;
-    delay(NFC_RESET_US);
-}
-
 void nfc_probe(void)
 {
     uint8_t i, bcc0, bcc1;
@@ -223,22 +185,83 @@ void nfc_probe(void)
     log_nl();
 }
 
+/* ── the FD pin is configured in EEPROM (FM11NT081D datasheet) ──────────────────────────
+ *   0x38C (page E3h) bits 1:0  fdp_conf: 00 no FD, 01 first SoF, 10 tag selected,
+ *                              11 field present (factory default, what the tag wants)
+ *   0x391 (REGU_CFG) bit 7     WIP_FD pin function: 0 = FD (default), 1 = EEPROM-write flag
+ * Both load at power-up. There is no register to write (the 0x0D "NFC_CFG" of Fudan's I2C
+ * driver does not exist on this part). An EEPROM write needs the enable sequence CE 55 +
+ * SSN high, the write command within ~0.7 ms, then SSN high for ~10 ms. */
+#define NFC_EE_E3       0x38C
+#define NFC_EE_E4       0x390
+#define NFC_CMD_WRITE_EE 0x40       /* 010_000xx */
+#define NFC_FDP_FIELD   0x03
+
+static uint8_t __xdata nfc_ee[8];   /* 0x38C..0x393: pages E3h and E4h */
+
+static void nfc_ee_read(void)
+{
+    nfc_addr = NFC_EE_E3;
+    nfc_len = 8;
+    nfc_read_block();
+    {
+        static uint8_t __xdata i;
+
+        for (i = 0; i < 8; i++)
+            nfc_ee[i] = nfc_buf[i];
+    }
+}
+
+/* write one 4-byte page (src = nfc_ee + off) at addr */
+static void nfc_ee_write_page(uint16_t addr, uint8_t off)
+{
+    static uint8_t __xdata i;
+
+    NFC_CS = 0;
+    delay(NFC_WAKE_US);
+    (void)nfc_bb_xfer(0xCE);        /* write enable */
+    (void)nfc_bb_xfer(0x55);
+    NFC_CS = 1;
+    delay(20);
+    NFC_CS = 0;
+    delay(30);
+    (void)nfc_bb_xfer((uint8_t)(NFC_CMD_WRITE_EE | ((addr >> 8) & 0x03)));
+    (void)nfc_bb_xfer((uint8_t)addr);
+    for (i = 0; i < 4; i++)
+        (void)nfc_bb_xfer(nfc_ee[off + i]);
+    NFC_CS = 1;                     /* SSN high starts the erase/write: ~10 ms */
+    for (i = 0; i < 20; i++)
+        delay(1000);
+}
+
 void nfc_cfg_fd(void)
 {
-    uint8_t before, after;
+    static uint8_t __xdata wrote, ok;
 
     extflash_power_up();
     nfc_bb_init();
-    before = nfc_reg_read(NFC_REG_CFG);
-    nfc_reg_write(NFC_REG_CFG, (uint8_t)((before & (uint8_t)~0x30) | NFC_CFG_FD));
-    after = nfc_reg_read(NFC_REG_CFG);
+    nfc_ee_read();
+    wrote = 0;
+    if ((nfc_ee[0] & 0x03) != NFC_FDP_FIELD && !(nfc_ee[4] & 0x40)) {   /* CFGLOCK clear */
+        nfc_ee[0] = (uint8_t)((nfc_ee[0] & 0xFC) | NFC_FDP_FIELD);
+        nfc_ee_write_page(NFC_EE_E3, 0);
+        wrote = 1;
+    }
+    if ((nfc_ee[5] & 0x80) && !(nfc_ee[4] & 0x40)) {
+        nfc_ee[5] = (uint8_t)(nfc_ee[5] & 0x7F);
+        nfc_ee_write_page(NFC_EE_E4, 4);
+        wrote = 1;
+    }
+    nfc_ee_read();                  /* what the chip will load at its next power-up */
+    ok = (uint8_t)((nfc_ee[0] & 0x03) == NFC_FDP_FIELD && !(nfc_ee[5] & 0x80));
     nfc_bb_release();
     extflash_power_down();
 
-    log_puts("nfc cfg ");
-    log_hex8(before);
-    log_puts(" -> ");
-    log_hex8(after);
-    log_puts((after & 0x30) == 0 ? " fd" : " fd?");
+    log_puts("nfc fd cfg ");
+    log_hex8(nfc_ee[0]);
+    log_puts(" ");
+    log_hex8(nfc_ee[5]);
+    log_puts(wrote ? " written" : "");
+    log_puts(ok ? " ok" : " NOT field-detect (locked?)");
     log_nl();
 }

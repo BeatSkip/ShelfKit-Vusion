@@ -56,6 +56,8 @@ IMAGE_SUFFIXES = frozenset(
 # A tag announces itself on the hub's UART log as "POLL src=<node id>".
 RE_POLL = re.compile(r"^POLL src=([0-9a-fA-F]{4,8})\b")
 # the hub prints the tag's supply voltage as vdd=XXXX (volts*256, 3.00 V -> 0x0300)
+# The hub logs what it told the tag: cmd=01 "data follows, keep listening", 00 "nothing queued".
+RE_RSP = re.compile(r"^RSP ([0-9a-fA-F]{4,8}) cmd=([0-9a-fA-F]{2})\b")
 RE_POLL_VDD = re.compile(r"\bvdd=([0-9a-fA-F]{4})\b")
 
 # Average CR2450 (3 V lithium coin cell): voltage is almost flat until the cell
@@ -199,6 +201,9 @@ class App:
         # heard, and what it was last sent. Wall-clock seconds (persisted, so a
         # restart keeps the ages meaningful); ages go over the wire.
         self.tag_seen: dict[int, float] = {}
+        # addr -> (cmd in the hub's last poll reply, when): a push only reaches a tag that was
+        # told "data follows"; after cmd=00 it closes its receiver within ~250 ms
+        self.rsp_cmd: dict[int, tuple[int, float]] = {}
         self.tag_vdd: dict[int, tuple[int, float]] = {}  # addr -> (raw*256, seen_at)
         # name, when, render key (the key lets the Fleet show the frame as a thumb)
         self.tag_push: dict[int, tuple[str, float, str | None]] = {}
@@ -470,6 +475,9 @@ class App:
             if pane is None:
                 return
             pane.add(next(self._arrivals), text)
+            rsp = RE_RSP.match(text)
+            if rsp:
+                self.rsp_cmd[int(rsp.group(1), 16)] = (int(rsp.group(2), 16), time.time())
             match = RE_POLL.match(text)
             if match:
                 addr = int(match.group(1), 16)
@@ -720,6 +728,44 @@ class App:
                 f"{pane.spec.name}: {line.upper()} "
                 f"{'asserted' if getattr(pane.worker, line) else 'released'}"
             )
+
+    SEND_EOL = {"none": b"", "lf": b"\n", "cr": b"\r", "crlf": b"\r\n"}
+
+    def send_raw(self, key: str, text: str, as_hex: bool = False, eol: str = "lf") -> dict:
+        """Debug: write what the user typed to a pane's port, byte for byte.
+
+        text is sent as UTF-8, or as raw bytes when as_hex is set ("50 0A", "500a", "0x50,0x0a").
+        eol is appended after it: none | lf | cr | crlf. The line is echoed into the pane's log
+        as "# > ..." so the log shows what was sent next to what came back. This goes around
+        the command queue on purpose - it is for poking the board - so it is refused while a
+        flash owns the port.
+        """
+        pane = self.panes.get(key)
+        if pane is None:
+            return {"ok": False, "error": f"no pane {key}"}
+        if self.flash.active and self.flash.pane == key:
+            return {"ok": False, "error": f"{pane.spec.name} is being used to flash"}
+        if eol not in self.SEND_EOL:
+            return {"ok": False, "error": "eol must be none, lf, cr or crlf"}
+        if as_hex:
+            digits = re.sub(r"0x|[\s,:;_-]", "", text, flags=re.I)
+            if not digits or len(digits) % 2 or re.search(r"[^0-9a-fA-F]", digits):
+                return {"ok": False, "error": "hex needs whole bytes, e.g. 50 0A"}
+            payload = bytes.fromhex(digits)
+        else:
+            payload = text.encode("utf-8")
+        payload += self.SEND_EOL[eol]
+        if not payload:
+            return {"ok": False, "error": "nothing to send"}
+        if len(payload) > 4096:
+            return {"ok": False, "error": "at most 4096 bytes at a time"}
+        if not pane.worker.is_open:
+            return {"ok": False, "error": f"{pane.spec.name}: open the port first"}
+        if not pane.worker.write(payload):
+            return {"ok": False, "error": pane.worker.error or "write failed"}
+        shown = payload.hex(" ") if as_hex else text
+        self.note(key, f"# > {shown}{'' if as_hex else ' [' + eol.upper() + ']' if eol != 'none' else ''}")
+        return {"ok": True, "sent": len(payload)}
 
     def pulse_reset(self, key: str) -> bool:
         """Assert RTS, then release it on a timer - a push button, not a toggle.
@@ -1743,6 +1789,12 @@ class App:
                     or self.flash.blocks_hub):
                 return
             now = time.time()
+            reply = self.rsp_cmd.get(addr)
+            if reply and reply[0] == 0 and now - reply[1] < 3.0:
+                # told "nothing queued", the tag is closing its receiver: a push now would burn
+                # ~100 s of hub time on frames nobody hears. Stay pending; the caller re-arms
+                # the hub for the tag's next poll.
+                return
             job = next((j for j in self.queue
                         if j["state"] == "pending" and j["addr"] == addr
                         and j.get("not_before", 0.0) <= now), None)

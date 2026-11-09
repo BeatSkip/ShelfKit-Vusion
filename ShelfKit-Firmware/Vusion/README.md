@@ -51,7 +51,7 @@ Everything tag-specific is in one header:
 | `SHELF_POLL_ACTIVE_S`, `SHELF_POLL_COOLDOWN_S`, `SHELF_POLL_IDLE_S` | Burst (30 s), cool-down (180 s) and idle (300 s) intervals, see [Listen window and burst polling](#listen-window-and-burst-polling) |
 | `SHELF_STATS_EVERY` | Print the `pow …` link/power summary every N polls (2) |
 | `SHELF_RADIO_SLEEP`, `SHELF_RADIO_DEEPSLEEP`, `SHELF_MCU_SLEEP`, `SHELF_XTAL_OFF` | The low-power switches (all but `SHELF_XTAL_OFF` are on), see [Power](#power) |
-| `SHELF_NFC_POLL`, `SHELF_NFC_RAIL_HOLD`, `SHELF_NFC_PROBE` | The parked NFC wake-on-field work (all 0) |
+| `SHELF_NFC_POLL`, `SHELF_NFC_RAIL_HOLD`, `SHELF_NFC_PROBE` | NFC wake-on-field (1, 1, 0): a falling edge on PB3 wakes the tag and polls; the rail is held on because with it off PB3 floats and re-triggers every cycle (seen on hardware: a poll every 1.8 s). A storm guard suspends the feature for ~30 poll cycles after 4 consecutive NFC-triggered cycles |
 | `SHELF_FLASH_POWER_ON`, `SHELF_WIPE_FIRST_BOOT` | Switch the flash rail around every flash access; wipe the owned flash sectors on a first boot |
 | `SHELF_POWER_LINES` | Hold the panel supply (U4, PA5) on from boot. Not a radio setting; leave off — the image path powers the panel around each image. PA2 (U5) is always parked low |
 
@@ -110,12 +110,17 @@ also park tags itself — `L<hh>` on its console makes every reply carry a delay
 Counters reset on the first answered poll, and the day-based steps use uptime, so a
 tag that comes back into range returns to the base interval immediately.
 
-## Polling on an NFC field (parked)
+## Polling on an NFC field
 
-**Disabled for now** (`SHELF_NFC_POLL 0`); the driver and the findings are kept in
-`Documentation/nfc-field-detect.md`, and the section below describes the intended behaviour.
+**Enabled** (`SHELF_NFC_POLL 1`); measurements and the Shakedown test sequence are in
+`Documentation/nfc-field-detect.md`. At boot `nfc_cfg_fd()` reads the chip's FD configuration
+(EEPROM `0x38C` / `0x391`) and rewrites it only if it is not field-detect. Measured: idle HIGH,
+active LOW, quiet with no phone; a phone gives bursts of 1-30 ms low pulses, so the first edge
+is the event and at most `SHELF_NFC_BURST_MAX` (3) are honoured per poll cycle. While the MCU
+sleeps, the wake is a port-change interrupt on PB3 (the only pin wake sleep has), armed around
+each sleep in `shelfhw_poll()`.
 
-`SHELF_NFC_POLL` would make the tag react when someone holds a reader to the label: it flashes
+`SHELF_NFC_POLL` makes the tag react when someone holds a reader to the label: it flashes
 the **blue LED** and polls within a second instead of waiting out the interval. The LED is
 there so the feature can be tested on a battery board with nothing plugged into the serial
 port.
@@ -149,7 +154,8 @@ the NFC chip's signal, and the tag will react to the adapter. Treat anything see
 serial cable plugged in as a property of the cable; test on a battery board, which is
 what the LED is for.
 
-`SHELF_NFC_POLL 0` removes the feature and leaves PB3 untouched.
+`SHELF_NFC_POLL 0` removes the feature and leaves PB3 untouched. With a phone in the field at
+reset PB3 is low and the tag enters the bootloader, so do not reset it while holding a phone.
 
 **The chip has to be configured before it does anything.** By default that pin reports
 the NFC chip's EEPROM write-in-progress flag, not a field detect, so the firmware is inert

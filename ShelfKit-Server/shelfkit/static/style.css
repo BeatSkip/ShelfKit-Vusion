@@ -574,6 +574,9 @@ tr.failed .state-word, tr.failed .detail { color: var(--red); font-weight: 500; 
 .pane-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 8px; }
 .pane-controls .port { width: 100px; }
 .pane-controls .baud { width: 92px; }
+.pane-send { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
+.pane-send .send-text { flex: 1 1 160px; min-width: 0; font-family: var(--mono, ui-monospace, monospace); }
+.pane-send .send-hex { display: inline-flex; align-items: center; gap: 4px; font-size: var(--t-small); color: var(--ink-2); }
 .toggle-dtr.on { background: var(--ink); color: var(--on-ink); }
 .log {
   height: 340px;

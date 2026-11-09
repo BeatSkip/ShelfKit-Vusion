@@ -44,14 +44,16 @@ void disable_radio_interrupt_in_mcu_pin(void)
  * the pin-change interrupt used before fired on both edges and could not be
  * acknowledged on this part. */
 static uint8_t __xdata nfc_event;
+static uint8_t __xdata nfc_armed;      /* waiting for a reader: also arms the wake from sleep */
 
 static void nfc_irq(void) __interrupt(INT_EXTERNAL1)
 {
-    /* The pin is open drain and active low, so only a low level is a reader. If
-     * EXTIRQ ends up in a level mode - its reset value is 00 = level high - the
-     * idle level would otherwise count as an endless stream of arrivals. */
-    if (!(PORTB & 0x08))
-        nfc_event = 1;
+    /* EXTIRQ1 is armed for a falling edge (shelfhw_nfc_arm), so being here is the event. The
+     * pin cannot be checked: a phone's pulses are 1-30 ms, and PORTB would be the wrong
+     * register anyway - it is the output latch (always 1 for an input with the pull-up),
+     * the pin is read from PINB. */
+    nfc_event = 1;              /* 1 = the EXTIRQ1 edge interrupt */
+    nfc_armed = 0;
     IE &= (uint8_t)~0x04;           /* IE.2 off: one shot until re-armed */
 }
 
@@ -59,6 +61,7 @@ void shelfhw_nfc_arm(void)
 {
     /* bits 5:4 = 11 (falling edge), bit 6 = 0 (Port B.3) */
     EXTIRQ = (uint8_t)((EXTIRQ & (uint8_t)~0x70) | 0x30);
+    nfc_armed = 1;
     IE |= 0x04;                     /* IE.2 = External 1 interrupt */
 }
 
@@ -77,7 +80,7 @@ uint8_t shelfhw_nfc_take(void)
 
 uint8_t shelfhw_nfc_level(void)
 {
-    return (uint8_t)((PORTB & 0x08) ? 1 : 0);
+    return (uint8_t)((PINB & 0x08) ? 1 : 0);      /* the pin, not the PORTB latch */
 }
 #endif
 
@@ -568,6 +571,16 @@ void shelfhw_poll(void)
 
     EA = 0;
     IE_1 = 1;                       /* wake-up timer (vector 1) ends the idle; no ISR runs, EA is off */
+#if SHELF_NFC_POLL
+    if (nfc_armed) {
+        /* Sleep wakes only on the wake-up timer or a port-change interrupt (AND9349/D, power
+         * modes); standby wakes on any enabled interrupt, which EXTIRQ1 already is. So also
+         * watch PB3 for a change: the field-detect line is quiet unless a reader is there. */
+        (void)PINCHGB;              /* clear the old change flags */
+        INTCHGB |= 0x08;
+        IE_3 = 1;
+    }
+#endif
 #if SHELF_MCU_SLEEP
     /* Sleep is 85 uA -> ~1.5 uA. CANSLEEPCONT makes libmf save SP + a signature so
      * the startup returns here instead of restarting at 0x0000; CANSLEEP is the
@@ -592,6 +605,18 @@ void shelfhw_poll(void)
             enable_radio_interrupt_in_mcu_pin();
         }
     }
+#if SHELF_NFC_POLL
+    if (nfc_armed) {
+        if (PINCHGB & 0x08) {       /* PB3 moved while we idled: a reader */
+            nfc_event = 2;          /* 2 = port-change wake from sleep/standby */
+            nfc_armed = 0;
+        }
+        INTCHGB &= (uint8_t)~0x08;
+        IE_3 = 0;                   /* never let the GPIO interrupt reach a handler */
+        if (nfc_armed)
+            shelfhw_nfc_arm();      /* sleep reset EXTIRQ and IE: set them up again */
+    }
+#endif
     IE_1 = 0;
     EA = 1;
 
