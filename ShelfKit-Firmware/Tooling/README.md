@@ -136,3 +136,14 @@ SDCC must be on `PATH` or in its default Windows install (`C:\Program Files\SDCC
 Hub and Logs screens, which merge the logs, keep them across restarts and add the image push. The
 second lost its test sources (`tooling/tests/*.c`) and could no longer run; if the protocol needs
 regression tests again, they have to be restored from git history first.
+
+## Versions and the build log
+
+`build-all.py` stamps every build with the numbers in `ShelfKit-Firmware/version.json`
+(`major.minor.patch` plus a build counter). Each run adds 1 to the build number;
+`--bump` raises the patch number first (`--bump minor` / `--bump major` for the others,
+which reset the lower parts). The numbers are compiled into the tag and the hub
+(`SHELF_FW_*`, `Shared/firmware/shelflink/inc/shelfver.h`) and each run appends a line to
+`ShelfKit-Firmware/build-log.md`: date, version, build, git commit (`dirty` when the tree had
+uncommitted changes) and the SHA-256 of every image. A tag reports its version and power stats
+when it is tapped with a phone (see `Documentation/nfc-field-detect.md`); look the build up in the log.

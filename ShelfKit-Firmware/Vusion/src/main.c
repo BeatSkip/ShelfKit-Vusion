@@ -18,6 +18,7 @@
 #include "shelfhw.h"
 #include "shelflink.h"
 #include "shelfmsg.h"
+#include "shelfver.h"
 #include "shelf_config.h"
 #include "fw_rx.h"
 #include "img_rx.h"
@@ -26,7 +27,11 @@
 #include "nfc_cfg.h"
 
 static struct wtimer_desc __xdata poll_timer;
-static uint8_t __xdata poll_payload[SM_POLL_LEN];
+static uint8_t __xdata poll_payload[SM_POLL_EXT_LEN];
+static uint8_t __xdata poll_len;
+/* the poll for a tap carries the firmware version and the power figures; it stays set until
+ * one such poll was acknowledged, so the 5 s follow-up repeats it if the first was lost */
+static uint8_t __xdata nfc_info;
 static uint8_t __xdata last_attempts;
 static int8_t __xdata last_hub_rssi;
 static uint16_t __xdata polls_done;
@@ -134,6 +139,20 @@ static uint32_t next_interval(void) __reentrant
     return interval;
 }
 
+/* the software ammeter's numbers, refreshed from the counters */
+static void pow_update(void)
+{
+    pow_awake_ms = shelfhw_awake_ticks() * 1000u / SHELFHW_TICKS_PER_S;
+    pow_radio_ms = shelfhw_radio_on_ticks() * 1000u / SHELFHW_TICKS_PER_S;
+    pow_asleep_s = shelfhw_asleep_ticks() / SHELFHW_TICKS_PER_S;
+    pow_total_ms = pow_awake_ms + pow_asleep_s * 1000u;
+    /* datasheet currents: MCU running ~3 mA, receiver +9.5 mA, sleep 3 uA */
+    pow_ua = pow_total_ms
+        ? (pow_awake_ms * 3000u + pow_radio_ms * 9500u + pow_asleep_s * 1000u * 3u)
+          / pow_total_ms
+        : 0;
+}
+
 static void log_stats(void)
 {
     log_puts("stats req=");
@@ -156,15 +175,7 @@ static void log_stats(void)
      * Multiply by the datasheet currents to get the average draw:
      *   I = (awake_ms * 3 mA + radio_ms * 9.5 mA + asleep_s * 1000 * 0.002 mA)
      *       / (awake_ms + asleep_s * 1000) */
-    pow_awake_ms = shelfhw_awake_ticks() * 1000u / SHELFHW_TICKS_PER_S;
-    pow_radio_ms = shelfhw_radio_on_ticks() * 1000u / SHELFHW_TICKS_PER_S;
-    pow_asleep_s = shelfhw_asleep_ticks() / SHELFHW_TICKS_PER_S;
-    pow_total_ms = pow_awake_ms + pow_asleep_s * 1000u;
-    /* datasheet currents: MCU running ~3 mA, receiver +9.5 mA, sleep 3 uA */
-    pow_ua = pow_total_ms
-        ? (pow_awake_ms * 3000u + pow_radio_ms * 9500u + pow_asleep_s * 1000u * 3u)
-          / pow_total_ms
-        : 0;
+    pow_update();
 
     log_puts("pow awake=");
     log_dec32(pow_awake_ms);
@@ -267,6 +278,7 @@ static void on_done(const struct sl_done __xdata *done)
      * which is exactly the heat that shows up on the panel. */
     if (done->result == SL_OK) {
         fails = 0;
+        nfc_info = 0;      /* the hub has the version now */
         log_puts("poll ok att=");
         log_dec(done->attempts);
         log_puts(" rssi=");
@@ -416,7 +428,29 @@ static void poll_cb(struct wtimer_desc __xdata *desc)
         poll_payload[SM_POLL_VDD_HI] = (uint8_t)(vdd >> 8);
     }
 
-    if (sl_send(SL_NODE_HUB, SL_T_POLL, poll_payload, SM_POLL_LEN) != SL_OK) {
+    poll_len = SM_POLL_LEN;
+    if (nfc_info) {
+        /* only for a poll the user started with a tap: which firmware this is and how
+         * the battery is doing. Nothing extra goes over the air on a normal poll. */
+        pow_update();
+        /* the same bytes a tool reads from the .hex: one source of truth */
+        poll_payload[SM_POLL_FW_MAJOR] = shelf_fw_info[SHELF_FW_INFO_MAJOR];
+        poll_payload[SM_POLL_FW_MINOR] = shelf_fw_info[SHELF_FW_INFO_MINOR];
+        poll_payload[SM_POLL_FW_PATCH] = shelf_fw_info[SHELF_FW_INFO_PATCH];
+        poll_payload[SM_POLL_FW_BUILD_LO] = shelf_fw_info[SHELF_FW_INFO_BLO];
+        poll_payload[SM_POLL_FW_BUILD_HI] = shelf_fw_info[SHELF_FW_INFO_BHI];
+        if (pow_ua > 0xFFFFUL)
+            pow_ua = 0xFFFFUL;
+        poll_payload[SM_POLL_AVG_UA_LO] = (uint8_t)pow_ua;
+        poll_payload[SM_POLL_AVG_UA_HI] = (uint8_t)(pow_ua >> 8);
+        pow_total_ms = pow_ua ? 25833UL / pow_ua : 0xFFFFUL;   /* days on a 620 mAh cell */
+        if (pow_total_ms > 0xFFFFUL)
+            pow_total_ms = 0xFFFFUL;
+        poll_payload[SM_POLL_LIFE_D_LO] = (uint8_t)pow_total_ms;
+        poll_payload[SM_POLL_LIFE_D_HI] = (uint8_t)(pow_total_ms >> 8);
+        poll_len = SM_POLL_EXT_LEN;
+    }
+    if (sl_send(SL_NODE_HUB, SL_T_POLL, poll_payload, poll_len) != SL_OK) {
         log_puts("poll skipped, previous still in flight\r\n");
         arm_poll(SHELF_POLL_INTERVAL_S);   /* no callback will come, re-arm here */
     }
@@ -457,6 +491,14 @@ void main(void)
     log_puts(" net ");
     log_hex8(SHELF_NET_ID);
     log_puts(" dump=1");
+    log_puts(" fw=");
+    log_dec(SHELF_FW_MAJOR);
+    log_puts(".");
+    log_dec(SHELF_FW_MINOR);
+    log_puts(".");
+    log_dec(SHELF_FW_PATCH);
+    log_puts("-");
+    log_dec(SHELF_FW_BUILD);
     log_nl();
 
     r = sl_init(node_id, SHELF_NET_ID, on_rx, on_done);
@@ -479,6 +521,7 @@ void main(void)
     log_dec(SHELF_POLL_INTERVAL_S);
     log_puts(" s");
     log_nl();
+    shelfhw_log_boot_done();
     shelfhw_led_pulse(SHELFHW_LED_BLUE, SHELFHW_LED_BOOT_PULSE_MS);
 
     poll_timer.handler = poll_cb;
@@ -496,13 +539,14 @@ void main(void)
             if (nfc_burst < SHELF_NFC_BURST_MAX) {
                 nfc_burst++;
                 nfc_seen = 1;
+                nfc_info = 1;           /* this poll carries version + power stats */
                 nfc_follow = 1;         /* and once more 5 s after the tap */
                 /* A reader appeared. The LED is the point: on a battery board with no
                  * serial attached it is the only way to see that the field-detect line
                  * works. Then poll while the phone is still there. */
                 shelfhw_led_pulse(SHELFHW_LED_BLUE, SHELFHW_LED_PULSE_MS);
                 log_puts(nfc_src == 2 ? "nfc field (wake) pb3=" : "nfc field (irq) pb3=");
-                log_dec(shelfhw_nfc_level());
+                log_dec((uint16_t)(shelfhw_nfc_level() & 1u));
                 log_nl();
                 arm_poll(1);
             } else if (nfc_burst == SHELF_NFC_BURST_MAX) {

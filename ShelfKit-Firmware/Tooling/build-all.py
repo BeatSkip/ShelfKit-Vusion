@@ -4,6 +4,10 @@
     python ShelfKit-Firmware/Tooling/build-all.py
     python ShelfKit-Firmware/Tooling/build-all.py --version 1.2.0
     python ShelfKit-Firmware/Tooling/build-all.py --targets vusion,bootloader
+    python ShelfKit-Firmware/Tooling/build-all.py --bump          # patch + 1 (or minor/major)
+    python ShelfKit-Firmware/Tooling/build-all.py --set 1.0.0
+    python ShelfKit-Firmware/Tooling/build-all.py --targets vusion,bootloader \\
+        --define SHELF_LOG_UART=1 --out Release/debug-log     # a tag with its serial log on
 
 Each target is built with the same flags SDCC-MDF uses, because they are read from
 the target's own ``sdcc-project.json`` and the board definition it names:
@@ -22,6 +26,16 @@ repository root. Names are stable: ``<target>-latest.hex``, or
 folder are removed first, so a stale build cannot be flashed by mistake and the
 folder never accumulates copies. Nothing in ``build/`` is touched, so a VS Code
 build and this script never fight over object files.
+
+Version stamping: ``ShelfKit-Firmware/version.json`` holds major.minor.patch and a build
+counter. Every successful run adds 1 to the build counter; ``--bump`` (``patch`` by default,
+or ``minor`` / ``major``) raises the version first and resets the lower parts;
+``--set X.Y.Z`` sets it outright. A build is named ``version-build``, like ``1.0.0-5``,
+everywhere it appears.
+The numbers are compiled into every target (SHELF_FW_MAJOR/MINOR/PATCH/BUILD, see
+Shared/firmware/shelflink/inc/shelfver.h), and a line with the version, build, git commit
+and the hash of each image is appended to ``ShelfKit-Firmware/build-log.md`` - that file is
+how you find out what a tag with a given version/build is actually running.
 
 Requires SDCC on ``PATH`` or in its default Windows install.
 """
@@ -43,6 +57,8 @@ HERE = Path(__file__).resolve().parent
 FIRMWARE = HERE.parent
 REPO = FIRMWARE.parent
 DEFAULT_OUT = REPO / "Release"
+VERSION_FILE = FIRMWARE / "version.json"
+BUILD_LOG = FIRMWARE / "build-log.md"
 SDCC_DIRS = [Path(r"C:\Program Files\SDCC\bin"), Path(r"C:\Program Files (x86)\SDCC\bin")]
 SOURCE_SUFFIXES = {".c", ".asm"}
 # folder name -> the name you pass to --targets
@@ -174,6 +190,92 @@ def git(*args: str) -> str:
     return result.stdout.strip() if result.returncode == 0 else ""
 
 
+def load_version() -> dict:
+    try:
+        data = json.loads(VERSION_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        data = {}
+    return {key: int(data.get(key, 0)) for key in ("major", "minor", "patch", "build")}
+
+
+def bump_version(version: dict, part: str | None, set_to: str | None = None) -> dict:
+    """The next build's numbers: build + 1 always, the version only when asked."""
+    out = dict(version)
+    if set_to:
+        out.update(zip(("major", "minor", "patch"), (int(n) for n in set_to.split("."))))
+    if part == "major":
+        out.update(major=out["major"] + 1, minor=0, patch=0)
+    elif part == "minor":
+        out.update(minor=out["minor"] + 1, patch=0)
+    elif part == "patch":
+        out["patch"] += 1
+    out["build"] = (out["build"] + 1) & 0xFFFF      # it travels in 16 bits
+    return out
+
+
+def version_text(version: dict) -> str:
+    return f"{version['major']}.{version['minor']}.{version['patch']}-{version['build']}"
+
+
+def version_defines(version: dict) -> list[str]:
+    return [f"-DSHELF_FW_MAJOR={version['major']}", f"-DSHELF_FW_MINOR={version['minor']}",
+            f"-DSHELF_FW_PATCH={version['patch']}", f"-DSHELF_FW_BUILD={version['build']}"]
+
+
+def write_build_log(version: dict, results: list[dict], part: str | None) -> None:
+    """Remember the build: version.json is the counter, build-log.md the history."""
+    VERSION_FILE.write_text(json.dumps(version, indent=2) + "\n", encoding="utf-8")
+    commit = git("rev-parse", "--short", "HEAD") or "no-git"
+    dirty = bool(git("status", "--porcelain", "--", "ShelfKit-Firmware", "Documentation"))
+    if not BUILD_LOG.exists():
+        BUILD_LOG.write_text(
+            "# Firmware build log\n\n"
+            "Appended by `Tooling/build-all.py`. `dirty` = the build had uncommitted changes, "
+            "so the commit alone does not reproduce it. The hash is the first 16 hex digits of "
+            "the SHA-256 of the .hex file.\n\n"
+            "| date | version | build | commit | images |\n|---|---|---|---|---|\n",
+            encoding="utf-8")
+    images = "; ".join(f"{row['target']} {row['sha256']} ({row['bytes']} B)" for row in results)
+    note = f" (version bump: {part})" if part else ""
+    with BUILD_LOG.open("a", encoding="utf-8") as log:
+        log.write(f"| {datetime.now():%Y-%m-%d %H:%M} | {version['major']}.{version['minor']}."
+                  f"{version['patch']} | {version['build']} | {commit}{' dirty' if dirty else ''} "
+                  f"| {images}{note} |\n")
+
+
+def find_marker(cells: dict[int, int]) -> tuple[int, int, int, int] | None:
+    """The version stamped into an image (shelfver.h), or None: (major, minor, patch, build).
+
+    'SKFW', major, minor, patch, build (LE16), check - 10 bytes summing to 0 mod 256.
+    """
+    magic = b"SKFW"
+    for start in sorted(cells):
+        if cells.get(start) != magic[0]:
+            continue
+        got = [cells.get(start + i) for i in range(10)]
+        if None in got:
+            continue
+        raw = bytes(got)
+        if raw[:4] != magic or sum(raw) & 0xFF:
+            continue
+        return raw[4], raw[5], raw[6], raw[7] | (raw[8] << 8)
+    return None
+
+
+def verify_stamp(rows: list[dict], version: dict) -> bool:
+    """Every tag/hub image must carry exactly the numbers this run stamped."""
+    wanted = (version["major"], version["minor"], version["patch"], version["build"])
+    good = True
+    for row in rows:
+        if row["target"] == "Bootloader":
+            continue                    # it has no version of its own
+        found = find_marker(read_hex(row["hex"]))
+        if found != wanted:
+            print(f"\n!!! {row['hex'].name}: version marker is {found}, expected {wanted}")
+            good = False
+    return good
+
+
 def build_stem(name: str, version: str | None) -> str:
     """``<name>-<version>``, or ``<name>-latest`` when no version was given."""
     return f"{name}-{version}" if version else f"{name}-latest"
@@ -210,7 +312,8 @@ def mem_usage(map_mem: Path) -> str:
 
 
 # ── one target ─────────────────────────────────────────────────────────────
-def build_target(folder: str, out_dir: Path, version: str | None, clean: bool) -> dict:
+def build_target(folder: str, out_dir: Path, version: str | None, clean: bool,
+                 stamp: list[str] | None = None, extra: list[str] | None = None) -> dict:
     root = FIRMWARE / folder
     project = load_project(root)
     board = load_board(root, project)
@@ -219,7 +322,7 @@ def build_target(folder: str, out_dir: Path, version: str | None, clean: bool) -
     build = project.get("build") or {}
     name = build.get("output_name") or "firmware"
     flags = board_flags(board) + [str(flag) for flag in build.get("flags") or []]
-    defines = [f"-D{d}" for d in project.get("defines") or []]
+    defines = [f"-D{d}" for d in project.get("defines") or []] + list(stamp or []) + [f"-D{d}" for d in extra or []]
     include_flags = [f"-I{inc}" for inc in includes]
 
     sdcc = find_tool("sdcc")
@@ -399,12 +502,22 @@ def main(argv: list[str] | None = None) -> int:
                         help="comma separated: " + ", ".join(TARGETS) + " (default all)")
     parser.add_argument("--version",
                         help="name the files <target>-<version>.hex (default: <target>-latest.hex)")
+    parser.add_argument("--bump", nargs="?", const="patch", choices=["major", "minor", "patch"],
+                        help="raise the firmware version first (default part: patch); the build "
+                             "number goes up on every run regardless")
+    parser.add_argument("--set", dest="set_to", metavar="X.Y.Z",
+                        help="set the firmware version outright (the build number still goes up)")
+    parser.add_argument("--define", action="append", default=[], metavar="NAME[=VALUE]",
+                        help="extra -D for every target, e.g. SHELF_LOG_UART=1 (repeatable); "
+                             "use it with --out so the normal Release/ is left alone")
     parser.add_argument("--out", default=str(DEFAULT_OUT), help=f"output folder (default {DEFAULT_OUT})")
     parser.add_argument("--clean", action="store_true",
                         help="accepted for compatibility; old .hex/.map are always removed")
     parser.add_argument("--no-bundle", action="store_true",
                         help="do not also write the bootloader+application HEX")
     args = parser.parse_args(argv)
+    if args.set_to and not re.fullmatch(r"\d{1,3}\.\d{1,3}\.\d{1,3}", args.set_to):
+        parser.error("--set wants X.Y.Z, for example 1.0.0")
 
     if args.targets.strip().lower() == "all":
         chosen = list(TARGETS.values())
@@ -424,7 +537,15 @@ def main(argv: list[str] | None = None) -> int:
 
     print(f"SDCC {find_tool('sdcc')}")
     print(f"output {out_dir}")
-    results = [build_target(folder, out_dir, args.version, args.clean) for folder in chosen]
+    stamped = bump_version(load_version(), args.bump, args.set_to)
+    print(f"firmware version {version_text(stamped)}"
+          + (f"  (--bump {args.bump})" if args.bump else ""))
+    stamp = version_defines(stamped)
+    results = [build_target(folder, out_dir, args.version, args.clean, stamp, args.define) for folder in chosen]
+    if not verify_stamp(results, stamped):
+        return 1
+    print("  version marker in the images: ok")
+    write_build_log(stamped, results, args.bump)
 
     if not args.no_bundle and "Vusion" in chosen and "Bootloader" in chosen:
         by_target = {row["target"]: row["hex"] for row in results}
@@ -440,7 +561,7 @@ def main(argv: list[str] | None = None) -> int:
             print("    it flashes over the wire, but ota-send.py and the server will refuse it.")
             print("    Free space in the application, or move bytes out of it.")
 
-    print("\n=== ready to flash ===")
+    print(f"\n=== ready to flash: firmware {version_text(stamped)}, logged in {display(BUILD_LOG)} ===")
     for row in results:
         print(f"  {row['hex'].name:<44} {row['bytes']:>8} bytes  {row['usage']}")
     full = locals().get("full_hex")

@@ -15,6 +15,7 @@
 #include <libmfwtimer.h>
 #include <libmfuart.h>
 #include <libmfuart0.h>
+#include "shelfver.h"
 #include "axradio.h"
 #include "shelf_config.h"   /* the per-target power switches live here */
 #include "shelfhw.h"
@@ -174,6 +175,31 @@ uint16_t shelfhw_random(void)
 
 /* ── UART0 TX log (register level, avoids the libmf FIFO tables) ─────── */
 
+/* 0 = the UART is never started and every log_* call returns at once. The tag is not
+ * wired to a serial adapter in the field, so it prints nothing by default (shelf_config.h):
+ * no UART/baud-timer running while awake, and no CPU time spent waiting for characters
+ * to leave (~87 us each at 115200, a few hundred per poll cycle). The hub and the
+ * Shakedown keep the default 1. */
+#ifndef SHELF_LOG_UART
+#define SHELF_LOG_UART 1
+#endif
+/* Tests for a tag that stops polling with the log off: the UART is started as usual but
+ * 0 = print always, 1 = never, 2 = print during boot, quiet from shelfhw_log_boot_done() on,
+ * 3 = quiet during boot, print from then on. */
+#ifndef SHELF_LOG_MUTE
+#define SHELF_LOG_MUTE 0
+#endif
+#if SHELF_LOG_UART
+static uint8_t __xdata log_quiet;
+
+void shelfhw_log_boot_done(void)
+{
+    log_quiet = (uint8_t)(SHELF_LOG_MUTE == 1 || SHELF_LOG_MUTE == 2);
+}
+#else
+void shelfhw_log_boot_done(void) {}
+#endif
+
 /* The AX8052 UART has a ONE byte receive buffer, and the hub prints a line for
  * every frame it sends. A host command arriving during that print lost bytes and
  * arrived as "ERR chk" / "ERR len", which is exactly what stalled an image push
@@ -207,14 +233,25 @@ static void host_rx_pump(void)
 
 void log_putc(uint8_t c)
 {
+#if !SHELF_LOG_UART
+    (void)c;
+    return;
+#else
+    if (log_quiet)
+        return;
     while (!(U0STATUS & 0x04))      /* wait for U0TXEMPTY */
         host_rx_pump();             /* free time: swallow anything arriving */
     U0SHREG = c;
     U0CTRL |= 0x08;                 /* arm the TX-done flag, like iocore */
+#endif
 }
 
 void log_puts(const char *s)
 {
+#if !SHELF_LOG_UART
+    (void)s;
+    return;
+#endif
     while (*s)
         log_putc((uint8_t)*s++);
 }
@@ -326,8 +363,13 @@ void shelfhw_init(void)
     DIRR = 0x15;
     axradio_setup_pincfg1();
 
-    /* UART0 TX on PB4. RX stays disabled so PB5 (EPD reset) is untouched. */
+    /* UART0 TX on PB4. RX stays disabled so PB5 (EPD reset) is untouched. With the log
+     * off the pin is a plain output held high (nothing is connected to it). */
+#if SHELF_LOG_UART
     PALTB |= 0x10;
+#else
+    PALTB &= (uint8_t)~0x10;
+#endif
     DIRB |= 0x10;
     PORTB |= 0x10;
 
@@ -385,8 +427,11 @@ void shelfhw_init(void)
     /* 115200: the timer reload rounds to 11 from 20 MHz (113.6 kbaud, 1.4% low,
      * the same rounding 38400 already had). Both boards and their bootloaders
      * have to agree, so the baud lives next to the UART setup on both sides. */
+#if SHELF_LOG_UART
     uart_timer0_baud(CLKSRC_FRCOSC, 115200, 20000000);
     uart0_init(0, 8, 1);
+    log_quiet = (uint8_t)(SHELF_LOG_MUTE == 1 || SHELF_LOG_MUTE == 3);
+#endif
 
     IE = 0x40;
     EIE = 0x00;
@@ -475,6 +520,16 @@ uint32_t shelfhw_radio_on_ticks(void)
     return meter_radio;
 }
 
+/* The log lines around the radio's sleep and wake used to hold the CPU for 1-3 ms each (87 us
+ * per character at 115200). A tag with the log muted locked up while the same build with the
+ * log on ran fine, so that gap was doing real work: the radio engine needs a moment after a
+ * mode change before the next SPI access. Make it explicit instead of a side effect. */
+static void radio_settle(uint8_t n100us)
+{
+    while (n100us--)
+        delay(100);
+}
+
 void shelfhw_radio_sleep(void)
 {
     /* close the radio-on interval */
@@ -491,6 +546,7 @@ void shelfhw_radio_sleep(void)
         uint8_t err = axradio_set_mode(AXRADIO_MODE_DEEPSLEEP);
 
         radio_deep = (uint8_t)(err == AXRADIO_ERR_NOERROR);
+        radio_settle(16);           /* ~1.6 ms: what the "rslp" log line took */
         /* The engine's own view, logged whether or not it worked: err != 0 means
          * the transceiver never went down, and then every "off" period is at
          * receiver current. mode==2 (AXRADIO_MODE_DEEPSLEEP) is the engine
@@ -544,6 +600,7 @@ uint8_t shelfhw_radio_wake(void)
     /* The wake protocol leaves PORTR at 0xEB, which includes pull-ups on PR6/PR7.
      * sl_init() removes them after the first bring-up; do the same here, or those
      * pins stay pulled up for every later transmission. */
+    radio_settle(30);               /* ~3 ms: the wake log + register snapshot used to sit here */
     axradio_setup_pincfg2();
     if (err == AXRADIO_ERR_NOERROR) {
         radio_deep = 0;
@@ -622,3 +679,14 @@ void shelfhw_poll(void)
 
     meter_asleep += (uint16_t)(wtimer0_curtime() - t0);
 }
+
+/* The build stamp as data, so the version can be read from a .hex file (see shelfver.h). Not
+ * static, so the linker keeps it even though only the tap poll reads it. */
+#define FWI_SUM (0x53 + 0x4B + 0x46 + 0x57 + SHELF_FW_MAJOR + SHELF_FW_MINOR + SHELF_FW_PATCH \
+                 + (SHELF_FW_BUILD & 0xFF) + ((SHELF_FW_BUILD >> 8) & 0xFF))
+const __code unsigned char shelf_fw_info[SHELF_FW_INFO_LEN] = {
+    'S', 'K', 'F', 'W',
+    SHELF_FW_MAJOR, SHELF_FW_MINOR, SHELF_FW_PATCH,
+    (SHELF_FW_BUILD & 0xFF), ((SHELF_FW_BUILD >> 8) & 0xFF),
+    (0x100 - (FWI_SUM & 0xFF)) & 0xFF
+};

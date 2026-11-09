@@ -335,8 +335,13 @@ banner, black and red patches) and carries what a tag in hand needs:
 | wireless id, large | the tag's current node id |
 | alias | the tag's alias, if it has one |
 | note | the tag's **notes** field, or a one-off `note` in the request |
+| firmware | version and build the tag last reported (a phone tap makes it send them), or "not reported" |
+| battery | voltage, a battery symbol and the rough percentage from the last poll, or "not reported" |
 | timestamp | when the label was drawn (`YYYY-MM-DD HH:MM`) |
 | B/W/R patches | a panel that has lost a colour is obvious next to them |
+
+Text is drawn with anti-aliasing off, in hinted fonts (Tahoma, Consolas) at whole-pixel
+sizes, because thresholded anti-aliased text comes out ragged on a 1-bit panel.
 
 It is drawn at 152×296 and rendered with `fit=stretch, dither=threshold` — dithering
 text makes it illegible — through the same pipeline as every other image, so what

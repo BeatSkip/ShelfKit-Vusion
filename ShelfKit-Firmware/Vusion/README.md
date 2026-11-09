@@ -331,3 +331,12 @@ re-running the decoder from the top for each band, because chains only walk down
 image ends "incomplete". Plain `CHUNK`s still work (the server uses them when a plane does not
 compress below the buffer, e.g. dithered photos). Old firmware does not understand ZCHUNK/ZEND:
 flash all tags before pushing with this server.
+
+## Serial log is off by default
+
+`SHELF_LOG_UART` is 0 in `include/shelf_config.h`: the tag does not start its UART and prints
+nothing, since it is not wired to a serial adapter in service. That saves the baud timer, the UART
+and the CPU time spent waiting for characters (about 1 KB of code too). Set it to 1 (or build with
+`-DSHELF_LOG_UART=1`) to watch the tag on PB4 while developing. A tapped poll also carries the firmware
+version, build and power stats to the hub (`fw=0.0.1+7 avg=50uA life=516d` on the hub's POLL line); the
+server keeps the latest per tag and shows it in the tag panel.

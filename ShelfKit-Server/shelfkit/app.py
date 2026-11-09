@@ -58,6 +58,9 @@ RE_POLL = re.compile(r"^POLL src=([0-9a-fA-F]{4,8})\b")
 # the hub prints the tag's supply voltage as vdd=XXXX (volts*256, 3.00 V -> 0x0300)
 # The hub logs what it told the tag: cmd=01 "data follows, keep listening", 00 "nothing queued".
 RE_RSP = re.compile(r"^RSP ([0-9a-fA-F]{4,8}) cmd=([0-9a-fA-F]{2})\b")
+# Only a poll the user started by tapping the tag carries these (firmware version + power):
+#   POLL src=15b3 ... fw=0.0.1-7 avg=50uA life=516d
+RE_POLL_FW = re.compile(r"\bfw=(\d+)\.(\d+)\.(\d+)-(\d+) avg=(\d+)uA life=(\d+)d\b")
 RE_POLL_VDD = re.compile(r"\bvdd=([0-9a-fA-F]{4})\b")
 
 # Average CR2450 (3 V lithium coin cell): voltage is almost flat until the cell
@@ -205,6 +208,8 @@ class App:
         # told "data follows"; after cmd=00 it closes its receiver within ~250 ms
         self.rsp_cmd: dict[int, tuple[int, float]] = {}
         self.tag_vdd: dict[int, tuple[int, float]] = {}  # addr -> (raw*256, seen_at)
+        # addr -> what the tag reported on its last tapped poll: firmware, power, when
+        self.tag_fw: dict[int, dict] = {}
         # name, when, render key (the key lets the Fleet show the frame as a thumb)
         self.tag_push: dict[int, tuple[str, float, str | None]] = {}
         # Editable per tag: alias, notes, and fleet-map position
@@ -278,6 +283,12 @@ class App:
             self.tags[addr] = int(row["seen_count"] or 0)
             if row["last_seen"]:
                 self.tag_seen[addr] = float(row["last_seen"])
+            if row.get("fw_version") is not None and row.get("fw_at"):
+                self.tag_fw[addr] = {
+                    "version": row["fw_version"], "build": int(row["fw_build"] or 0),
+                    "avg_ua": int(row["avg_ua"] or 0), "life_days": int(row["life_days"] or 0),
+                    "at": float(row["fw_at"]),
+                }
             if row["push_name"]:
                 self.tag_push[addr] = (
                     row["push_name"],
@@ -470,6 +481,8 @@ class App:
         event: tuple[str, str | None, str | None] | None = None
         counted: int | None = None
         hub_booted = False
+        fw_event = None
+        fw_store = None
         with self.lock:
             pane = self.panes.get(key)
             if pane is None:
@@ -483,6 +496,16 @@ class App:
                 addr = int(match.group(1), 16)
                 self.tags[addr] = self.tags.get(addr, 0) + 1
                 self.tag_seen[addr] = time.time()
+                fw = RE_POLL_FW.search(text)
+                if fw:
+                    major, minor, patch, build, avg, life = (int(g) for g in fw.groups())
+                    self.tag_fw[addr] = {
+                        "version": f"{major}.{minor}.{patch}", "build": build,
+                        "avg_ua": avg, "life_days": life, "at": time.time(),
+                    }
+                    fw_store = (f"{addr:04X}", self.tag_fw[addr])
+                    fw_event = ("firmware", f"{addr:04X}",
+                                f"{major}.{minor}.{patch}-{build}, avg {avg} uA, ~{life} d")
                 vdd = RE_POLL_VDD.search(text)
                 if vdd:
                     self.tag_vdd[addr] = (int(vdd.group(1), 16), time.time())
@@ -506,6 +529,12 @@ class App:
             self._rearm_pending()               # a reset hub forgot every pre-arm
         if event is not None:
             self._event(*event)
+        if fw_store is not None and self.store is not None:
+            hex_id, info = fw_store      # the latest report per tag survives a restart
+            self.store.record_fw(hex_id, info["version"], info["build"],
+                                 info["avg_ua"], info["life_days"], info["at"])
+        if fw_event is not None:
+            self._event(*fw_event)
         if learn:
             self._learn_boot_state(key)
 
@@ -570,6 +599,7 @@ class App:
                     "row": meta.get("row"),
                     "col": meta.get("col"),
                     "vdd": self._vdd_of(addr, now),
+                    "fw": self._fw_of(addr, now),
                     "push": (
                         {
                             "name": push[0],
@@ -994,6 +1024,7 @@ class App:
                 "size": stat.st_size,
                 "at": round(stat.st_mtime, 1),
                 "ok": not path.name.count("-full-"),   # a bundle carries the bootloader
+                "build": (firmware.file_info(path) or {}).get("text"),   # version+build stamped in it
             })
         return found
 
@@ -1026,7 +1057,9 @@ class App:
             self.status = f"flashing {Path(path).name} to {addr:04X} ..."
             cancel = self._cancel
         name = Path(path).name
-        self._event("flash", f"{addr:04X}", f"{name} ({len(image)} B)")
+        stamp = firmware.build_info(image)
+        self._event("flash", f"{addr:04X}",
+                    f"{name} ({len(image)} B" + (f", {stamp['text']}" if stamp else "") + ")")
         threading.Thread(
             target=self._flash_worker,
             args=(key, addr, image, name, cancel),
@@ -1311,11 +1344,13 @@ class App:
             meta = self.tag_meta.get(addr) or {}
             used_alias = alias if alias is not None else meta.get("alias")
             used_note = note if note is not None else meta.get("notes")
+            now = time.time()
+            fw, vdd = self._fw_of(addr, now), self._vdd_of(addr, now)
         used_note = (used_note or "").strip()
 
         path = REPO_ROOT / "ShelfKit-Server" / "data" / "service" / f"service-{addr:04X}.png"
         try:
-            service_image.write(path, addr, used_alias, used_note)
+            service_image.write(path, addr, used_alias, used_note, fw=fw, battery=vdd)
         except Exception as exc:  # noqa: BLE001 - Pillow or font trouble
             return {"ok": False, "error": f"cannot draw the label: {exc}"}
 
@@ -1360,6 +1395,13 @@ class App:
             self.status = f"{addr:04X} wiped, it will come back with a new id"
         return {"ok": True, "old": f"{addr:04X}"}
 
+    def _fw_of(self, addr: int, now: float) -> dict | None:
+        """Firmware version and power figures from the tag's last tapped poll, if any."""
+        info = self.tag_fw.get(addr)
+        if info is None:
+            return None
+        return {**info, "age": round(now - info["at"], 1)}
+
     def _vdd_of(self, addr: int, now: float) -> dict | None:
         """The last reported supply voltage, or None if none has arrived yet."""
         pair = self.tag_vdd.get(addr)
@@ -1373,7 +1415,7 @@ class App:
     def _rename_tag(self, old: int, new: int) -> None:
         """Re-key every in-memory table and the stored row after an assignment."""
         with self.lock:
-            for table in (self.tags, self.tag_seen, self.tag_push, self.tag_meta):
+            for table in (self.tags, self.tag_seen, self.tag_push, self.tag_meta, self.tag_fw):
                 if old in table:
                     table[new] = table.pop(old)
         if self.store is not None:
@@ -1649,6 +1691,7 @@ class App:
                     if kind == "service":
                         from . import service_image as _svc
                         meta = self.tag_meta.get(addr) or {}
+                        now = time.time()
                         label_path = (REPO_ROOT / "ShelfKit-Server" / "data" / "service"
                                       / f"service-{addr:04X}.png")
                         _svc.write(
@@ -1657,6 +1700,7 @@ class App:
                             else meta.get("alias"),
                             (params.get("note") if params.get("note") is not None
                              else meta.get("notes") or "").strip(),
+                            fw=self._fw_of(addr, now), battery=self._vdd_of(addr, now),
                         )
                         params["path"] = str(label_path)
                         fit, dither = "stretch", "threshold"

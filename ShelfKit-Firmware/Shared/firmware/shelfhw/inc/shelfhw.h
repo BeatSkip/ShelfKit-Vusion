@@ -122,6 +122,7 @@ uint16_t shelfhw_measure_vdd(void) __reentrant;
 
 /* UART0 TX debug log. */
 void log_putc(uint8_t c);
+void shelfhw_log_boot_done(void);   /* boot is over: only matters for SHELF_LOG_MUTE 2/3 (a test) */
 void log_puts(const char *s);
 void log_hex8(uint8_t v);
 void log_hex16(uint16_t v);

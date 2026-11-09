@@ -22,6 +22,7 @@
 #include "shelfhw.h"
 #include "shelflink.h"
 #include "shelfmsg.h"
+#include "shelfver.h"
 #include "shelf_config.h"
 #include "pwr.h"
 #include "img_rx.h"
@@ -68,6 +69,25 @@ static void log_rx(const struct sl_rx __xdata *rx)
             log_puts(" vdd=");
             log_hex16((uint16_t)rx->payload[SM_POLL_VDD_LO] |
                       ((uint16_t)rx->payload[SM_POLL_VDD_HI] << 8));
+        }
+        if (rx->len >= SM_POLL_EXT_LEN) {
+            /* a poll the user started with an NFC tap: version and power stats */
+            log_puts(" fw=");
+            log_dec(rx->payload[SM_POLL_FW_MAJOR]);
+            log_puts(".");
+            log_dec(rx->payload[SM_POLL_FW_MINOR]);
+            log_puts(".");
+            log_dec(rx->payload[SM_POLL_FW_PATCH]);
+            log_puts("-");
+            log_dec((uint16_t)rx->payload[SM_POLL_FW_BUILD_LO] |
+                    ((uint16_t)rx->payload[SM_POLL_FW_BUILD_HI] << 8));
+            log_puts(" avg=");
+            log_dec((uint16_t)rx->payload[SM_POLL_AVG_UA_LO] |
+                    ((uint16_t)rx->payload[SM_POLL_AVG_UA_HI] << 8));
+            log_puts("uA life=");
+            log_dec((uint16_t)rx->payload[SM_POLL_LIFE_D_LO] |
+                    ((uint16_t)rx->payload[SM_POLL_LIFE_D_HI] << 8));
+            log_puts("d");
         }
     }
     log_nl();
@@ -329,6 +349,14 @@ static void log_banner(void)
     log_puts(" net ");
     log_hex8(SHELF_NET_ID);
     log_puts(" dump=1 batch=1 show=1");
+    log_puts(" fw=");
+    log_dec(SHELF_FW_MAJOR);
+    log_puts(".");
+    log_dec(SHELF_FW_MINOR);
+    log_puts(".");
+    log_dec(SHELF_FW_PATCH);
+    log_puts("-");
+    log_dec(SHELF_FW_BUILD);
     log_nl();
 }
 

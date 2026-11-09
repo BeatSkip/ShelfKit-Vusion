@@ -6,6 +6,8 @@
  *   [0..1] tag uptime in seconds, little endian (wraps after 18 h)
  *   [2]    attempts the previous poll needed (0 = none yet)
  *   [3]    RSSI in dBm (signed) of the hub's previous answer, 0 = none yet
+ *   [4..5] supply voltage, volts*256
+ *   [6..14] only on a poll started by an NFC tap: firmware version, build, power stats
  *
  * POLL_RSP (hub -> tag), SM_RSP_LEN bytes:
  *   [0]    command for the tag, SM_CMD_*
@@ -23,6 +25,20 @@
 /* supply voltage in volts*256 (3.00 V -> 0x0300), measured by the tag at each poll */
 #define SM_POLL_VDD_LO      4
 #define SM_POLL_VDD_HI      5
+
+/* Extended POLL, sent only for a poll the user started by tapping the tag with a phone
+ * (len SM_POLL_EXT_LEN): which firmware this tag runs and its latest power figures. A
+ * normal poll stays SM_POLL_LEN bytes - nothing extra goes over the air on the idle fleet. */
+#define SM_POLL_EXT_LEN     15
+#define SM_POLL_FW_MAJOR    6
+#define SM_POLL_FW_MINOR    7
+#define SM_POLL_FW_PATCH    8
+#define SM_POLL_FW_BUILD_LO 9       /* build counter, little endian */
+#define SM_POLL_FW_BUILD_HI 10
+#define SM_POLL_AVG_UA_LO   11      /* average current since boot, microamps */
+#define SM_POLL_AVG_UA_HI   12
+#define SM_POLL_LIFE_D_LO   13      /* estimated battery life in days (CR2450), 0xFFFF = n/a */
+#define SM_POLL_LIFE_D_HI   14
 
 #define SM_RSP_LEN          3
 #define SM_RSP_CMD          0

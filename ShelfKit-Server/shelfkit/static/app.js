@@ -488,6 +488,7 @@ function tagRows() {
       low,
       battery: volts,
       batteryPct: detail.vdd ? detail.vdd.percent : null,
+      fw: detail.fw || null,
       seen,
       count: detail.count ?? count,
       push: detail.push || null,
@@ -937,11 +938,20 @@ function renderInspector() {
   setText(ui.inspectorAlias, row.alias || "No alias");
   paintGlass(ui.inspectorGlass, row, 4);
 
+  const newest = (state?.firmware || []).find(
+    (file) => file.ok && file.build && !/hub|bootloader/i.test(file.name));
+  const reported = row.fw ? `${row.fw.version}-${row.fw.build}` : null;
+  const outdated = reported && newest && newest.build !== reported;
   const facts = [
     ["Status", statusWord(row)],
     ["Heard", heardText(row)],
     ["Check-ins", String(row.count)],
     ["Battery", row.battery != null ? `${row.battery.toFixed(2)} V, ${row.batteryPct ?? 0}%` : "No reading", row.low],
+    ["Firmware", row.fw
+      ? `${row.fw.version}-${row.fw.build}${outdated ? `, Release/ has ${newest.build}` : newest ? ", up to date" : ""}`
+      : "Not reported (tap the tag with a phone)", outdated],
+    ["Power", row.fw ? `avg ${row.fw.avg_ua} \u00b5A, about ${row.fw.life_days} days on a CR2450` : "Not reported"],
+    ["Reported", row.fw ? `${ageText(row.fw.age)} ago` : "Never"],
     ["Last push", row.push ? `${ageText(row.push.age)} ago` : "None"],
     ["Image", row.push ? row.push.name : "None"],
   ];
@@ -988,7 +998,8 @@ function renderInspector() {
       ui.inspectorFw.append(option);
     }
     for (const file of firmwares) {
-      const option = el("option", null, `${file.name} (${Math.round(file.size / 1024)} kB)`);
+      const stamp = file.build ? `, ${file.build}` : "";
+      const option = el("option", null, `${file.name} (${Math.round(file.size / 1024)} kB${stamp})`);
       option.value = file.path;
       ui.inspectorFw.append(option);
     }

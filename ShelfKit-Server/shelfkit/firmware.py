@@ -91,6 +91,50 @@ def load_image(path: Path) -> bytes:
         raise ImageError(f"cannot read {path}: {exc}")
 
 
+FW_MAGIC = b"SKFW"
+FW_INFO_LEN = 10
+
+
+def build_info(image: bytes) -> dict | None:
+    """The version stamped into a firmware image, or None for one built without it.
+
+    shelfver.h stores 'S' 'K' 'F' 'W', major, minor, patch, build (LE16) and a check byte
+    that makes the ten bytes sum to 0 mod 256, as a constant in
+    the code. It is found by its magic, so it does not matter where the linker put it.
+    """
+    start = image.find(FW_MAGIC)
+    while start != -1:
+        block = image[start:start + FW_INFO_LEN]
+        if len(block) == FW_INFO_LEN and sum(block) & 0xFF == 0:
+            major, minor, patch = block[4], block[5], block[6]
+            build = block[7] | (block[8] << 8)
+            version = f"{major}.{minor}.{patch}"
+            return {"version": version, "build": build, "text": f"{version}-{build}"}
+        start = image.find(FW_MAGIC, start + 1)
+    return None
+
+
+_info_cache: dict[str, tuple[float, dict | None]] = {}
+
+
+def file_info(path: Path) -> dict | None:
+    """build_info() of a .hex/.bin on disk, cached until the file changes."""
+    path = Path(path)
+    try:
+        mtime = path.stat().st_mtime
+    except OSError:
+        return None
+    hit = _info_cache.get(str(path))
+    if hit and hit[0] == mtime:
+        return hit[1]
+    try:
+        info = build_info(load_image(path))
+    except ImageError:
+        info = None
+    _info_cache[str(path)] = (mtime, info)
+    return info
+
+
 def check_image(path: Path) -> tuple[bytes, int]:
     """Load an image and check it is one the bootloader can install.
 

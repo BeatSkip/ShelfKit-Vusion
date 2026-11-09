@@ -19,7 +19,7 @@ import threading
 import time
 from pathlib import Path
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 MAX_EVENTS = 5000      # keep the newest N; the Logs screen never shows more
 MAX_BITMAPS = 64       # content store ceiling (each row ~15 KB of blobs)
 
@@ -43,6 +43,11 @@ CREATE TABLE IF NOT EXISTS tags (
     push_name   TEXT,                  -- last content pushed to this tag
     push_key    TEXT,                  -- the bitmap it was rendered into
     push_at     REAL,
+    fw_version  TEXT,                  -- '0.0.1', from the tag's last NFC-tapped poll
+    fw_build    INTEGER,
+    avg_ua      INTEGER,               -- average current since the tag's boot
+    life_days   INTEGER,               -- estimated battery life from that
+    fw_at       REAL,                  -- when that report arrived
     created_at  REAL NOT NULL
 );
 
@@ -97,7 +102,10 @@ class Store:
             return
         if version == 0:
             self._db.executescript(_SCHEMA)
-        # future versions: elif version == 1: ALTER TABLE ...
+        elif version == 1:
+            for column in ("fw_version TEXT", "fw_build INTEGER", "avg_ua INTEGER",
+                           "life_days INTEGER", "fw_at REAL"):
+                self._db.execute(f"ALTER TABLE tags ADD COLUMN {column}")
         self._db.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
         self._db.commit()
 
@@ -171,6 +179,17 @@ class Store:
             self._db.commit()
             row = self._db.execute("SELECT seen_count FROM tags WHERE hex_id=?", (hex_id,)).fetchone()
         return int(row["seen_count"]) if row else 0
+
+    def record_fw(self, hex_id: str, version: str, build: int, avg_ua: int,
+                  life_days: int, at: float | None = None) -> None:
+        """Keep the tag's latest firmware version and power figures (newest report wins)."""
+        when = time.time() if at is None else at
+        with self._lock:
+            self._ensure_tag(hex_id, when)
+            self._db.execute(
+                "UPDATE tags SET fw_version=?, fw_build=?, avg_ua=?, life_days=?, fw_at=? "
+                "WHERE hex_id=?", (version, build, avg_ua, life_days, when, hex_id))
+            self._db.commit()
 
     def update_tag(self, hex_id: str, **fields) -> dict | None:
         """Set editable tag fields: alias, notes, grid_row, grid_col, battery, last_status."""

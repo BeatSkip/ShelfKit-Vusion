@@ -288,8 +288,10 @@ class Handler(BaseHTTPRequestHandler):
                 except ValueError:
                     return self._error(f"bad tag id {parts[2]}")
                 path = str(body.get("path") or "")
-                result = self.app.enqueue("firmware", addr,
-                                          Path(path).name or "firmware", path=path)
+                from . import firmware
+                stamp = firmware.file_info(Path(path)) if path else None
+                label = (Path(path).name or "firmware") + (f" {stamp['text']}" if stamp else "")
+                result = self.app.enqueue("firmware", addr, label, path=path)
                 return self._json({"result": result, "state": self.app.state()})
             if len(parts) == 4 and parts[1] == "tags" and parts[3] == "assign":
                 try:

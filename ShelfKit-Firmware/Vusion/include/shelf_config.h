@@ -114,6 +114,21 @@
 #define SHELF_COOLDOWN_POLLS      3      /* ... this many of them ... */
 #define SHELF_POLL_IDLE_S         300    /* ... then the idle rate */
 
+/* The tag is not wired to a serial adapter in service, so it prints nothing: SHELF_LOG_MUTE 1
+ * (the default) starts the UART as usual and drops every character at once. That saves the
+ * CPU time spent waiting for characters to leave (~87 us each at 115200, a few hundred per poll
+ * cycle - an estimated ~0.6 uA of ~50). SHELF_LOG_UART 0 is NOT usable: with no UART start-up the
+ * tag boots and polls, but breaks on the first NFC tap (tested on hardware, cause not found -
+ * probably something that depends on the UART/timer 0 set-up or the memory layout it shifts).
+ * To read the tag's log on a serial port while developing, build with
+ *   build-all.py --define SHELF_LOG_MUTE=0 --out Release/debug-log */
+#ifndef SHELF_LOG_UART
+#define SHELF_LOG_UART          1
+#endif
+#ifndef SHELF_LOG_MUTE
+#define SHELF_LOG_MUTE          0
+#endif
+
 /* Print the link statistics every this many polls */
 #define SHELF_STATS_EVERY       2   /* one power summary every 2 polls */
 
