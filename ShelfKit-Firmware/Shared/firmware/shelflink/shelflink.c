@@ -13,6 +13,7 @@
 #define SL_RX_TRAILER 2
 
 struct sl_stats __xdata sl_stats;
+uint32_t __xdata sl_tx_frames;
 
 enum {
     ST_IDLE,        /* no request in flight                              */
@@ -48,7 +49,10 @@ static uint8_t radio_send(uint16_t dst, const uint8_t __xdata *frame, uint8_t le
     struct axradio_address __xdata a;
 
     fill_addr(&a, dst);
-    return axradio_transmit(&a, frame, len);
+    if (axradio_transmit(&a, frame, len) != AXRADIO_ERR_NOERROR)
+        return AXRADIO_ERR_BUSY;
+    sl_tx_frames++;                 /* requests, retries and ACKs: all cost a transmitter burst */
+    return AXRADIO_ERR_NOERROR;
 }
 
 static void arm_timer(uint16_t ticks)

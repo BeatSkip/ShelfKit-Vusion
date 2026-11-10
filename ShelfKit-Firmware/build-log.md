@@ -33,3 +33,4 @@ Appended by `Tooling/build-all.py`. `dirty` = the build had uncommitted changes,
 | 2026-11-10 00:59 | 1.0.0 | 27 | 3b065a0 dirty | Vusion 6785857dbf1ff6b5 (119291 B); Vusion-Hub b309ff8915a97bb6 (88381 B); Bootloader de00217c95532429 (24931 B) |
 | 2026-11-10 01:01 | 1.0.0 | 28 | 3b065a0 dirty | Vusion addd4eab40d993c1 (119375 B); Vusion-Hub f15b76daf6615cdf (88440 B); Bootloader 62c924bad1e8daad (24931 B) |
 | 2026-11-10 01:05 | 1.0.0 | 29 | 3b065a0 dirty | Vusion 1e3b388dd23d0283 (119354 B); Vusion-Hub 706fc1e2293bb7d3 (88440 B); Bootloader a720a19586dea731 (24931 B) |
+| 2026-11-10 22:24 | 1.0.0 | 30 | 5951d28 dirty | Vusion 614befeee552050f (119934 B); Vusion-Hub 4c96583cc4bb4c8e (89056 B); Bootloader e2310ad4eda7e837 (24931 B) |

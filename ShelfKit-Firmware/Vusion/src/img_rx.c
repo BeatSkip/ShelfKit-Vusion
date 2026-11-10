@@ -50,6 +50,7 @@ static uint16_t __xdata r_n;
 static uint16_t __xdata r_t0;
 static uint16_t __xdata r_dt;
 static struct wtimer_desc __xdata refresh_timer;
+static uint32_t __xdata panel_ticks;    /* time spent in refresh waveforms, for the power estimate */
 
 static void panel_off(void)
 {
@@ -201,6 +202,7 @@ static void on_chunk(void)
 static void refresh_done(uint8_t st)
 {
     r_dt = (uint16_t)((uint16_t)wtimer0_curtime() - r_t0);
+    panel_ticks += r_dt;
     log_puts("img done busy=");
     log_dec(st);
     log_puts(" ");
@@ -309,6 +311,11 @@ uint8_t img_rx_active(void)
 uint8_t img_rx_refreshing(void)
 {
     return refreshing;
+}
+
+uint32_t img_rx_panel_ticks(void)
+{
+    return panel_ticks;
 }
 
 void img_rx_idle(void)

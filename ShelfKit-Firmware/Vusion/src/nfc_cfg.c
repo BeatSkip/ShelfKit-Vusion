@@ -27,6 +27,7 @@
 #include "spi.h"
 #include "flash.h"
 #include "shelfhw.h"
+#include "shelf_config.h"
 #include "nfc_cfg.h"
 
 #define NFC_SCK         SPI_SCK     /* PC1 */
@@ -106,7 +107,9 @@ static uint8_t nfc_bb_xfer(uint8_t out)
     return in;
 }
 
+#if SHELF_NFC_PROBE
 static uint8_t __xdata nfc_uid[9];  /* SN0..2, BCC0, SN3..6, BCC1 */
+#endif
 /* One read command reaches 256 bytes (A9:A8 are in the command byte), so a block is
  * read in one go into this buffer; the addresses are file scope because the tag has no
  * internal RAM for a parameter block. */
@@ -131,6 +134,9 @@ static void nfc_read_block(void)
     delay(NFC_RESET_US);
 }
 
+/* The boot-time probe is a development aid behind SHELF_NFC_PROBE. Compiled out with the
+ * switch off: it was ~390 bytes of an image that has to fit the OTA window. */
+#if SHELF_NFC_PROBE
 static void nfc_dump(const char *what)
 {
     uint8_t i;
@@ -184,6 +190,7 @@ void nfc_probe(void)
     log_puts((nfc_uid[3] == bcc0 && nfc_uid[8] == bcc1) ? " ok" : " bad");
     log_nl();
 }
+#endif /* SHELF_NFC_PROBE */
 
 /* ── the FD pin is configured in EEPROM (FM11NT081D datasheet) ──────────────────────────
  *   0x38C (page E3h) bits 1:0  fdp_conf: 00 no FD, 01 first SoF, 10 tag selected,

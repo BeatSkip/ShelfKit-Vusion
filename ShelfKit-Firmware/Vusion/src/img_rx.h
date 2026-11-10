@@ -19,6 +19,10 @@ uint8_t img_rx_active(void);
  * may sleep: main() polls with shelfhw_poll() instead of shelfhw_poll_awake()). */
 uint8_t img_rx_refreshing(void);
 
+/* Wake-up-timer ticks spent in refresh waveforms since boot (the panel supply is the
+ * load then, not the MCU or the radio): an input of the power estimate in main.c. */
+uint32_t img_rx_panel_ticks(void);
+
 /* Called once per poll: a panel that was left powered (a refresh that never reported
  * done, a transfer that was abandoned) is put to sleep and its rail cut. */
 void img_rx_idle(void);

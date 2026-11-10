@@ -129,6 +129,28 @@
 #define SHELF_LOG_MUTE          0
 #endif
 
+/* ── the power estimate's currents ────────────────────────────────────────
+ * The tag cannot measure its own current. It counts how long it spent in each state and
+ * multiplies by the figures below (main.c, pow_update), which gives the `avg=`/`life=` it
+ * logs and reports on a tapped poll. They are datasheet-class numbers, NOT measurements:
+ * put a meter on a battery board and correct them here, SHELF_PWR_SLEEP_UA first.
+ *
+ * SHELF_PWR_SLEEP_UA is the whole board between polls, not just the MCU: with
+ * SHELF_NFC_RAIL_HOLD the switched rail stays up, so the flash (in standby, not deep
+ * power-down), the NFC chip, the panel controller and the pull-up that PA5 is held low
+ * against all draw through it. Firmware cannot see any of that, and at a 300 s poll
+ * interval this one figure decides the result - see Documentation/power-audit.md.
+ * The three large ones are used in steps of 100 uA. MCU Standby (85 uA, only while the
+ * receiver is on) is counted at 100 uA and has no switch. */
+#define SHELF_PWR_MCU_UA        3000u   /* CPU running from the 20 MHz FRC                  */
+#define SHELF_PWR_SLEEP_UA      3u      /* board total in Sleep, radio in deep sleep        */
+#define SHELF_PWR_RADIO_UA      9500u   /* AX5043 powered and receiving, on top of the MCU  */
+#define SHELF_PWR_PANEL_UA      8000u   /* panel supply during a refresh waveform           */
+/* One frame on air at 15 dBm, in uA*s, on top of the radio-on current: ~3 ms (112 bit
+ * preamble + sync + ~18 bytes at 100 kbit/s, plus the PA ramp) at ~55 mA minus the 9.5 mA
+ * already counted = ~140. */
+#define SHELF_PWR_TX_UAS        140u
+
 /* Print the link statistics every this many polls */
 #define SHELF_STATS_EVERY       2   /* one power summary every 2 polls */
 

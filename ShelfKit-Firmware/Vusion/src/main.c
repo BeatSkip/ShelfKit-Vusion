@@ -36,8 +36,14 @@ static uint8_t __xdata last_attempts;
 static int8_t __xdata last_hub_rssi;
 static uint16_t __xdata polls_done;
 /* the power summary's arithmetic, kept in XRAM: the tag has no internal RAM to
- * spare for five 32-bit locals */
+ * spare for 32-bit locals. pow_total_ms holds seconds inside pow_update() and is reused
+ * as scratch by poll_cb(). */
 static uint32_t __xdata pow_awake_ms, pow_radio_ms, pow_asleep_s, pow_total_ms, pow_ua;
+static uint32_t __xdata pow_t, pow_q;   /* scratch: a span in ticks, and what it was scaled to */
+static uint32_t __xdata pow_uas;        /* charge since boot: 0.1 mA * ticks, then uA*s */
+/* work that must not run while the receiver is on: done by listen_cb() once it is parked */
+static uint8_t __xdata stats_due;
+static uint8_t __xdata fail_led_due;
 static uint16_t __xdata node_id;   /* from the SPI flash record, see shelf_id.c */
 #if SHELF_NFC_POLL
 /* A reader gives one or two edges per visit. A line that is floating or held can
@@ -139,18 +145,43 @@ static uint32_t next_interval(void) __reentrant
     return interval;
 }
 
-/* the software ammeter's numbers, refreshed from the counters */
+/* pow_q = pow_t wake-up-timer ticks in milliseconds (1000/512 = 125/64, 1000/640 = 125/80) */
+static void pow_ms(void)
+{
+    pow_q = pow_t * 125u / (SHELFHW_TICKS_PER_S / 8u);
+}
+
+/* The software ammeter's numbers, refreshed from the counters (currents: shelf_config.h).
+ *
+ * The currents of the active states are summed as ticks * 0.1 mA, which stays inside 32
+ * bits for a day of receiver time, and only then turned into uA*s. Standby goes in at
+ * 0.1 mA (85 uA in the datasheet): it only happens while the receiver is on, so it is a
+ * rounding error next to that. Sleep and the transmitter bursts are added in uA*s directly.
+ * The average is charge / uptime in seconds; the old sum in uA*ms wrapped after 16 days
+ * asleep, and from then on the average came out far too low. Everything is file-scope
+ * XRAM: a local or a parameter here costs internal RAM the tag does not have. */
 static void pow_update(void)
 {
-    pow_awake_ms = shelfhw_awake_ticks() * 1000u / SHELFHW_TICKS_PER_S;
-    pow_radio_ms = shelfhw_radio_on_ticks() * 1000u / SHELFHW_TICKS_PER_S;
-    pow_asleep_s = shelfhw_asleep_ticks() / SHELFHW_TICKS_PER_S;
-    pow_total_ms = pow_awake_ms + pow_asleep_s * 1000u;
-    /* datasheet currents: MCU running ~3 mA, receiver +9.5 mA, sleep 3 uA */
-    pow_ua = pow_total_ms
-        ? (pow_awake_ms * 3000u + pow_radio_ms * 9500u + pow_asleep_s * 1000u * 3u)
-          / pow_total_ms
-        : 0;
+    pow_t = shelfhw_radio_on_ticks();
+    pow_ms();
+    pow_radio_ms = pow_q;
+    pow_uas = pow_t * (SHELF_PWR_RADIO_UA / 100u)
+            + img_rx_panel_ticks() * (SHELF_PWR_PANEL_UA / 100u);
+
+    pow_t = shelfhw_awake_ticks();
+    pow_ms();
+    pow_awake_ms = pow_q;
+    pow_uas += pow_t * (SHELF_PWR_MCU_UA / 100u);
+    pow_t += shelfhw_standby_ticks();               /* every tick not spent in Sleep */
+    pow_uas += shelfhw_standby_ticks();             /* Standby at 0.1 mA */
+
+    pow_asleep_s = shelfhw_asleep_s();
+    pow_uas = pow_uas / SHELFHW_TICKS_PER_S * 100u
+            + pow_asleep_s * SHELF_PWR_SLEEP_UA
+            + sl_tx_frames * SHELF_PWR_TX_UAS;
+
+    pow_total_ms = pow_t / SHELFHW_TICKS_PER_S + pow_asleep_s;      /* uptime, in seconds */
+    pow_ua = pow_total_ms ? pow_uas / pow_total_ms : 0;
 }
 
 static void log_stats(void)
@@ -171,10 +202,9 @@ static void log_stats(void)
     log_dec(sl_stats.rx_stray);
     log_nl();
 
-    /* Software ammeter: awake/radio in ms, asleep in s, counted since boot.
-     * Multiply by the datasheet currents to get the average draw:
-     *   I = (awake_ms * 3 mA + radio_ms * 9.5 mA + asleep_s * 1000 * 0.002 mA)
-     *       / (awake_ms + asleep_s * 1000) */
+    /* Software ammeter: awake/radio in ms, asleep in s, counted since boot. pow_update()
+     * multiplies them - and the standby time, the frames sent and the panel's refresh
+     * time - by the currents in shelf_config.h. */
     pow_update();
 
     log_puts("pow awake=");
@@ -213,6 +243,16 @@ static void listen_cb(struct wtimer_desc __xdata *desc)
     log_puts("sleep\r\n");
     shelfhw_radio_sleep();
     radio_asleep = 1;
+    /* Held back by on_done() until here: both used to run with the receiver on, which made
+     * a 50 ms LED pulse or a statistics line cost several times what it does now. */
+    if (fail_led_due) {
+        fail_led_due = 0;
+        shelfhw_led_pulse(SHELFHW_LED_RED, SHELFHW_LED_PULSE_MS);
+    }
+    if (stats_due) {
+        stats_due = 0;
+        log_stats();
+    }
 #if SHELF_NFC_POLL
     nfc_burst = 0;              /* new cycle: a reader is welcome again */
     if (nfc_seen) {
@@ -310,11 +350,20 @@ static void on_done(const struct sl_done __xdata *done)
         log_dec(done->attempts);
         log_puts(" attempts");
         log_nl();
+#if SHELF_RADIO_SLEEP
+        fail_led_due = 1;       /* red = poll failed, shown once the receiver is off */
+#else
         shelfhw_led_pulse(SHELFHW_LED_RED, SHELFHW_LED_PULSE_MS);
+#endif
     }
 
-    if (polls_done % SHELF_STATS_EVERY == 0)
+    if (polls_done % SHELF_STATS_EVERY == 0) {
+#if SHELF_RADIO_SLEEP
+        stats_due = 1;          /* printed by listen_cb() once the radio is parked */
+#else
         log_stats();
+#endif
+    }
 
 #if SHELF_RADIO_SLEEP
     /* Re-arm the listening window from the reply in BOTH cases, so "data follows"

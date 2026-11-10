@@ -326,12 +326,18 @@ void log_nl(void)
 /* ── bring-up ─────────────────────────────────────────────────────────── */
 
 /* ── software ammeter ─────────────────────────────────────────────────────
- * 16-bit tick deltas accumulated into 32-bit totals, so the ~128 s wrap of the
- * wake-up timer is harmless. awake = everything shelfhw_poll() was not idling,
- * which includes the boot, the polls and any transfer. */
-static uint16_t __xdata meter_prev;
-static uint32_t __xdata meter_total;
-static uint32_t __xdata meter_asleep;
+ * Only the idle call itself is timed, and its span is booked to Sleep or Standby according
+ * to what wtimer_idle() actually did (while the receiver is on the MCU only reaches
+ * Standby). Everything else - the boot, the callbacks, a transfer, a blocking LED pulse -
+ * is the CPU running, and is whatever remains of the uptime. The stamp used to be taken
+ * *before* the callbacks ran, which booked every poll's working time as sleep.
+ *
+ * One idle is at most 0xF000 ticks (libmf's WTIMER0_MARGIN), so 16-bit spans are enough.
+ * Sleep is carried into seconds: a 32-bit tick count wraps after 97 days, and the cell
+ * has to last years. */
+static uint32_t __xdata meter_standby;      /* ticks in Standby                             */
+static uint32_t __xdata meter_asleep_s;     /* whole seconds in Sleep ...                   */
+static uint16_t __xdata meter_asleep_frac;  /* ... and the ticks that do not fill one yet   */
 static uint32_t __xdata meter_radio_since;
 static uint32_t __xdata meter_radio;
 
@@ -510,13 +516,19 @@ uint16_t shelfhw_measure_vdd(void) __reentrant
 static uint8_t __xdata radio_deep;  /* radio parked in AX5043 deep sleep: SPI pins are GPIO */
 
 
-uint32_t shelfhw_awake_ticks(void)  { return meter_total - meter_asleep; }
-uint32_t shelfhw_asleep_ticks(void) { return meter_asleep; }
+/* the uptime minus the two idle states; correct modulo 2^32 across the timer's wrap */
+uint32_t shelfhw_awake_ticks(void)
+{
+    return wtimer0_curtime() - meter_standby
+           - meter_asleep_s * SHELFHW_TICKS_PER_S - meter_asleep_frac;
+}
+uint32_t shelfhw_standby_ticks(void) { return meter_standby; }
+uint32_t shelfhw_asleep_s(void)      { return meter_asleep_s; }
 uint32_t shelfhw_radio_on_ticks(void)
 {
     /* the radio is on right now: count the time since it woke */
     if (!radio_deep)
-        return meter_radio + (uint16_t)(wtimer0_curtime() - (uint16_t)meter_radio_since);
+        return meter_radio + (wtimer0_curtime() - meter_radio_since);
     return meter_radio;
 }
 
@@ -534,7 +546,7 @@ void shelfhw_radio_sleep(void)
 {
     /* close the radio-on interval */
     if (!radio_deep) {
-        meter_radio += (uint16_t)(wtimer0_curtime() - (uint16_t)meter_radio_since);
+        meter_radio += wtimer0_curtime() - meter_radio_since;
         meter_radio_since = wtimer0_curtime();
     }
 #if SHELF_RADIO_DEEPSLEEP
@@ -619,12 +631,13 @@ uint8_t shelfhw_radio_wake(void)
 void shelfhw_poll(void)
 {
     uint8_t woke;
-    uint16_t t0 = wtimer0_curtime();
-
-    meter_total += (uint16_t)(t0 - meter_prev);
-    meter_prev = t0;
+    uint16_t t0;
 
     wtimer_runcallbacks();
+
+    /* the idle span starts here, after the callbacks: a poll, the radio wake and a blocking
+     * LED pulse all run in there, with the CPU at full current */
+    t0 = (uint16_t)wtimer0_curtime();
 
     EA = 0;
     IE_1 = 1;                       /* wake-up timer (vector 1) ends the idle; no ISR runs, EA is off */
@@ -677,7 +690,17 @@ void shelfhw_poll(void)
     IE_1 = 0;
     EA = 1;
 
-    meter_asleep += (uint16_t)(wtimer0_curtime() - t0);
+    /* book the idle span to what the MCU really did with it */
+    t0 = (uint16_t)((uint16_t)wtimer0_curtime() - t0);
+    if (woke == WTIDLE_SLEEP) {
+        meter_asleep_frac += t0;
+        meter_asleep_s += meter_asleep_frac / SHELFHW_TICKS_PER_S;
+        meter_asleep_frac %= SHELFHW_TICKS_PER_S;
+    } else {
+        /* Standby - or work was already waiting and it did not idle at all, which is
+         * less than a tick either way */
+        meter_standby += t0;
+    }
 }
 
 /* The build stamp as data, so the version can be read from a .hex file (see shelfver.h). Not

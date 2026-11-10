@@ -74,11 +74,14 @@ void shelfhw_poll_awake(void);
 #ifndef SHELF_XTAL_OFF
 #define SHELF_XTAL_OFF 0
 #endif
-/* Software ammeter: how many ticks the MCU has spent awake, asleep and with the
- * radio on since boot. Multiply by the datasheet currents to get an average draw
- * without a shunt - see "Measuring power without a meter" in the tag README. */
+/* Software ammeter: how long the MCU has spent running, in Standby and in Sleep, and how
+ * long the radio was on, since boot. Multiply by the datasheet currents to get an average
+ * draw without a shunt - see "Measuring power without a meter" in the tag README. The three
+ * MCU states do not overlap; the radio time lies on top of them. Sleep is in seconds
+ * because a tick count would wrap after 97 days. */
 uint32_t shelfhw_awake_ticks(void);
-uint32_t shelfhw_asleep_ticks(void);
+uint32_t shelfhw_standby_ticks(void);
+uint32_t shelfhw_asleep_s(void);
 uint32_t shelfhw_radio_on_ticks(void);
 
 #if SHELF_NFC_POLL

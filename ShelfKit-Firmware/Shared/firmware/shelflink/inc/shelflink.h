@@ -91,6 +91,11 @@ struct sl_stats {
 
 extern struct sl_stats __xdata sl_stats;
 
+/* Every frame the transmitter was actually keyed for since boot: requests, their retries
+ * and the acknowledgements of received DATA. 32 bits, unlike the statistics above, because
+ * the power estimate multiplies it by the cost of one burst and must not wrap in service. */
+extern uint32_t __xdata sl_tx_frames;
+
 /* Request received (POLL or non-duplicate DATA). For a POLL the handler must
  * answer with sl_reply(); duplicates are flagged in rx->dup. */
 typedef void (*sl_rx_handler)(const struct sl_rx __xdata *rx);
