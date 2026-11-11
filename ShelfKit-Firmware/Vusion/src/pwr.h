@@ -11,7 +11,7 @@
  *              rail) and nothing we use gets better, so the firmware only ever parks it
  *              LOW (pwr_park_u5(), called by pwr_init()). It is never switched on.
  *
- * Configure below which of the two pwr_on()/pwr_off()/pwr_pulse() drive.
+ * Configure below which of the two pwr_on()/pwr_off() drive.
  */
 
 #ifndef PWR_DRIVER_H
@@ -40,8 +40,6 @@ void pwr_park_u5(void);
 void pwr_on(void);
 void pwr_off(void);
 
-/* Pulse mode: toggle the selected pins on/off with the given timing.
- * cycles = number of full on+off periods; 0 = run forever (blocks). */
-void pwr_pulse(uint16_t on_ms, uint16_t off_ms, uint16_t cycles);
+/* The hub's copy also has pwr_pulse(); the tag never used it and needs the code space. */
 
 #endif /* PWR_DRIVER_H */

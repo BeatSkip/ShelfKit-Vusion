@@ -490,6 +490,27 @@
 
       <p id="inspector-alert" class="warning" hidden></p>
 
+      <section class="vhist" aria-labelledby="vhist-title">
+        <h3 id="vhist-title">Battery voltage</h3>
+        <div class="vhist-range">
+          <select id="vhist-range" aria-label="Period">
+            <option value="1">Last 24 hours</option>
+            <option value="7" selected>Last 7 days</option>
+            <option value="30">Last 30 days</option>
+            <option value="90">Last 90 days</option>
+            <option value="0">All readings</option>
+            <option value="custom">Custom period</option>
+          </select>
+        </div>
+        <div id="vhist-custom" class="vhist-range" hidden>
+          <label>From <input id="vhist-from" type="datetime-local"></label>
+          <label>To <input id="vhist-to" type="datetime-local"></label>
+        </div>
+        <svg id="vhist-chart" class="vhist-chart" viewBox="0 0 360 170" role="img"
+             aria-label="Voltage over time"></svg>
+        <dl id="vhist-stats" class="facts"></dl>
+      </section>
+
       <div class="row">
         <button id="inspector-push" class="primary" type="button">Push image</button>
         <button id="inspector-service" type="button"

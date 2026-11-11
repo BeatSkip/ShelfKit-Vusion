@@ -241,12 +241,94 @@ static void nfc_ee_write_page(uint16_t addr, uint8_t off)
         delay(1000);
 }
 
+/* ── what a phone finds when it reads the tag ─────────────────────────────────────────────
+ * The chip is an NFC Forum Type 2 tag: the capability container (E1 ..) sits at 0x00C and the
+ * TLV area with the NDEF message starts at 0x010. SHELF_NFC_URL "" keeps that message empty
+ * (03 00 FE): the phone sees a tag and nothing to open. With a URL it is one URI record
+ * (03 len D1 01 len+1 55 00 <url> FE). Only differing pages are written, so after the first
+ * boot this is one read. Pages are 4 bytes; file-scope variables because there is no spare
+ * internal RAM. */
+#define NFC_EE_USER     0x010
+#define NFC_URL_LEN     (sizeof(SHELF_NFC_URL) - 1)
+#define NFC_NDEF_LEN    (NFC_URL_LEN ? NFC_URL_LEN + 8 : 3)
+typedef char nfc_url_fits[(NFC_URL_LEN <= 48) ? 1 : -1];
+
+static const char __code nfc_url[] = SHELF_NFC_URL;
+static uint8_t __xdata nfc_i;
+static uint8_t __xdata nfc_page;
+static uint8_t __xdata nfc_state;   /* 0 ok, 1 written, 2 failed, 3 no Type 2 header */
+
+/* wanted byte nfc_i of the NDEF TLV (bytes past its end: the old content is kept) */
+static uint8_t nfc_ndef_byte(void)
+{
+    if (nfc_i >= NFC_NDEF_LEN)
+        return nfc_buf[nfc_i];
+    if (!NFC_URL_LEN)
+        return nfc_i == 0 ? 0x03 : (nfc_i == 1 ? 0x00 : 0xFE);
+    if (nfc_i >= 7 && nfc_i < 7 + NFC_URL_LEN)
+        return (uint8_t)nfc_url[nfc_i - 7];
+    switch (nfc_i) {
+    case 0:  return 0x03;
+    case 1:  return (uint8_t)(NFC_URL_LEN + 5);
+    case 2:  return 0xD1;
+    case 3:  return 0x01;
+    case 4:  return (uint8_t)(NFC_URL_LEN + 1);
+    case 5:  return 0x55;               /* 'U' */
+    case 6:  return 0x00;               /* no abbreviated prefix: the URL is written in full */
+    default: return 0xFE;               /* terminator */
+    }
+}
+
+/* nfc_buf holds the area as read; 1 = some byte up to the TLV's end differs */
+static uint8_t nfc_ndef_differs(void)
+{
+    for (nfc_i = 0; nfc_i < NFC_NDEF_LEN; nfc_i++)
+        if (nfc_buf[nfc_i] != nfc_ndef_byte())
+            return 1;
+    return 0;
+}
+
+static void nfc_ndef_sync(void)
+{
+    nfc_addr = 0x00C;
+    nfc_len = 4;
+    nfc_read_block();
+    if (nfc_buf[0] != 0xE1) {       /* not a Type 2 capability container: leave it alone */
+        nfc_state = 3;
+        return;
+    }
+    nfc_state = 0;
+    nfc_addr = NFC_EE_USER;
+    nfc_len = (uint8_t)((NFC_NDEF_LEN + 3) & 0xFC);
+    nfc_read_block();
+    if (!nfc_ndef_differs())
+        return;
+    nfc_state = 1;
+    for (nfc_page = 0; nfc_page < nfc_len; nfc_page += 4) {
+        for (nfc_i = nfc_page; nfc_i < nfc_page + 4; nfc_i++)
+            nfc_ee[nfc_i - nfc_page] = nfc_ndef_byte();
+        nfc_ee_write_page(NFC_EE_USER + nfc_page, 0);
+    }
+    nfc_addr = NFC_EE_USER;
+    nfc_len = (uint8_t)((NFC_NDEF_LEN + 3) & 0xFC);
+    nfc_read_block();
+    if (nfc_ndef_differs())
+        nfc_state = 2;
+}
+
 void nfc_cfg_fd(void)
 {
     static uint8_t __xdata wrote, ok;
 
     extflash_power_up();
     nfc_bb_init();
+#if SHELF_NFC_NDEF_SYNC
+    nfc_ndef_sync();
+    log_puts("nfc ndef ");
+    log_puts(nfc_state == 0 ? "ok" : (nfc_state == 1 ? "written" :
+             (nfc_state == 2 ? "WRITE FAILED" : "skipped, no type 2 header")));
+    log_nl();
+#endif
     nfc_ee_read();
     wrote = 0;
     if ((nfc_ee[0] & 0x03) != NFC_FDP_FIELD && !(nfc_ee[4] & 0x40)) {   /* CFGLOCK clear */

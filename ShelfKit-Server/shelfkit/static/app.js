@@ -910,6 +910,8 @@ function openInspector(hex) {
     inspected = wanted;
     disarm();
     loadForm(tagRows().find((row) => row.hex === wanted));
+    vhist.tag = wanted;
+    refreshVoltage();
   }
   ui.inspector.hidden = false;
   document.body.classList.add("inspecting");
@@ -2617,3 +2619,123 @@ async function boot() {
 }
 
 boot();
+
+
+// ── battery voltage history (inspector) ───────────────────────────────────────
+const vhist = { tag: null, seq: 0 };
+const vui = {
+  range: $("vhist-range"), custom: $("vhist-custom"), from: $("vhist-from"),
+  to: $("vhist-to"), chart: $("vhist-chart"), stats: $("vhist-stats"),
+};
+
+function vhistWindow() {
+  const now = Date.now() / 1000;
+  if (vui.range.value === "custom") {
+    const since = vui.from.value ? new Date(vui.from.value).getTime() / 1000 : now - 7 * 86400;
+    const until = vui.to.value ? new Date(vui.to.value).getTime() / 1000 : now;
+    return [since, until];
+  }
+  const days = Number(vui.range.value);
+  return [days ? now - days * 86400 : 0, now];
+}
+
+function svgEl(name, attrs, text) {
+  const node = document.createElementNS("http://www.w3.org/2000/svg", name);
+  for (const [key, value] of Object.entries(attrs || {})) node.setAttribute(key, value);
+  if (text != null) node.textContent = text;
+  return node;
+}
+
+function fmtTime(sec, spanSec) {
+  const d = new Date(sec * 1000);
+  if (spanSec <= 2 * 86400) {
+    return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  }
+  return d.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+}
+
+function drawVoltage(data) {
+  const svg = vui.chart;
+  svg.replaceChildren();
+  const W = 360, H = 170, L = 34, R = 8, T = 8, B = 22;
+  const pts = data.points || [];
+  if (!pts.length) {
+    svg.append(svgEl("text", { x: W / 2, y: H / 2, "text-anchor": "middle" },
+      "No readings in this period"));
+    return;
+  }
+  const t0 = pts[0][0];
+  const t1 = Math.max(pts[pts.length - 1][0], t0 + 1);
+  let lo = Math.min(...pts.map((p) => p[1]));
+  let hi = Math.max(...pts.map((p) => p[1]));
+  const low = prefs.low_battery_v;
+  lo = Math.min(lo, low) - 0.02;
+  hi = Math.max(hi, lo + 0.1) + 0.02;
+  const x = (t) => L + ((t - t0) / (t1 - t0)) * (W - L - R);
+  const y = (v) => T + (1 - (v - lo) / (hi - lo)) * (H - T - B);
+
+  for (let i = 0; i <= 4; i++) {
+    const v = lo + ((hi - lo) * i) / 4;
+    svg.append(svgEl("line", { class: "grid-line", x1: L, x2: W - R, y1: y(v), y2: y(v) }));
+    svg.append(svgEl("text", { x: L - 4, y: y(v) + 3, "text-anchor": "end" }, v.toFixed(2)));
+  }
+  for (let i = 0; i <= 3; i++) {
+    const t = t0 + ((t1 - t0) * i) / 3;
+    const anchor = i === 0 ? "start" : i === 3 ? "end" : "middle";
+    svg.append(svgEl("text", { x: x(t), y: H - 7, "text-anchor": anchor }, fmtTime(t, t1 - t0)));
+  }
+  svg.append(svgEl("line", { class: "low-line", x1: L, x2: W - R, y1: y(low), y2: y(low) }));
+  svg.append(svgEl("polyline", { class: "series",
+    points: pts.map((p) => `${x(p[0]).toFixed(1)},${y(p[1]).toFixed(1)}`).join(" ") }));
+  if (pts.length <= 150) {
+    for (const p of pts) svg.append(svgEl("circle", { class: "dots", cx: x(p[0]), cy: y(p[1]), r: 1.4 }));
+  }
+}
+
+function drawVoltageStats(data) {
+  const s = data.stats;
+  vui.stats.replaceChildren();
+  if (!s) return;
+  const span = s.span_h >= 48 ? `${(s.span_h / 24).toFixed(1)} days` : `${s.span_h.toFixed(1)} h`;
+  const sign = s.drain_net_mv >= 0 ? "−" : "+";
+  const rows = [
+    ["Readings", `${data.count} over ${span}`],
+    ["From → to", `${s.first_v.toFixed(3)} V → ${s.last_v.toFixed(3)} V`],
+    ["Min / max", `${s.min_v.toFixed(3)} / ${s.max_v.toFixed(3)} V`],
+    ["Average drain", s.drain_mv_per_day == null ? "Needs two readings further apart"
+      : `${s.drain_mv_per_day.toFixed(1)} mV per day (trend line)`],
+    ["Net change", `${sign}${Math.abs(s.drain_net_mv).toFixed(0)} mV`],
+    ["Current (rough)", s.drain_ua_estimate == null
+      ? "Needs 1 h of readings and a falling voltage"
+      : `about ${s.drain_ua_estimate} µA, from the CR2450 curve`],
+  ];
+  for (const [k, v] of rows) vui.stats.append(el("dt", null, k), el("dd", null, v));
+}
+
+async function refreshVoltage() {
+  if (!inspected) return;
+  const mine = ++vhist.seq;           // only the newest request may draw
+  try {
+    const [since, until] = vhistWindow();
+    const response = await fetch(`/api/voltage?tag=${inspected}&since=${since}&until=${until}`);
+    const data = await response.json();
+    if (mine !== vhist.seq || data.error || data.hex_id !== inspected) return;
+    drawVoltage(data);
+    drawVoltageStats(data);
+  } catch (error) {
+    /* the next refresh tries again */
+  }
+}
+
+vui.range.addEventListener("change", () => {
+  vui.custom.hidden = vui.range.value !== "custom";
+  refreshVoltage();
+});
+vui.from.addEventListener("change", refreshVoltage);
+vui.to.addEventListener("change", refreshVoltage);
+setInterval(() => {
+  if (inspected && !ui.inspector.hidden) {
+    vhist.tag = inspected;
+    refreshVoltage();
+  }
+}, 30000);

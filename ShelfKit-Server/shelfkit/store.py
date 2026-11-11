@@ -19,7 +19,7 @@ import threading
 import time
 from pathlib import Path
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 MAX_EVENTS = 5000      # keep the newest N; the Logs screen never shows more
 MAX_BITMAPS = 64       # content store ceiling (each row ~15 KB of blobs)
 
@@ -77,6 +77,14 @@ CREATE TABLE IF NOT EXISTS events (
     detail TEXT
 );
 CREATE INDEX IF NOT EXISTS events_at ON events(at DESC);
+""" + """
+CREATE TABLE IF NOT EXISTS voltage (    -- every supply-voltage reading a tag has reported
+    id     INTEGER PRIMARY KEY AUTOINCREMENT,
+    hex_id TEXT NOT NULL,
+    at     REAL NOT NULL,
+    raw    INTEGER NOT NULL            -- volts * 256, as the tag sends it
+);
+CREATE INDEX IF NOT EXISTS voltage_tag_at ON voltage(hex_id, at);
 """
 
 
@@ -102,10 +110,12 @@ class Store:
             return
         if version == 0:
             self._db.executescript(_SCHEMA)
-        elif version == 1:
-            for column in ("fw_version TEXT", "fw_build INTEGER", "avg_ua INTEGER",
-                           "life_days INTEGER", "fw_at REAL"):
-                self._db.execute(f"ALTER TABLE tags ADD COLUMN {column}")
+        else:
+            if version == 1:
+                for column in ("fw_version TEXT", "fw_build INTEGER", "avg_ua INTEGER",
+                               "life_days INTEGER", "fw_at REAL"):
+                    self._db.execute(f"ALTER TABLE tags ADD COLUMN {column}")
+            self._db.executescript(_SCHEMA)     # IF NOT EXISTS: adds the voltage table
         self._db.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
         self._db.commit()
 
@@ -224,6 +234,9 @@ class Store:
                 self._db.execute(
                     "UPDATE tags SET hex_id=? WHERE hex_id=?", (new_hex, old_hex)
                 )
+            self._db.execute(
+                "UPDATE voltage SET hex_id=? WHERE hex_id=?", (new_hex, old_hex)
+            )
             self._db.commit()
             return not taken
 
@@ -239,8 +252,28 @@ class Store:
                 cursor = self._db.execute("DELETE FROM tags WHERE hex_id=?", (hex_id,))
                 removed += cursor.rowcount or 0
                 self._db.execute("DELETE FROM events WHERE hex_id=?", (hex_id,))
+                self._db.execute("DELETE FROM voltage WHERE hex_id=?", (hex_id,))
             self._db.commit()
         return removed
+
+    # ── voltage history ────────────────────────────────────────────────────
+    def add_voltage(self, hex_id: str, raw: int, at: float | None = None) -> None:
+        """Keep one supply-voltage reading (raw = volts * 256) of a tag."""
+        when = time.time() if at is None else at
+        with self._lock:
+            self._db.execute(
+                "INSERT INTO voltage(hex_id, at, raw) VALUES(?,?,?)", (hex_id, when, int(raw))
+            )
+            self._db.commit()
+
+    def voltage_between(self, hex_id: str, since: float, until: float) -> list[tuple[float, float]]:
+        """(time, volts) of every reading in [since, until], oldest first."""
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT at, raw FROM voltage WHERE hex_id=? AND at>=? AND at<=? ORDER BY at",
+                (hex_id, since, until),
+            ).fetchall()
+        return [(row["at"], row["raw"] / 256.0) for row in rows]
 
     def record_push(self, hex_id: str, name: str, bitmap_key: str | None,
                     at: float | None = None) -> None:

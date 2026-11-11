@@ -88,6 +88,12 @@
  * 1.8 s), so the storm guard suspends the feature - i.e. NFC does not work. Keep 1 until
  * there is a pull-up on PB3 or the chip is powered from an always-on rail. */
 #define SHELF_NFC_RAIL_HOLD     1
+/* What a phone gets from the tag. "" = an empty NDEF message: the phone detects the tag and
+ * opens nothing. To open a page later, put it here in full, e.g. "https://example.com/t"
+ * (at most 48 characters). With SHELF_NFC_NDEF_SYNC 1 the tag compares the chip's NDEF area
+ * with this at every boot and rewrites it only when it differs (a few EEPROM pages, once). */
+#define SHELF_NFC_URL           ""
+#define SHELF_NFC_NDEF_SYNC     1
 /* 1 = read the NFC chip's UID and dump its configuration area at boot. Read-only. */
 #define SHELF_NFC_PROBE         0
 

@@ -18,6 +18,7 @@
 
 #include <ax8052f143.h>
 #include <libmftypes.h>
+#include <libmfwtimer.h>
 #include "axradio.h"
 #include "shelfhw.h"
 #include "shelflink.h"
@@ -33,6 +34,21 @@ static uint8_t __xdata delay_hint;      /* 10 s units, 0 = no request */
  * so the tag keeps listening instead of closing its window after the grace. */
 #define PREARM_SLOTS 4
 static uint16_t __xdata prearmed[PREARM_SLOTS];
+/* The poll that last consumed a pre-arm. When the tag misses our reply it sends the
+ * same poll again (retry, same seq); that copy must get the same "data follows",
+ * or the tag closes its window on cmd=00 and the push misses it. */
+static uint16_t __xdata armed_src;
+static uint8_t __xdata armed_seq;
+
+/* The green "a tag polled" flash. NOT shelfhw_led_pulse(): that busy-waits 50 ms with
+ * no host RX pump and no radio service. The UART holds one byte, so a command the host
+ * sent in reaction to the POLL line was lost whole (no answer at all - the server then
+ * waited out its 6 s timeout and the tag's window closed), a longer line lost its
+ * middle ("ERR chk"), and a second tag polling meanwhile got its reply too late
+ * (SL_RSP_TIMEOUT_MS is 60 ms), retried, and was answered as a duplicate. The main loop
+ * switches it off instead. */
+static uint8_t __xdata led_lit;
+static uint16_t __xdata led_t0;
 
 static void log_rx(const struct sl_rx __xdata *rx)
 {
@@ -483,9 +499,14 @@ static void on_rx(const struct sl_rx __xdata *rx)
             if (prearmed[i] == rx->src) {
                 prearmed[i] = 0;
                 rsp[SM_RSP_CMD] = SM_CMD_DATA;
+                armed_src = rx->src;
+                armed_seq = rx->seq;
                 break;
             }
         }
+        /* a repeat of the poll that took the pre-arm: same answer */
+        if (rx->dup && rx->src == armed_src && rx->seq == armed_seq)
+            rsp[SM_RSP_CMD] = SM_CMD_DATA;
         rsp[SM_RSP_RSSI] = (uint8_t)(int8_t)rx->rssi;
         rsp[SM_RSP_DELAY] = delay_hint;
         sl_reply(rx, SL_T_POLL_RSP, rsp, SM_RSP_LEN);
@@ -502,8 +523,11 @@ static void on_rx(const struct sl_rx __xdata *rx)
     /* A tag announced itself: one short green flash. Deliberately not a
      * toggle - keeping the LED lit for the whole poll interval is what heated
      * the panel on the tag and made the frame look like a toggle here. */
-    if (rx->type == SL_T_POLL)
-        shelfhw_led_pulse(SHELFHW_LED_GREEN, SHELFHW_LED_PULSE_MS);
+    if (rx->type == SL_T_POLL) {
+        shelfhw_led(SHELFHW_LED_GREEN, 1);
+        led_lit = 1;
+        led_t0 = (uint16_t)wtimer0_curtime();
+    }
 }
 
 void main(void)
@@ -540,5 +564,10 @@ void main(void)
         host_poll();
         if (blk_active)
             batch_step();
+        if (led_lit && (uint16_t)((uint16_t)wtimer0_curtime() - led_t0)
+                       >= SHELFHW_MS_TO_TICKS(SHELFHW_LED_PULSE_MS)) {
+            shelfhw_led(SHELFHW_LED_GREEN, 0);
+            led_lit = 0;
+        }
     }
 }

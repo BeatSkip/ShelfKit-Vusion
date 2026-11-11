@@ -34,3 +34,7 @@ Appended by `Tooling/build-all.py`. `dirty` = the build had uncommitted changes,
 | 2026-11-10 01:01 | 1.0.0 | 28 | 3b065a0 dirty | Vusion addd4eab40d993c1 (119375 B); Vusion-Hub f15b76daf6615cdf (88440 B); Bootloader 62c924bad1e8daad (24931 B) |
 | 2026-11-10 01:05 | 1.0.0 | 29 | 3b065a0 dirty | Vusion 1e3b388dd23d0283 (119354 B); Vusion-Hub 706fc1e2293bb7d3 (88440 B); Bootloader a720a19586dea731 (24931 B) |
 | 2026-11-10 22:24 | 1.0.0 | 30 | 5951d28 dirty | Vusion 614befeee552050f (119934 B); Vusion-Hub 4c96583cc4bb4c8e (89056 B); Bootloader e2310ad4eda7e837 (24931 B) |
+| 2026-11-11 20:23 | 1.0.0 | 31 | d1c8da5 dirty | Vusion 5d5f82c6d33eb781 (120890 B); Vusion-Hub 49107b8a1a29d95a (89547 B); Bootloader a0f29311bac03e2c (24931 B) |
+| 2026-11-11 | 1.1.0 | 32-33 | - | NOT RECORDED: the 1.1.0 bump and its build rows were lost when version.json/build-log.md were restored from git after test builds. Tags E1D6 and F466 report 1.1.0-32 (flashed 20:17-20:19). The 1.0.0-31 row above is a later build that started from the restored counter; the earlier tag firmware also reported 1.0.0-31. Counter set to continue at 1.1.0-34. |
+| 2026-11-11 20:25 | 1.2.0 | 34 | d1c8da5 dirty | Vusion 5cb1aea6aee18d3c (120890 B); Vusion-Hub e9b130473cfd3086 (89547 B); Bootloader e2310ad4eda7e837 (24931 B) (version bump: minor) |
+| 2026-11-11 20:26 | 1.1.0 | 35 | d1c8da5 dirty | Vusion ac0db3629f04f23c (120890 B); Vusion-Hub 5b05196923bd7667 (89547 B); Bootloader e2310ad4eda7e837 (24931 B) |

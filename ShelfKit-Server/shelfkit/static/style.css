@@ -762,3 +762,15 @@ tr.failed .state-word, tr.failed .detail { color: var(--red); font-weight: 500; 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* battery history ----------------------------------------------------------- */
+.vhist { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid var(--rule); }
+.vhist h3 { font-size: var(--t-body); font-weight: 500; }
+.vhist-range { display: flex; gap: 8px; flex-wrap: wrap; font-size: var(--t-small); color: var(--ink-2); }
+.vhist-range label { display: flex; flex-direction: column; gap: 3px; }
+.vhist-chart { width: 100%; height: auto; background: var(--surface); border: 1px solid var(--rule); }
+.vhist-chart text { fill: var(--ink-2); font-size: 9px; font-family: inherit; }
+.vhist-chart .grid-line { stroke: var(--rule); stroke-width: 0.5; }
+.vhist-chart .low-line { stroke: var(--red); stroke-width: 0.8; stroke-dasharray: 3 3; }
+.vhist-chart .series { fill: none; stroke: var(--ink); stroke-width: 1.4; stroke-linejoin: round; }
+.vhist-chart .dots { fill: var(--ink); }

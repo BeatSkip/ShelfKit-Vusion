@@ -52,6 +52,7 @@ Everything tag-specific is in one header:
 | `SHELF_STATS_EVERY` | Print the `pow …` link/power summary every N polls (2) |
 | `SHELF_RADIO_SLEEP`, `SHELF_RADIO_DEEPSLEEP`, `SHELF_MCU_SLEEP`, `SHELF_XTAL_OFF` | The low-power switches (all but `SHELF_XTAL_OFF` are on), see [Power](#power) |
 | `SHELF_NFC_POLL`, `SHELF_NFC_RAIL_HOLD`, `SHELF_NFC_PROBE` | NFC wake-on-field (1, 1, 0): a falling edge on PB3 wakes the tag and polls; the rail is held on because with it off PB3 floats and re-triggers every cycle (seen on hardware: a poll every 1.8 s). A storm guard suspends the feature for ~30 poll cycles after 4 consecutive NFC-triggered cycles |
+| `SHELF_NFC_URL`, `SHELF_NFC_NDEF_SYNC` | What a phone reads from the tag ("", 1): empty = the phone detects the tag and opens nothing. At boot the tag compares the NFC chip's NDEF area (Type 2, from 0x010) with this and rewrites it only if it differs. A URL (max 48 chars) adds ~100 B of code, which the OTA window cannot take right now (see Documentation/power-audit.md for the size budget) |
 | `SHELF_FLASH_POWER_ON`, `SHELF_WIPE_FIRST_BOOT` | Switch the flash rail around every flash access; wipe the owned flash sectors on a first boot |
 | `SHELF_POWER_LINES` | Hold the panel supply (U4, PA5) on from boot. Not a radio setting; leave off — the image path powers the panel around each image. PA2 (U5) is always parked low |
 

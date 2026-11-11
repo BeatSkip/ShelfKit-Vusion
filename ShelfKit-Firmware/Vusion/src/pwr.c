@@ -66,28 +66,3 @@ void pwr_off(void)
     /* off level per pin = complement of its on level, within the mask */
     PORTA = (uint8_t)((PORTA & (uint8_t)~m) | ((uint8_t)~pwr_on_level() & m));
 }
-
-/* libmf's delay() takes microseconds and tops out at ~65 ms per call. */
-static void pwr_delay_ms(uint16_t ms)
-{
-    while (ms--)
-        delay(1000);
-}
-
-void pwr_pulse(uint16_t on_ms, uint16_t off_ms, uint16_t cycles)
-{
-    if (cycles == 0) {
-        for (;;) {
-            pwr_on();
-            pwr_delay_ms(on_ms);
-            pwr_off();
-            pwr_delay_ms(off_ms);
-        }
-    }
-    while (cycles--) {
-        pwr_on();
-        pwr_delay_ms(on_ms);
-        pwr_off();
-        pwr_delay_ms(off_ms);
-    }
-}

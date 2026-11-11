@@ -58,7 +58,8 @@ RE_POLL = re.compile(r"^POLL src=([0-9a-fA-F]{4,8})\b")
 # the hub prints the tag's supply voltage as vdd=XXXX (volts*256, 3.00 V -> 0x0300)
 # The hub logs what it told the tag: cmd=01 "data follows, keep listening", 00 "nothing queued".
 RE_RSP = re.compile(r"^RSP ([0-9a-fA-F]{4,8}) cmd=([0-9a-fA-F]{2})\b")
-# Only a poll the user started by tapping the tag carries these (firmware version + power):
+# Only the first poll after a tag resets (power-up, OTA update) and a poll the user started
+# by tapping the tag carry these (firmware version + power):
 #   POLL src=15b3 ... fw=0.0.1-7 avg=50uA life=516d
 RE_POLL_FW = re.compile(r"\bfw=(\d+)\.(\d+)\.(\d+)-(\d+) avg=(\d+)uA life=(\d+)d\b")
 RE_POLL_VDD = re.compile(r"\bvdd=([0-9a-fA-F]{4})\b")
@@ -192,6 +193,7 @@ class App:
         # True while the hub redraws its own panel: its serial line is also the panel's
         # reset, so nothing may be written to it until the refresh is done.
         self.display_busy = False
+        self._arming: set[int] = set()      # tags whose pre-arm is awaiting the hub's answer
         self.progress = ""
         self.tags: dict[int, int] = {}
         # Editor: how the image is fitted and dithered, plus the last preview.
@@ -406,6 +408,51 @@ class App:
         return {"ok": bool(entries) or not problems, "imported": len(entries),
                 "problems": problems}
 
+    def voltage_history(self, hex_id: str, since: float, until: float,
+                        max_points: int = 1200) -> dict:
+        """A tag's voltage readings in [since, until] for the chart, plus the drain over it.
+
+        The drain is a least-squares line through every reading (one noisy reading cannot
+        swing it, unlike last minus first), given in mV per day. The mA figure turns the
+        CR2450 curve's percentage change into charge of a 620 mAh cell - an approximation,
+        because the voltage of a lithium coin cell is nearly flat for most of its life.
+        """
+        hex_id = hex_id.upper()
+        points = self.store.voltage_between(hex_id, since, until) if self.store else []
+        out = {"hex_id": hex_id, "since": since, "until": until, "count": len(points),
+               "points": [], "stats": None}
+        if not points:
+            return out
+        n = len(points)
+        t0 = points[0][0]
+        xs = [(t - t0) / 86400.0 for t, _v in points]          # days since the first reading
+        vs = [v for _t, v in points]
+        slope = None
+        if n >= 2 and xs[-1] > 0:
+            mx, mv = sum(xs) / n, sum(vs) / n
+            var = sum((x - mx) ** 2 for x in xs)
+            if var > 0:
+                slope = sum((x - mx) * (v - mv) for x, v in zip(xs, vs)) / var   # V per day
+        span_h = (points[-1][0] - t0) / 3600.0
+        pct_first, pct_last = battery_percent(vs[0]), battery_percent(vs[-1])
+        ua = None
+        if span_h >= 1.0 and pct_first >= pct_last:
+            ua = round((pct_first - pct_last) / 100.0 * 620000.0 / span_h)   # uA, 620 mAh
+        out["stats"] = {
+            "first_at": points[0][0], "last_at": points[-1][0],
+            "first_v": round(vs[0], 3), "last_v": round(vs[-1], 3),
+            "min_v": round(min(vs), 3), "max_v": round(max(vs), 3),
+            "mean_v": round(sum(vs) / n, 3), "span_h": round(span_h, 2),
+            "drain_mv_per_day": None if slope is None else round(-slope * 1000.0, 2),
+            "drain_net_mv": round((vs[0] - vs[-1]) * 1000.0, 1),
+            "drain_ua_estimate": ua,
+        }
+        if n > max_points:                     # thin out evenly, keep the newest reading
+            step = n / max_points
+            points = [points[int(i * step)] for i in range(max_points - 1)] + [points[-1]]
+        out["points"] = [[round(t, 1), round(v, 3)] for t, v in points]
+        return out
+
     def _event(self, event: str, hex_id: str | None = None, detail: str | None = None) -> None:
         if self.store is not None:
             self.store.add_event(event, hex_id, detail)
@@ -483,6 +530,7 @@ class App:
         hub_booted = False
         fw_event = None
         fw_store = None
+        volt_store = None
         with self.lock:
             pane = self.panes.get(key)
             if pane is None:
@@ -509,6 +557,7 @@ class App:
                 vdd = RE_POLL_VDD.search(text)
                 if vdd:
                     self.tag_vdd[addr] = (int(vdd.group(1), 16), time.time())
+                    volt_store = (f"{addr:04X}", int(vdd.group(1), 16), time.time())
                 counted = addr
                 event = ("sync", f"{addr:04X}", None)
             if RE_BOOTLOADER.match(text):
@@ -533,6 +582,8 @@ class App:
             hex_id, info = fw_store      # the latest report per tag survives a restart
             self.store.record_fw(hex_id, info["version"], info["build"],
                                  info["avg_ua"], info["life_days"], info["at"])
+        if volt_store is not None and self.store is not None:
+            self.store.add_voltage(*volt_store)     # every reading, for the history chart
         if fw_event is not None:
             self._event(*fw_event)
         if learn:
@@ -1773,8 +1824,55 @@ class App:
         with self.lock:
             pane = self.panes.get(self.hub_key())
             ok = pane is not None and pane.worker.is_open and not self.display_busy
-        if ok:
-            pane.worker.write(f"Q{addr:04x}\n".encode("ascii"))
+        if not ok:
+            return
+        with self.lock:
+            start = pane.seq
+            if addr in self._arming:        # one confirmation at a time per tag
+                pane.worker.write(f"Q{addr:04x}\n".encode("ascii"))
+                return
+            self._arming.add(addr)
+            key = self.hub_key()
+        pane.worker.write(f"Q{addr:04x}\n".encode("ascii"))
+        threading.Thread(target=self._confirm_prearm, args=(key, addr, start),
+                         name=f"prearm-{addr:04x}", daemon=True).start()
+
+    RE_PREARM_ANSWER = re.compile(r"^(OK data|ERR \w+)")
+    PREARM_TRIES = 4
+    PREARM_WAIT_S = 0.6
+
+    def _confirm_prearm(self, key: str, addr: int, start: int) -> None:
+        """A pre-arm nobody answered is a push that silently misses its poll: the hub
+        prints `OK data` for every Q it takes, so wait for it, send the Q again if it
+        does not come, and leave a line in the log either way a tag was NOT armed."""
+        pane = self.panes.get(key)
+        answer = None
+        try:
+            for attempt in range(self.PREARM_TRIES):
+                match = self._wait_line(key, self.RE_PREARM_ANSWER, start, self.PREARM_WAIT_S)
+                if match is not None:
+                    answer = match.group(1)
+                    break
+                with self.lock:
+                    wanted = any(j["state"] == "pending" and j["addr"] == addr
+                                 for j in self.queue)
+                if (not wanted or pane is None or not pane.worker.is_open
+                        or self.display_busy):
+                    return                  # cancelled or delivered meanwhile: nothing to arm
+                with self.lock:
+                    start = pane.seq
+                pane.worker.write(f"Q{addr:04x}\n".encode("ascii"))
+                self.note(key, f"# pre-arm {addr:04X}: no answer from the hub, "
+                               f"sent again ({attempt + 2}/{self.PREARM_TRIES})")
+            if answer is None:
+                self.note(key, f"# pre-arm {addr:04X}: the hub never answered, "
+                               "the tag's next poll will NOT be flagged")
+            elif answer != "OK data":
+                self.note(key, f"# pre-arm {addr:04X}: the hub refused it ({answer}), "
+                               "the tag's next poll will NOT be flagged")
+        finally:
+            with self.lock:
+                self._arming.discard(addr)
 
     PREARM_SLOTS = 4        # the hub remembers this many tags at once (PREARM_SLOTS in its main.c)
 

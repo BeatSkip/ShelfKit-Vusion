@@ -438,6 +438,16 @@ static void poll_cb(struct wtimer_desc __xdata *desc)
         return;
     }
 
+    /* The battery voltage, taken BEFORE the receiver wakes. A CR2450 has ~10-20 ohm of
+     * internal resistance, so with the receiver on (~12 mA with the CPU) it reads
+     * 150-250 mV low - a full cell showed 2.75 V, which the server's curve calls half
+     * empty. Here the cell has rested since the last poll and only the CPU is running. */
+    {
+        uint16_t vdd = shelfhw_measure_vdd();
+        poll_payload[SM_POLL_VDD_LO] = (uint8_t)vdd;
+        poll_payload[SM_POLL_VDD_HI] = (uint8_t)(vdd >> 8);
+    }
+
 #if SHELF_RADIO_SLEEP
     /* wake the radio for this poll and open the listening window */
     if (radio_asleep) {
@@ -471,16 +481,12 @@ static void poll_cb(struct wtimer_desc __xdata *desc)
     poll_payload[SM_POLL_UPTIME_HI] = (uint8_t)(up >> 8);
     poll_payload[SM_POLL_ATTEMPTS] = last_attempts;
     poll_payload[SM_POLL_RSSI] = (uint8_t)last_hub_rssi;
-    {
-        uint16_t vdd = shelfhw_measure_vdd();
-        poll_payload[SM_POLL_VDD_LO] = (uint8_t)vdd;
-        poll_payload[SM_POLL_VDD_HI] = (uint8_t)(vdd >> 8);
-    }
 
     poll_len = SM_POLL_LEN;
     if (nfc_info) {
-        /* only for a poll the user started with a tap: which firmware this is and how
-         * the battery is doing. Nothing extra goes over the air on a normal poll. */
+        /* only for the first poll after a reset and a poll the user started with a tap:
+         * which firmware this is and how the battery is doing. Nothing extra goes over
+         * the air on a normal poll. */
         pow_update();
         /* the same bytes a tool reads from the .hex: one source of truth */
         poll_payload[SM_POLL_FW_MAJOR] = shelf_fw_info[SHELF_FW_INFO_MAJOR];
@@ -574,6 +580,10 @@ void main(void)
     shelfhw_led_pulse(SHELFHW_LED_BLUE, SHELFHW_LED_BOOT_PULSE_MS);
 
     poll_timer.handler = poll_cb;
+    /* The first poll after any reset - power-up, OTA update, watchdog - carries the firmware
+     * version, so the server knows what every tag runs without a tap. It repeats until the hub
+     * acknowledges one, like a tap's. (Its avg/life figures cover only the boot seconds.) */
+    nfc_info = 1;
     arm_poll(1);                    /* first check-in one second after boot */
 
     /* armed by poll_cb, not before: an un-armed descriptor is simply not linked */

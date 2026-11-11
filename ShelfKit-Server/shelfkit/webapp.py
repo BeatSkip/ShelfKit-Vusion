@@ -10,6 +10,7 @@ long-lived poll connection per browser tab. The API is small and boring:
     POST /api/flash            {"method": "debugger"|"serial", "path": "...hex", "pane": "tag",
                                "allow_partial": false}  start flashing (one at a time)
     POST /api/flash/cancel     stop it (the chip may be left half-programmed)
+    GET  /api/voltage?tag=0100&since=<unix>&until=<unix>   a tag's voltage readings and drain
     GET  /api/aliases.csv      every tag's alias, notes, shelf and slot as a CSV download
     POST /api/aliases          {"csv": "hex_id,alias,..."}  apply a CSV (blank cells clear)
     POST /api/prefs            {"late_after_s": 330, ...}  page settings, validated and stored
@@ -133,6 +134,17 @@ class Handler(BaseHTTPRequestHandler):
             from .app import REPO_ROOT
             return self._json({"flash": self.app.flash.info(full=True),
                                "files": flasher.hex_files(REPO_ROOT / "Release")})
+        if path == "/api/voltage":
+            import time as _time
+            try:
+                until = float((query.get("until") or [_time.time()])[0])
+                since = float((query.get("since") or [until - 86400.0 * 7])[0])
+            except ValueError:
+                return self._error("since and until are unix times")
+            tag = (query.get("tag") or [""])[0].strip().upper()
+            if not tag or len(tag) > 4 or any(c not in "0123456789ABCDEF" for c in tag):
+                return self._error("tag is a hex id such as 0100")
+            return self._json(self.app.voltage_history(tag, since, until))
         if path == "/api/aliases.csv":
             return self._send(HTTPStatus.OK, self.app.aliases_csv().encode("utf-8"),
                               "text/csv; charset=utf-8")

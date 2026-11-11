@@ -31,7 +31,9 @@ Version stamping: ``ShelfKit-Firmware/version.json`` holds major.minor.patch and
 counter. Every successful run adds 1 to the build counter; ``--bump`` (``patch`` by default,
 or ``minor`` / ``major``) raises the version first and resets the lower parts;
 ``--set X.Y.Z`` sets it outright. A build is named ``version-build``, like ``1.0.0-5``,
-everywhere it appears.
+everywhere it appears. ``--no-record`` builds without touching either file (a compile
+check); never undo a build by restoring version.json from git - that also throws away
+any ``--bump`` made since the last commit.
 The numbers are compiled into every target (SHELF_FW_MAJOR/MINOR/PATCH/BUILD, see
 Shared/firmware/shelflink/inc/shelfver.h), and a line with the version, build, git commit
 and the hash of each image is appended to ``ShelfKit-Firmware/build-log.md`` - that file is
@@ -507,6 +509,10 @@ def main(argv: list[str] | None = None) -> int:
                              "number goes up on every run regardless")
     parser.add_argument("--set", dest="set_to", metavar="X.Y.Z",
                         help="set the firmware version outright (the build number still goes up)")
+    parser.add_argument("--no-record", action="store_true",
+                        help="a throwaway build (a compile check, a test image): stamped with the "
+                             "next number but version.json and build-log.md are left alone, so the "
+                             "next real build reuses that number. Not with --bump/--set")
     parser.add_argument("--define", action="append", default=[], metavar="NAME[=VALUE]",
                         help="extra -D for every target, e.g. SHELF_LOG_UART=1 (repeatable); "
                              "use it with --out so the normal Release/ is left alone")
@@ -518,6 +524,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.set_to and not re.fullmatch(r"\d{1,3}\.\d{1,3}\.\d{1,3}", args.set_to):
         parser.error("--set wants X.Y.Z, for example 1.0.0")
+    if args.no_record and (args.bump or args.set_to):
+        parser.error("--no-record would throw the --bump/--set away; build without it")
 
     if args.targets.strip().lower() == "all":
         chosen = list(TARGETS.values())
@@ -545,7 +553,11 @@ def main(argv: list[str] | None = None) -> int:
     if not verify_stamp(results, stamped):
         return 1
     print("  version marker in the images: ok")
-    write_build_log(stamped, results, args.bump)
+    if args.no_record:
+        print(f"  --no-record: {display(VERSION_FILE)} and {display(BUILD_LOG)} not updated, "
+              f"the next build is {version_text(stamped)} again - do not flash this one")
+    else:
+        write_build_log(stamped, results, args.bump)
 
     if not args.no_bundle and "Vusion" in chosen and "Bootloader" in chosen:
         by_target = {row["target"]: row["hex"] for row in results}
@@ -561,7 +573,10 @@ def main(argv: list[str] | None = None) -> int:
             print("    it flashes over the wire, but ota-send.py and the server will refuse it.")
             print("    Free space in the application, or move bytes out of it.")
 
-    print(f"\n=== ready to flash: firmware {version_text(stamped)}, logged in {display(BUILD_LOG)} ===")
+    if args.no_record:
+        print(f"\n=== test build {version_text(stamped)} (not recorded) ===")
+    else:
+        print(f"\n=== ready to flash: firmware {version_text(stamped)}, logged in {display(BUILD_LOG)} ===")
     for row in results:
         print(f"  {row['hex'].name:<44} {row['bytes']:>8} bytes  {row['usage']}")
     full = locals().get("full_hex")

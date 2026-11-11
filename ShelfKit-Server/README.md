@@ -286,6 +286,7 @@ that is still polling simply reappears as a fresh row (with no alias) on its nex
 | Fleet → select rows → **Forget** | the same for a selection |
 | Fleet → **Forget tags silent for 15 minutes** | deletes every tag not heard for 15 minutes, which is longer than the slowest poll interval (10 minutes). Only offered when such a tag exists |
 | Fleet battery reading | the tag's supply voltage and a cell gauge from each poll, with the **CR2450 percentage** in its tooltip and the inspector, red below 2.5 V (older firmware shows "No battery reading") |
+| Battery history | every voltage a tag reports is stored (the `voltage` table in the state database). The tag inspector plots it over 24 h, 7, 30 or 90 days, everything, or a custom from/to, with the average drain: a trend line in mV per day, the net change, and a rough current in uA derived from the CR2450 curve (needs 1 h of readings; the cell is flat for most of its life, so treat it as an estimate). `GET /api/voltage?tag=0100&since=<unix>&until=<unix>` returns the same data |
 | Inspector → **Read flash** | reads the tag's metadata pages back over the radio and offers the `.bin`/`.txt` |
 | Inspector → **Factory reset** | sends the tag a wipe command: it erases its SPI flash, resets and comes back with a **new random id**; the old row is dropped |
 
@@ -335,7 +336,7 @@ banner, black and red patches) and carries what a tag in hand needs:
 | wireless id, large | the tag's current node id |
 | alias | the tag's alias, if it has one |
 | note | the tag's **notes** field, or a one-off `note` in the request |
-| firmware | version and build the tag last reported (a phone tap makes it send them), or "not reported" |
+| firmware | version and build the tag last reported (it sends them on its first poll after every reset or update, and when tapped with a phone), or "not reported" |
 | battery | voltage, a battery symbol and the rough percentage from the last poll, or "not reported" |
 | timestamp | when the label was drawn (`YYYY-MM-DD HH:MM`) |
 | B/W/R patches | a panel that has lost a colour is obvious next to them |

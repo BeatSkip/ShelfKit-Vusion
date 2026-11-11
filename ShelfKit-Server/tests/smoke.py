@@ -248,6 +248,19 @@ def main() -> int:
               get("/api/state")["tag_info"]["256"]["vdd"]["volts"] == 3.0,
               get("/api/state")["tag_info"]["256"].get("vdd"))
 
+        # every poll's voltage is kept and can be read back for the chart
+        PORTS["SMOKE1"].feed("POLL src=0100 seq=02 rssi=-30 up=72s att=1 hubrssi=-33 vdd=0300\r\n")
+        time.sleep(0.2)
+        history = get("/api/voltage?tag=0100&since=0")
+        check("both readings are in the voltage history",
+              history["count"] == 2 and [p[1] for p in history["points"]] == [3.0, 3.0], history)
+        try:
+            get("/api/voltage?tag=zz")
+            refused = False
+        except urllib.error.HTTPError as err:
+            refused = err.code == 400
+        check("a bad tag id is refused", refused)
+
         # the Editor's render path - the one that used to raise
         image = str((REPO / "Resources" / "polyform-eink.png").resolve())
         post("/api/image", {"path": image})
@@ -365,6 +378,8 @@ def main() -> int:
         pend = app.enqueue("image", 0x0200, "prearm", path=str(app.image),
                            fit="stretch", dither="threshold")
         check("queueing a command pre-arms its tag", "Q0200" in hub.written, hub.written)
+        check("a pre-arm the hub never answers is sent again",
+              wait_for(lambda: hub.written.count("Q0200") >= 2, 3.0), hub.written)
         hub.written.clear()
         hub.feed("*** ShelfKit hub, node 0001 net 5a dump=1 batch=1 show=1\r\n")
         check("a reset hub gets its pre-arms back",
