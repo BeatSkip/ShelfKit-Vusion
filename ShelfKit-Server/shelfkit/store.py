@@ -19,7 +19,7 @@ import threading
 import time
 from pathlib import Path
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 MAX_EVENTS = 5000      # keep the newest N; the Logs screen never shows more
 MAX_BITMAPS = 64       # content store ceiling (each row ~15 KB of blobs)
 
@@ -98,6 +98,13 @@ CREATE TABLE IF NOT EXISTS power_runs ( -- an archived power measurement: one ba
     points     TEXT                    -- JSON [[t, volts], ...], its own copy of the readings
 );
 CREATE INDEX IF NOT EXISTS power_runs_tag ON power_runs(hex_id, ended_at);
+
+CREATE TABLE IF NOT EXISTS app_bindings ( -- InkServices: the app that owns a tag's screen.
+    hex_id       TEXT PRIMARY KEY,     -- one app per tag. The app's own config and data
+    app_id       TEXT NOT NULL,        -- live in its own database (inkservices/appstore.py)
+    last_hash    TEXT,                 -- sha1 of the last queued planes: skip identical pushes
+    last_push_at REAL
+);
 """
 
 
@@ -253,6 +260,13 @@ class Store:
             self._db.execute(
                 "UPDATE power_runs SET hex_id=? WHERE hex_id=?", (new_hex, old_hex)
             )
+            # the tag's app moves with it; where the new id already has one, that one
+            # stays (as with the tag row above). The app's own data is moved by the
+            # AppHost, in the app's database.
+            self._db.execute(
+                "UPDATE OR IGNORE app_bindings SET hex_id=? WHERE hex_id=?", (new_hex, old_hex)
+            )
+            self._db.execute("DELETE FROM app_bindings WHERE hex_id=?", (old_hex,))
             self._db.commit()
             return not taken
 
@@ -270,8 +284,56 @@ class Store:
                 self._db.execute("DELETE FROM events WHERE hex_id=?", (hex_id,))
                 self._db.execute("DELETE FROM voltage WHERE hex_id=?", (hex_id,))
                 self._db.execute("DELETE FROM power_runs WHERE hex_id=?", (hex_id,))
+                self._db.execute("DELETE FROM app_bindings WHERE hex_id=?", (hex_id,))
             self._db.commit()
         return removed
+
+    # ── InkServices: which app owns which tag's screen ────────────────────
+    @staticmethod
+    def _binding_row(row) -> dict:
+        return {"hex_id": row["hex_id"], "app_id": row["app_id"],
+                "last_hash": row["last_hash"], "last_push_at": row["last_push_at"]}
+
+    def bind_app(self, hex_id: str, app_id: str) -> None:
+        """Give a tag's screen to an app (replacing any app it had).
+
+        last_hash is cleared: the new app's first screen must be pushed even if it
+        happens to look like the old one's last.
+        """
+        with self._lock:
+            self._db.execute(
+                "INSERT INTO app_bindings(hex_id, app_id, last_hash, last_push_at) "
+                "VALUES(?,?,NULL,NULL) ON CONFLICT(hex_id) DO UPDATE SET "
+                "app_id=excluded.app_id, last_hash=NULL, last_push_at=NULL",
+                (hex_id, app_id),
+            )
+            self._db.commit()
+
+    def unbind_app(self, hex_id: str) -> None:
+        with self._lock:
+            self._db.execute("DELETE FROM app_bindings WHERE hex_id=?", (hex_id,))
+            self._db.commit()
+
+    def app_binding(self, hex_id: str) -> dict | None:
+        with self._lock:
+            row = self._db.execute(
+                "SELECT * FROM app_bindings WHERE hex_id=?", (hex_id,)
+            ).fetchone()
+        return self._binding_row(row) if row else None
+
+    def app_bindings(self) -> list[dict]:
+        with self._lock:
+            rows = self._db.execute("SELECT * FROM app_bindings ORDER BY hex_id").fetchall()
+        return [self._binding_row(row) for row in rows]
+
+    def set_app_pushed(self, hex_id: str, image_hash: str, at: float) -> None:
+        """Remember what was last queued for the tag, so an identical screen is skipped."""
+        with self._lock:
+            self._db.execute(
+                "UPDATE app_bindings SET last_hash=?, last_push_at=? WHERE hex_id=?",
+                (image_hash, at, hex_id),
+            )
+            self._db.commit()
 
     # ── voltage history ────────────────────────────────────────────────────
     def add_voltage(self, hex_id: str, raw: int, at: float | None = None) -> None:

@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Layout playground</title>
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    body { padding: 0 var(--gutter) 48px; }
+    .ink-head { display: flex; align-items: baseline; gap: 16px; padding: 18px 0 6px;
+                border-bottom: 1px solid var(--rule); margin-bottom: 18px; flex-wrap: wrap; }
+    .ink-head h1 { font-size: var(--t-h1); margin: 0; }
+    h2 { font-size: var(--t-h2); margin: 28px 0 10px; }
+    .panel { image-rendering: pixelated; background: #fff; border: 1px solid var(--case-edge);
+             box-shadow: 0 6px 10px -6px var(--case-shadow); display: block; }
+    .stack { display: flex; flex-direction: column; gap: 8px; }
+    .controls { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    .controls input[type=text] { min-width: 0; flex: 1 1 160px; }
+    label.f { display: flex; flex-direction: column; gap: 3px; font-size: var(--t-small); color: var(--ink-2); }
+    /* inside a column a flex-basis is a height: keep the field its own size */
+    label.f input, label.f textarea, .controls label.f input[type=text] { flex: none; }
+    .log { font-family: var(--mono); font-size: 12px; background: var(--term); border: 1px solid var(--rule-soft);
+           padding: 6px 8px; max-height: 140px; overflow: auto; white-space: pre-wrap; margin: 0; }
+    .msg { font-size: var(--t-small); min-height: 1.2em; }
+    .msg.bad { color: var(--red); }
+    .play { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 20px; align-items: start; }
+    @media (max-width: 860px) { .play { grid-template-columns: 1fr; } }
+    .play textarea { width: 100%; box-sizing: border-box; font-family: var(--mono); font-size: 13px;
+                     background: var(--raised); color: var(--ink); border: 1px solid var(--rule);
+                     padding: 8px; resize: vertical; tab-size: 2; }
+    #pl-src { min-height: 340px; }
+    #pl-data { min-height: 110px; }
+    #pl-img { width: 456px; max-width: 100%; height: auto; }
+    .diags { list-style: none; margin: 0; padding: 0; font-size: var(--t-small); max-width: 456px; }
+    .diags li { padding: 4px 0; border-bottom: 1px solid var(--rule-soft); }
+    .diags .error { color: var(--red); font-weight: 600; }
+    .diags .warn { color: var(--ink); }
+    .diags .info { color: var(--ink-2); }
+    .diags code { font-family: var(--mono); font-size: 11px; color: var(--ink-2); }
+    #pl-boxes { max-height: 260px; max-width: 456px; }
+  </style>
+</head>
+<body>
+  <header class="ink-head">
+    <h1>Layout playground</h1>
+    <span class="hint">InkLayout, development page. Nothing is sent to a tag from here.</span>
+    <a class="button quiet" href="/#apps">Back to Apps</a>
+    <a class="button quiet" href="/api/layout/skill" target="_blank" rel="noopener"
+       title="The file a model gets to learn InkLayout">Skill file</a>
+  </header>
+
+  <section>
+    <p class="hint">Write InkLayout on the left. It renders as you type, with the problems the
+      renderer found and the text picture a model without vision would read.
+      See Documentation/InkLayout.md for the language.</p>
+    <div class="play">
+      <div class="stack">
+        <div class="controls">
+          <select id="pl-load" aria-label="Load an app's layout"><option value="">Load an app's layout…</option></select>
+          <select id="pl-display" aria-label="Display"></select>
+        </div>
+        <textarea id="pl-src" spellcheck="false" aria-label="Layout"></textarea>
+        <label class="f"><span>Data (JSON, read as <code>data.…</code>)</span>
+          <textarea id="pl-data" spellcheck="false">{}</textarea>
+        </label>
+        <p id="pl-json" class="msg bad" role="status"></p>
+      </div>
+      <div class="stack">
+        <img id="pl-img" class="panel" alt="Rendered screen">
+        <ul id="pl-diags" class="diags"></ul>
+        <pre id="pl-boxes" class="log"></pre>
+      </div>
+    </div>
+  </section>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
+  ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+
+async function api(path, body) {
+  const opts = body === undefined ? {} :
+    {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)};
+  const res = await fetch(path, opts);
+  const type = res.headers.get("Content-Type") || "";
+  const data = type.includes("json") ? await res.json() : await res.text();
+  if (!res.ok) throw new Error(data.error || data || res.statusText);
+  return data;
+}
+
+async function loadApps() {          // the apps with a layout file, for "Load an app's layout"
+  try {
+    const {apps} = await api("/api/inkapps");
+    const sel = $("pl-load");
+    sel.length = 1;
+    for (const a of apps.filter((x) => x.layout)) sel.add(new Option(`${a.title} (${a.layout})`, a.id));
+  } catch { /* the server runs without InkServices: the playground still works */ }
+}
+
+// ── layout playground ─────────────────────────────────────────────────────
+const SAMPLE = `<screen padding="6" gap="6">
+  <row bg="black" padding="4 6" justify="between">
+    <text color="white" bold="true" size="16">{{ data.title | upper }}</text>
+    <icon name="sun" color="white"/>
+  </row>
+  <text size="11">TODAY</text>
+  <row gap="8">
+    <text size="40" bold="true" color="red">{{ data.temp }}°</text>
+    <col gap="2" w="fill">
+      <text size="12" fit="shrink">{{ data.sky }}</text>
+      <text size="12">{{ data.wind }} km/h</text>
+    </col>
+  </row>
+  <line/>
+  <grid cols="3" gap="4">
+    <repeat each="data.days" as="d">
+      <col bg="{{ loop.first ? 'black' : 'none' }}" border="1 black" padding="3">
+        <text size="11" bold="true" align="center" color="{{ loop.first ? 'white' : 'black' }}">{{ d.day }}</text>
+        <text size="16" align="center" color="{{ loop.first ? 'white' : 'black' }}">{{ d.t }}°</text>
+      </col>
+    </repeat>
+  </grid>
+  <col h="24" bg="dots"/>
+  <spacer h="fill"/>
+  <text size="11" align="center">{{ now | date:"%a %d %b %H:%M" }}</text>
+</screen>`;
+const SAMPLE_DATA = {title: "Weather", temp: 12, sky: "Light rain", wind: 18,
+  days: [{day: "Fri", t: 11}, {day: "Sat", t: 9}, {day: "Sun", t: 13}]};
+
+let timer = null;
+let seq = 0;
+function schedule() { clearTimeout(timer); timer = setTimeout(renderPlay, 250); }
+
+async function renderPlay() {
+  let data = {};
+  try {
+    data = JSON.parse($("pl-data").value || "{}");
+    $("pl-json").textContent = "";
+  } catch (e) {
+    $("pl-json").textContent = "Data is not valid JSON: " + e.message;
+    return;
+  }
+  const mine = ++seq;
+  try {
+    const r = await api("/api/layout/render",
+      {layout: $("pl-src").value, data, display: $("pl-display").value || null,
+       tag: {hex_id: "0101", alias: "Playground"}});
+    if (mine !== seq) return;
+    const img = $("pl-img");
+    img.src = "data:image/png;base64," + r.png;
+    img.style.width = (r.size[0] * 3) + "px";
+    $("pl-diags").innerHTML = r.diagnostics.length
+      ? r.diagnostics.map((d) => `<li class="${d.level}"><strong>${d.level}</strong> <code>${esc(d.at)}</code><br>${esc(d.msg)}</li>`).join("")
+      : '<li class="info">No problems.</li>';
+    $("pl-boxes").textContent = r.boxes;
+  } catch (e) {
+    $("pl-json").textContent = e.message;
+  }
+}
+
+$("pl-src").addEventListener("input", schedule);
+$("pl-data").addEventListener("input", schedule);
+$("pl-display").addEventListener("change", schedule);
+$("pl-load").addEventListener("change", async (e) => {
+  if (!e.target.value) return;
+  try {
+    $("pl-src").value = await api(`/api/inkapps/layout?app=${encodeURIComponent(e.target.value)}`);
+    $("pl-data").value = "{}";
+    renderPlay();
+  } catch (err) { $("pl-json").textContent = err.message; }
+  e.target.value = "";
+});
+$("pl-src").addEventListener("keydown", (e) => {        // Tab indents instead of leaving the box
+  if (e.key !== "Tab") return;
+  e.preventDefault();
+  const t = e.target, s = t.selectionStart;
+  t.setRangeText("  ", s, t.selectionEnd, "end");
+  schedule();
+});
+
+(async () => {
+  try {
+    const {displays, default: def} = await api("/api/layout/displays");
+    for (const d of displays) $("pl-display").add(new Option(d.name, d.id, d.id === def, d.id === def));
+  } catch { /* the default display is used */ }
+  $("pl-src").value = SAMPLE;
+  $("pl-data").value = JSON.stringify(SAMPLE_DATA, null, 2);
+  renderPlay();
+  loadApps();
+})();
+</script>
+</body>
+</html>

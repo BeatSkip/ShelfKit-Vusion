@@ -1,0 +1,24 @@
+<screen padding="6" gap="6">
+  <row bg="black" padding="4 6" radius="3">
+    <text color="white" bold="true" size="16">{{ tag.alias }}</text>
+  </row>
+
+  <text size="14" bold="true" fit="shrink" lines="2">{{ data.greeting }}</text>
+
+  <col gap="0">
+    <text size="11">PRESSED</text>
+    <text size="64" bold="true" color="red" fit="shrink">{{ data.n }}</text>
+  </col>
+
+  <col if="data.message" gap="4">
+    <line/>
+    <row gap="4">
+      <icon name="message"/>
+      <text size="11" bold="true">MESSAGE</text>
+    </row>
+    <text size="12" fit="wrap" lines="4">{{ data.message }}</text>
+  </col>
+
+  <spacer h="fill"/>
+  <text size="11" align="center">{{ now | date:"%a %d %b %H:%M" }}</text>
+</screen>

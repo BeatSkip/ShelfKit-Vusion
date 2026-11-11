@@ -45,6 +45,7 @@
       <a href="#logs" data-screen="logs">Logs</a>
       <a href="#hub" data-screen="hub">Hub</a>
       <a href="#flash" data-screen="flash">Flash<span class="mark s-sending" id="nav-flash" hidden></span></a>
+      <a href="#apps" data-screen="apps">Apps</a>
       <a href="#settings" data-screen="settings">Settings</a>
     </nav>
 
@@ -357,6 +358,27 @@
       </div>
     </section>
 
+    <!-- Apps (drawn by apps.js) -->
+    <section class="screen" data-screen="apps" aria-labelledby="apps-title" hidden>
+      <div class="screen-head">
+        <h1 id="apps-title">Apps</h1>
+        <p class="screen-note">Small programs on this server that draw a tag's screen and answer
+          its NFC link. A tag runs one app at a time, and every change reaches it at its next
+          check-in.</p>
+        <span class="grow"></span>
+        <a class="button quiet" href="/inkapps.html">Layout playground</a>
+        <button id="apps-reload" type="button"
+                title="Import every app in inkapps/ again, to pick up changes to their files">Reload apps</button>
+      </div>
+      <p id="apps-problem" class="warning" hidden></p>
+      <div class="apps" id="apps-body">
+        <nav class="apps-list" id="apps-list" aria-label="Installed apps"></nav>
+        <div class="apps-detail" id="apps-detail"></div>
+      </div>
+      <p class="empty" id="apps-empty" hidden>No apps yet. An app is a folder with an
+        <code>app.py</code> in <code>ShelfKit-Server/inkapps/</code>. Add one and press Reload apps.</p>
+    </section>
+
     <!-- Settings -->
     <section class="screen" data-screen="settings" aria-labelledby="settings-title" hidden>
       <div class="screen-head">
@@ -429,6 +451,21 @@
           <p class="hint">The ports are remembered and opened on the Hub screen. Hiding the tag
             port closes it, but it stays available as a target on the Flash screen. The hub and
             the tag can't share a port.</p>
+        </section>
+
+        <section class="setting-group" aria-labelledby="set-public-title">
+          <h2 id="set-public-title">Tag pages for phones</h2>
+          <div class="setting-fields">
+            <label>Address phones use
+              <input id="set-public-url" class="wide" type="url" spellcheck="false"
+                     autocomplete="off" placeholder="https://shelf.example.org">
+            </label>
+          </div>
+          <p class="hint">Tapping a tag opens <code>&lt;address&gt;/tag/&lt;ID&gt;</code>. This
+            server serves those pages on its own port. To reach them from a phone, forward
+            <code>/tag/</code> from a reverse proxy to this server, and enter the proxy's address
+            here so the Apps screen shows the right links. Forward nothing else: the rest of this
+            port is this admin page. Leave it empty to show this server's own address.</p>
         </section>
 
         <section class="setting-group" aria-labelledby="set-axsdb-title">
@@ -629,5 +666,6 @@
   <datalist id="port-options"></datalist>
   <div id="toasts" class="toasts" aria-live="polite"></div>
   <script src="/app.js"></script>
+  <script src="/apps.js"></script>
 </body>
 </html>

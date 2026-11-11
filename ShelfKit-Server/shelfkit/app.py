@@ -19,6 +19,7 @@ from collections import deque
 from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import urlparse
 
 from . import hubhost, prefs as prefs_mod
 from .flasher import Flasher, axsdb_problem, resolve_axsdb
@@ -231,6 +232,8 @@ class App:
         self.boot_state = False
         self._reset_at: tuple[str, float] | None = None   # (pane key, deadline)
         self.store = store                      # shelfkit.store.Store, or None
+        self.inkhost = None                     # InkServices AppHost, see start_inkservices()
+        self.server_base: str | None = None     # http://<bound address>:<port>, set by make_server
         self.prefs = dict(prefs_mod.DEFAULTS)   # the Settings screen's values
         self.flash = Flasher(self)              # firmware flashing: debugger or bootloader
         self.keys: list[str] = []
@@ -1255,6 +1258,8 @@ class App:
 
         if hexes and self.store is not None:
             self.store.forget_tags(hexes)
+        if hexes and self.inkhost is not None:
+            self.inkhost.forget_tags(hexes)
         if hexes:
             shown = ", ".join(hexes[:6]) + (f" +{len(hexes) - 6}" if len(hexes) > 6 else "")
             self._event("forget", None, f"{len(hexes)} tag(s): {shown}")
@@ -1525,6 +1530,49 @@ class App:
                     table[new] = table.pop(old)
         if self.store is not None:
             self.store.rename_tag(f"{old:04X}", f"{new:04X}")
+        if self.inkhost is not None:            # the tag's app data follows it
+            self.inkhost.rename_tag(f"{old:04X}", f"{new:04X}")
+
+    # ── InkServices ────────────────────────────────────────────────────────
+    def start_inkservices(self, root=None, image_dir=None):
+        """Load the apps in inkapps/ and let them push through this App's queue.
+
+        Needs the store (bindings live there); without one there are no apps.
+        """
+        from .inkservices import host as ink_host
+
+        if self.store is None:
+            return None
+        kwargs = {}
+        if root is not None:
+            kwargs["root"] = root
+        if image_dir is not None:
+            kwargs["image_dir"] = image_dir
+        self.inkhost = ink_host.AppHost(self.store, self.enqueue, self.ink_tag_info, **kwargs)
+        return self.inkhost
+
+    def tag_page_base(self) -> tuple[str | None, bool]:
+        """(address the tag pages are reached at, whether only this computer can open it).
+        Settings' "Address phones use" wins: that is a reverse proxy, or a name."""
+        public = (self.prefs.get("public_url") or "").rstrip("/")
+        if public:
+            return public, False
+        base = self.server_base
+        host = urlparse(base).hostname if base else None
+        return base, host in (None, "localhost", "::1") or str(host).startswith("127.")
+
+    def ink_tag_info(self, hex_id: str) -> dict:
+        """What an app may know about a tag: alias, notes, battery volts, display."""
+        try:
+            addr = int(hex_id, 16)
+        except ValueError:
+            return {}
+        with self.lock:
+            meta = dict(self.tag_meta.get(addr) or {})
+            vdd = self._vdd_of(addr, time.time())
+        return {"alias": meta.get("alias"), "notes": meta.get("notes"),
+                "battery": vdd["volts"] if vdd else None,
+                "display": None}     # every tag is the default preset until tags report theirs
 
     # ── editor: fit/dither + the preview ───────────────────────────────────
     def set_options(self, fit: str | None = None, dither: str | None = None) -> None:
@@ -1821,6 +1869,15 @@ class App:
                     )
                 except Exception as exc:  # noqa: BLE001 - report at click time
                     return {"ok": False, "error": f"cannot prepare the image: {exc}"}
+            source = params.get("source")
+            if source:
+                # One pending image per tag from the same source (an InkService app):
+                # a newer screen replaces the one still waiting, so a burst of button
+                # presses costs the tag one transfer, not one per press. A job that
+                # is already running is left alone.
+                self.queue = [j for j in self.queue
+                              if not (j["addr"] == addr and j["state"] == "pending"
+                                      and j["params"].get("source") == source)]
             job = {"id": next(self._jobs), "kind": kind, "addr": addr,
                    "label": label, "params": params, "created": time.time(),
                    "state": "pending", "error": None,

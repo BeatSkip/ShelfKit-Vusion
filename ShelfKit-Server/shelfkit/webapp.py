@@ -69,6 +69,8 @@ from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
 from .app import App
+from .inkservices import phone as inkphone
+from .inkservices import web as inkweb
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 # Only these are served, so a request path can never escape STATIC_DIR.
@@ -76,7 +78,9 @@ ASSETS = {
     "/": "index.html",
     "/index.html": "index.html",
     "/app.js": "app.js",
+    "/apps.js": "apps.js",               # the Apps screen
     "/style.css": "style.css",
+    "/inkapps.html": "inkapps.html",     # InkServices + InkLayout development page
 }
 
 
@@ -128,8 +132,12 @@ class Handler(BaseHTTPRequestHandler):
         path = unquote(url.path)
         query = parse_qs(url.query)
 
+        if inkphone.handle_get(self, path, url.query):   # /tag/<ID>: what an NFC tap opens
+            return None
         if path in ASSETS:
             return self._serve_asset(ASSETS[path])
+        if inkweb.handle_get(self, path, query):      # /api/inkapps*, /api/layout/*
+            return None
         if path == "/api/state":
             return self._json(self.app.state())
         if path == "/api/hub-display":
@@ -203,6 +211,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802 - base class name
         path = unquote(urlparse(self.path).path)
+        if inkphone.handle_post(self, path):   # tag page forms: urlencoded, own origin check
+            return None
         # A page on another site can POST here too (a plain form needs no permission), and
         # this server drives serial ports and runs the flasher. Browsers always say which
         # site a POST came from, so refuse one that is not this page.
@@ -210,6 +220,8 @@ class Handler(BaseHTTPRequestHandler):
         if origin and urlparse(origin).netloc != self.headers.get("Host"):
             return self._error("cross-site request refused", HTTPStatus.FORBIDDEN)
         body = self._body()
+        if inkweb.handle_post(self, path, body):      # /api/inkapps*, /api/layout/*
+            return None
         parts = [part for part in path.split("/") if part]
         # every endpoint is /api/<something>
         if not parts or parts[0] != "api":
@@ -433,10 +445,28 @@ def parse_cursors(value: str) -> dict[str, str]:
     return cursors
 
 
+def lan_address() -> str:
+    """This machine's address on the local network.
+
+    Connecting a UDP socket sends nothing; it only makes the OS pick the interface
+    it would route through. 192.0.2.1 is a documentation address (RFC 5737)."""
+    import socket
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("192.0.2.1", 9))
+            return s.getsockname()[0]
+    except OSError:
+        return "127.0.0.1"
+
+
 def make_server(app: App, host: str = "127.0.0.1", port: int = 8765) -> ThreadingHTTPServer:
     handler = type("ShelfKitHandler", (Handler,), {"app": app})
     server = ThreadingHTTPServer((host, port), handler)
     server.daemon_threads = True
+    # where the tag pages are, unless Settings names the address phones use (a proxy)
+    bound, real_port = server.server_address[:2]
+    shown = lan_address() if bound in ("0.0.0.0", "::", "") else bound
+    app.server_base = f"http://{shown}:{real_port}"
     return server
 
 

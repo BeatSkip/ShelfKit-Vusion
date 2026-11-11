@@ -25,6 +25,7 @@ DEFAULTS = {
     "wall_size": "full",      # full | half
     "axsdb_path": "",         # axsdb.exe, or its folder; empty = look for it
     "show_tag_port": True,    # the optional tag debug serial pane on the Hub screen
+    "public_url": "",         # where phones reach the tag pages (a reverse proxy); "" = here
 }
 # The hub's and the tag's serial ports are also set from the Settings screen, but they
 # live with the panes (see App._plan_ports), not in this dict.
@@ -51,6 +52,13 @@ def clean(options: dict, current: dict | None = None) -> tuple[dict, list[str]]:
     problems: list[str] = []
     for name, value in (options or {}).items():
         if name not in DEFAULTS:
+            continue
+        if name == "public_url":
+            url, problem = _public_url(value)
+            if problem:
+                problems.append(problem)
+            else:
+                prefs[name] = url
             continue
         if name in BOOLS:
             if isinstance(value, bool):
@@ -86,6 +94,22 @@ def clean(options: dict, current: dict | None = None) -> tuple[dict, list[str]]:
         prefs = {**prefs, **{k: (current or DEFAULTS).get(k, DEFAULTS[k])
                              for k in ("late_after_s", "silent_after_s", "forget_after_s")}}
     return prefs, problems
+
+
+def _public_url(value) -> tuple[str, str]:
+    """("https://host[:port][/path]" without a trailing slash, problem)."""
+    from urllib.parse import urlparse
+
+    text = value.strip() if isinstance(value, str) else None
+    if text == "":
+        return "", ""
+    parsed = urlparse(text or "")
+    if (text is None or len(text) > 200 or parsed.scheme not in ("http", "https")
+            or not parsed.hostname or parsed.query or parsed.fragment
+            or any(c.isspace() for c in text)):
+        return "", ("the address phones use must be an http:// or https:// address, "
+                    "such as https://home.example.org or http://192.168.1.20:8765")
+    return text.rstrip("/"), ""
 
 
 def aliases_to_csv(rows: list[dict]) -> str:

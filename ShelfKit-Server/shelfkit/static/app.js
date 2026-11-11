@@ -17,7 +17,7 @@ const MAX_DOM_LINES = 2000;
 // server's defaults in shelfkit/prefs.py.
 let prefs = {
   late_after_s: 330, silent_after_s: 630, forget_after_s: 900, low_battery_v: 2.5,
-  fleet_view: "wall", wall_size: "full", axsdb_path: "",
+  fleet_view: "wall", wall_size: "full", axsdb_path: "", public_url: "",
   show_tag_port: true, hub_port: "", tag_port: "",
 };
 const THEME_KEY = "shelfkit-theme";
@@ -247,6 +247,7 @@ const ui = {
   setTagPort: $("set-tag-port"),
   setShowTag: $("set-show-tag"),
   setAxsdb: $("set-axsdb"),
+  setPublicUrl: $("set-public-url"),
   setAxsdbState: $("set-axsdb-state"),
 
   navFlash: $("nav-flash"),
@@ -438,6 +439,7 @@ function show(name) {
   window.scrollTo(0, 0);
   draw();
   if (name === "flash") refreshFlash();
+  if (name === "apps" && window.appsShown) window.appsShown();     // apps.js
   if (name === "hub") {
     // lines arrive while the screen is hidden, when a log has no height to scroll
     for (const view of panes.values()) view.log.scrollTop = view.log.scrollHeight;
@@ -2130,6 +2132,7 @@ function loadSettingsForm() {
   setRadio(ui.setView, prefs.fleet_view);
   setRadio(ui.setSize, prefs.wall_size);
   ui.setAxsdb.value = prefs.axsdb_path || "";
+  ui.setPublicUrl.value = prefs.public_url || "";
   ui.setHubPort.value = prefs.hub_port || "";
   ui.setTagPort.value = prefs.tag_port || "";
   ui.setShowTag.checked = prefs.show_tag_port !== false;
@@ -2187,6 +2190,7 @@ function settingsFromForm() {
   out.fleet_view = radioValue(ui.setView);
   out.wall_size = radioValue(ui.setSize);
   out.axsdb_path = ui.setAxsdb.value.trim();
+  out.public_url = ui.setPublicUrl.value.trim();
   out.hub_port = ui.setHubPort.value.trim();
   out.tag_port = ui.setTagPort.value.trim();
   out.show_tag_port = ui.setShowTag.checked;

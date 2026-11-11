@@ -1,0 +1,50 @@
+<screen padding="4" gap="3">
+  <row bg="black" padding="4 6" justify="between">
+    <text color="white" bold="true" size="16">{{ data.month | upper }}</text>
+    <icon name="pill" color="white"/>
+  </row>
+
+  <grid cols="7" gap="2">
+    <repeat each="data.weekdays" as="w">
+      <text size="10" bold="true" align="center">{{ w }}</text>
+    </repeat>
+  </grid>
+  <grid cols="7" gap="2" cell-h="16">
+    <repeat each="data.cells" as="c">
+      <stack bg="{{ c.bg }}" border="{{ c.border }}">
+        <text if="c.show" size="10" bold="{{ c.bold }}" align="center" color="{{ c.fg }}">{{ c.n }}</text>
+      </stack>
+    </repeat>
+  </grid>
+
+  <row gap="4">
+    <stack w="10" h="10" bg="black"/>
+    <text size="10">{{ data.taken_count }} taken</text>
+    <spacer w="4"/>
+    <stack w="10" h="10" bg="red"/>
+    <text size="10" color="{{ data.missed_count ? 'red' : 'black' }}">{{ data.missed_count }} missed</text>
+  </row>
+
+  <line/>
+  <text size="11">LAST TAKEN</text>
+  <text size="14" bold="true">{{ data.last_date }}</text>
+  <text size="28" bold="true" color="red">{{ data.last_time }}</text>
+
+  <spacer h="fill"/>
+  <row if="data.status == 'taken'" gap="6" padding="4" bg="black">
+    <icon name="check" color="white"/>
+    <text size="12" bold="true" color="white">Taken today</text>
+  </row>
+  <row if="data.status == 'late'" gap="6" padding="4" bg="red">
+    <icon name="bell" color="white"/>
+    <text size="12" bold="true" color="white">Take your pill</text>
+  </row>
+  <row if="data.status == 'due'" gap="6" padding="4" border="2 red">
+    <icon name="clock"/>
+    <text size="12">Due by {{ data.remind_at }}</text>
+  </row>
+  <row if="data.status == 'break'" gap="6" padding="4" border="1 black">
+    <icon name="moon"/>
+    <text size="12">Pill-free day</text>
+  </row>
+</screen>

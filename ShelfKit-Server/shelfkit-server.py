@@ -122,6 +122,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.hub_display_title:
         display["title"] = args.hub_display_title
     app = App(specs, auto_open, store=store, display_opts=display or None)
+    inkhost = app.start_inkservices()      # InkServices apps in inkapps/ (needs the store)
+    if inkhost is not None:
+        inkhost.start_scheduler()          # @app.every timers; stopped by inkhost.close()
 
     try:
         server = webapp.make_server(app, args.host, args.port)
@@ -141,6 +144,19 @@ def main(argv: list[str] | None = None) -> int:
     for spec, pane in zip(specs, app.panes.values()):
         print(f"  {spec.name:<6} {spec.port or '(no port)':<12} {pane.worker.status}", flush=True)
     print(f"state: {args.db if store is not None else 'not persisted'}", flush=True)
+    if inkhost is not None:
+        loaded = inkhost.loaded.values()
+        ok = [a.id for a in loaded if a.app]
+        bad = [f"{a.id} ({a.error})" for a in loaded if not a.app]
+        print(f"apps: {', '.join(ok) or 'none'}" + (f"; failed: {'; '.join(bad)}" if bad else ""),
+              flush=True)
+    if inkhost is not None:
+        base, local = app.tag_page_base()
+        print(f"tag pages: {base}/tag/<ID>  (what a tag's NFC link opens)", flush=True)
+        if local:
+            print("  only this computer can open that: forward /tag/ from a reverse proxy "
+                  "and enter the proxy's address under Settings > Address phones use",
+                  flush=True)
     print("Ctrl+C to stop", flush=True)
 
     if not args.no_browser:
@@ -154,6 +170,8 @@ def main(argv: list[str] | None = None) -> int:
         for pane in app.panes.values():
             pane.worker.close()
         server.server_close()
+        if inkhost is not None:
+            inkhost.close()
         if store is not None:
             app._event("stop", None, "server stopped")
             store.close()

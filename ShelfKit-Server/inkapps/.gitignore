@@ -1,0 +1,3 @@
+# Each app keeps its database in its own data/ folder. Code is versioned, data is not:
+# a git pull or a Dev-tab commit must never overwrite what an app has stored.
+*/data/

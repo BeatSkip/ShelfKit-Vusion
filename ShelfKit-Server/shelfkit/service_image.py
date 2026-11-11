@@ -42,7 +42,7 @@ SANS_FONTS = ("tahomabd.ttf", "arialbd.ttf", "DejaVuSans-Bold.ttf")
 TEXT_FONTS = ("tahoma.ttf", "arial.ttf", "DejaVuSans.ttf")
 
 
-def _font(size: int, mono: bool = False, bold: bool = True) -> ImageFont.ImageFont:
+def font(size: int, mono: bool = False, bold: bool = True) -> ImageFont.ImageFont:
     """A hinted scalable font if one can be found, else Pillow's built-in one."""
     for name in MONO_FONTS if mono else SANS_FONTS if bold else TEXT_FONTS:
         for folder in FONT_DIRS:
@@ -57,6 +57,9 @@ def _font(size: int, mono: bool = False, bold: bool = True) -> ImageFont.ImageFo
         return ImageFont.load_default(size=size)
     except TypeError:           # older Pillow: the fixed bitmap font
         return ImageFont.load_default()
+
+
+_font = font        # the name the label code below (and hub_display/stats_image) uses
 
 
 def _fits(text: str, font: ImageFont.ImageFont, limit: int) -> str:

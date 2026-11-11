@@ -1,12 +1,12 @@
 # ShelfKit-Server — browser UI and image push for the ShelfKit hub and tags
 
-A local web app over the hub's serial port, with seven screens: **Fleet** (home), **Editor**, **Queue**,
-**Logs**, **Hub**, **Flash** and **Settings**. Clicking a tag anywhere opens its inspector. Every control on the page does
+A local web app over the hub's serial port, with eight screens: **Fleet** (home), **Editor**, **Queue**,
+**Logs**, **Hub**, **Flash**, **Apps** and **Settings**. Clicking a tag anywhere opens its inspector. Every control on the page does
 something real; screens that were only placeholders are gone.
 
 ![Fleet](../Documentation/screenshots/fleet.png)
 
-More captures (Editor, Queue, Hub, Flash, Settings, the inspector) are in the
+More captures (Editor, Queue, Hub, Flash, Apps, Settings, the inspector, a tag's phone page) are in the
 [top-level README](../README.md); all of them are the running app against simulated serial data.
 
 ```
@@ -120,7 +120,9 @@ small bitmap font, and tags stay paper-coloured in both themes because they are 
 | **Logs** | Events recorded by the server (`push`, `ok`, `fail`, `error`, `boot`, `bootloader`, `open`, ...), identical neighbours collapsed into `×N`, filtered by tag or event, **kept across restarts**. Check-ins (`sync`) are hidden unless you ask for them, because every poll makes one |
 | **Hub** | Both serial panes (port, baud, Open/Close, DTR, Reset, Clear log, live log, and a **send box** to write text or hex bytes to the port with a chosen line ending), Copy logs and Save log, the features the hub's firmware reports, and the settings for the hub's own panel. The port and baud you used come back next run. `#console` links land here |
 | **Flash** | Put firmware on a chip from the page, with the **USB debugger** (AXSDB) or the **serial bootloader**. Pick the file from `Release/`, press Start, press again to confirm. Four steps (find the chip, erase, write, start) show as they happen, with the tool's own output underneath. See [Flashing](#flashing-from-the-page) |
-| **Settings** | When a tag counts as late or silent, when to offer to forget it, the low-battery voltage, and the Fleet layout and tag size. A CSV of aliases, notes, shelf and slot can be exported and imported. Saved by the server (the `prefs` setting in the state database), so every browser and every restart sees the same values; an impossible combination is refused with a message and nothing is stored |
+| **Apps** | The InkServices apps in `inkapps/`: which tags run each one, a live preview, per-tag settings, the phone-page buttons to try (and Simulate NFC tap), stored data and the app's log. **Run on this tag** gives an app a tag's screen. Links to the layout playground. See [Documentation/InkServices.md](../Documentation/InkServices.md) and the [plan](../Documentation/plans/2026-11-11-inkservices.md) |
+| **Tag pages** | `/tag/<ID>` on the same port: what a phone opens from the tag's NFC link. Plain HTML forms with the app's buttons and the tag's current screen. Forward only `/tag/` (and `/t/`) through a reverse proxy, and set its address under Settings. Code and routes: `shelfkit/inkservices/phone.py` |
+| **Settings** | When a tag counts as late or silent, when to offer to forget it, the low-battery voltage, the Fleet layout and tag size, and the address phones use for tag pages. A CSV of aliases, notes, shelf and slot can be exported and imported. Saved by the server (the `prefs` setting in the state database), so every browser and every restart sees the same values; an impossible combination is refused with a message and nothing is stored |
 
 ### Tag status
 

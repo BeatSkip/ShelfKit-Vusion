@@ -1,0 +1,41 @@
+<screen padding="6" gap="6">
+  <row bg="black" padding="4 6" justify="between">
+    <text color="white" bold="true" size="16" fit="shrink" w="fill">{{ data.place | upper }}</text>
+    <icon if="not data.setup" name="{{ data.icon }}" color="white"/>
+  </row>
+
+  <col if="data.setup" gap="6">
+    <text size="12" fit="wrap" lines="6">{{ data.why }}</text>
+  </col>
+
+  <col if="not data.setup" gap="6">
+    <row gap="8">
+      <text size="48" bold="true" color="red">{{ data.temp }}°</text>
+      <col gap="2" w="fill">
+        <text size="12" bold="true" fit="shrink">{{ data.sky }}</text>
+        <text size="12">{{ data.wind }} km/h</text>
+      </col>
+    </row>
+    <line/>
+    <grid cols="3" gap="4">
+      <repeat each="data.days" as="d">
+        <col border="1 black" padding="3" gap="3" align="center">
+          <text size="11" bold="true" align="center">{{ d.day }}</text>
+          <icon name="{{ d.icon }}"/>
+          <text size="11" align="center">{{ d.hi }}° {{ d.lo }}°</text>
+        </col>
+      </repeat>
+    </grid>
+  </col>
+
+  <spacer h="fill"/>
+  <line/>
+  <row gap="8">
+    <icon name="moon" size="24"/>
+    <col gap="2" w="fill">
+      <text size="12" bold="true" fit="shrink">{{ data.moon.name }}</text>
+      <text size="11">{{ data.moon.lit }}% lit</text>
+    </col>
+  </row>
+  <text if="data.stale" size="11" color="red">{{ data.stale }}</text>
+</screen>

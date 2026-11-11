@@ -1,51 +1,105 @@
 # ShelfKit
 
-**An e-paper shelf-label system you can build, flash and drive yourself.** ShelfKit is a hub plus a
-fleet of battery shelf tags: the tags poll a serial-attached hub over sub-GHz radio, the hub relays
-content to them, and a local web app is where you watch the fleet and push what each tag should show.
+**Supermarket shelf labels, repurposed into little e-paper screens you own.** ShelfKit turns
+SES-imagotag / Vusion 2.6" price tags (AX8052F143 radio MCU, 152×296 black/white/red panel, one
+CR2450 coin cell) into a fleet you drive from your own computer: custom firmware for the tags and a
+USB hub, and a local web app that pushes images and runs small apps on them.
 
-It runs on real SES-imagotag / Vusion 2.6" labels (AX8052F143 + GDEW026Z39 black/white/red panel),
-built from source with SDCC — no vendor cloud, no gateway subscription, nothing phoning home.
+No vendor cloud, no gateway subscription, nothing phoning home. Everything is built from source with
+SDCC and Python's standard library.
 
 ![ShelfKit fleet view](Documentation/screenshots/fleet.png)
 
-*Fleet — every tag that announced itself, at true panel size on its shelf, with its state and the last
-frame pushed to it (the frames are the real render, not a mockup).*
+*The Fleet screen: every tag that checked in, at true panel size on its shelf, with its state,
+battery and the exact frame it is showing.*
 
-![ShelfKit editor](Documentation/screenshots/editor.png)
+## What it can do
 
-*Editor — pick an image, choose fit and dither, and see exactly what the glass will show, including a
-4× zoom.*
+- **Push any image to any tag.** Pick a picture, choose fit and dither, see exactly what the glass
+  will show, and send it. The image goes out at the tag's next check-in, chain-code compressed when
+  that helps, so a typical label takes about 30 radio frames instead of 404.
+- **Run apps on tags.** Small Python apps (*InkServices*) own a tag's screen: they draw it, update it
+  on a timer and react when someone taps the tag with a phone. A pill tracker, weather with the moon
+  phase, and a hello-world counter come with it.
+- **Tap a tag, get its page.** Each tag's NFC chip holds a link to `/tag/<ID>` on your server. A
+  phone tap opens that tag's app page with its buttons, and the tag shows the result.
+- **Design screens as text.** *InkLayout* is a small XML layout language made for this panel:
+  rows, grids, text that fits, icons, the three colours, and a renderer that tells you what
+  overflowed. It is simple enough that a cheap AI model can write layouts from a skill file.
+- **Look after the fleet.** Over-the-air firmware updates, wireless ID assignment, flash read-back,
+  factory reset, service labels for finding a tag in hand, and per-tag battery history with a drain
+  estimate.
+- **Sip power.** Between polls the radio, the MCU and the panel rail are all asleep. The check-in
+  interval adapts (30 s while busy, 5 min idle, up to a day with no hub in range), so a lost tag can't
+  drain itself.
 
-![ShelfKit inspector](Documentation/screenshots/inspector.png)
+## Apps on your tags
 
-*Inspector — click any tag, on any screen: its frame and facts, alias, notes, shelf and slot, push or
-service label, and (folded away) wireless id, firmware update, flash read-back and factory reset.*
+<img src="Documentation/screenshots/tag-apps.png" alt="Pill tracker and weather screens as the tag shows them" width="560">
 
-![ShelfKit queue](Documentation/screenshots/queue.png)
+*Real renders at 2×, exactly the pixels the tags get: the pill tracker after the reminder time and
+after a tap, and the weather app.*
 
-*Queue — every outbound command waits for its tag's next check-in; state and progress live, with
-**Cancel all**.*
+An app is a folder in `ShelfKit-Server/inkapps/` with an `app.py` and, usually, a `layout.xml`. This
+is the whole hello app:
 
-![ShelfKit hub screen](Documentation/screenshots/hub.png)
+```python
+from shelfkit.inkservices import InkApp
 
-*Hub — every serial line from both boards, the handshake lines and a reset button per pane, the
-features the hub's firmware reports, and the settings for the hub's own e-paper panel.*
+app = InkApp("hello", title="Hello", description="A counter and a message, set from your phone",
+             layout="layout.xml")
+app.config_field("greeting", label="Greeting", default="Hello!")
 
-![ShelfKit flash screen](Documentation/screenshots/flash.png)
+@app.data
+def data(tag):
+    return {"greeting": tag.config.get("greeting", ""), "n": tag.data.get("n", 0)}
 
-*Flash — put firmware on a chip from the page, through the USB debugger (AXSDB) or the serial
-bootloader.*
+@app.button("Press me")
+def press(tag):
+    tag.data["n"] = tag.data.get("n", 0) + 1
+```
 
-![ShelfKit settings](Documentation/screenshots/settings.png)
+```xml
+<screen padding="6" gap="6">
+  <row bg="black" padding="4 6"><text color="white" bold="true" size="16">{{ tag.alias }}</text></row>
+  <text size="14" bold="true" fit="shrink">{{ data.greeting }}</text>
+  <text size="64" bold="true" color="red" fit="shrink">{{ data.n }}</text>
+</screen>
+```
 
-*Settings — when a tag counts as late or silent, the low-battery voltage, fleet layout, serial ports,
-the AXSDB location, and CSV import/export of aliases, notes and shelf positions.*
+The host takes care of the rest:
+- Each app gets its own SQLite file with per-tag settings and data.
+- `@app.every(minutes=30)` runs on a scheduler.
+- `@app.on_open` fires on an NFC tap.
+- A screen identical to the last one is never sent, which saves the battery.
+- An app that crashes logs its error and leaves every other tag alone.
 
-Every screen has a light and a dark palette: the button in the top bar switches between them and the
-choice is remembered, or `?theme=light` / `?theme=dark` forces one for a link or a capture.
+<table><tr>
+<td width="68%"><img src="Documentation/screenshots/apps.png" alt="The Apps screen"></td>
+<td width="32%"><img src="Documentation/screenshots/phone.png" alt="A tag's phone page"></td>
+</tr><tr>
+<td><em>The Apps screen: which tags run each app, a live preview, per-tag settings, the phone
+buttons to try, stored data and the app's log.</em></td>
+<td><em>What a phone sees after tapping the tag. Plain HTML, no script, so it works in any browser.</em></td>
+</tr></table>
 
-<img src="Documentation/screenshots/fleet-light.png" alt="Fleet, light theme" width="1000">
+The **layout playground** (`/inkapps.html`) renders InkLayout as you type, and
+`GET /api/layout/skill` hands a model everything it needs to write layouts. See
+[Documentation/InkServices.md](Documentation/InkServices.md) for the vision and
+[Documentation/InkLayout.md](Documentation/InkLayout.md) for the language.
+
+## The rest of the web app
+
+| | |
+|---|---|
+| ![Editor](Documentation/screenshots/editor.png) | ![Inspector](Documentation/screenshots/inspector.png) |
+| **Editor**: pick an image, choose fit and dither, preview the real render with a 4× zoom, and push it to one or many tags. | **Inspector**: a tag's frame, alias, notes, shelf slot, battery history, and (folded away) ID, firmware update, flash read-back and reset. |
+| ![Queue](Documentation/screenshots/queue.png) | ![Hub](Documentation/screenshots/hub.png) |
+| **Queue**: every command waits for its tag's next check-in, with live progress and **Cancel all**. | **Hub**: both serial ports live, handshake lines, a reset button, and the hub's own e-paper panel. |
+| ![Flash](Documentation/screenshots/flash.png) | ![Settings](Documentation/screenshots/settings.png) |
+| **Flash**: program a chip from the page, via the AXSDB debugger or the serial bootloader. | **Settings**: thresholds, fleet layout, the address phones use for tag pages, and CSV import/export. |
+
+Every screen comes in light and dark. `?theme=light` or `?theme=dark` forces one.
 
 ## How it works
 
@@ -57,247 +111,143 @@ choice is remembered, or `?theme=light` / `?theme=dark` forces one for a link or
  └────────────────┘   ───────► ACK                 └──────────────┘   SENT …     └──────────────┘
 ```
 
-- **Tags** wake every couple of minutes, send a tiny `POLL`, and treat the hub's answer as the
-  acknowledgement. The hub can then push an image to any tag that has just spoken; the tag streams the
-  chunks straight into the panel controller (there is no RAM for a frame buffer) and refreshes.
-- **The check-in adapts.** The base interval is 2 minutes. While the hub keeps saying "data follows" the
-  tag polls every 30 s; afterwards it cools down (3 minutes, three times) and settles at 5 minutes when
-  idle. It stretches to 10 minutes when the link is weak, and collapses to hourly, then two-hourly, then
-  daily when there is no hub at all, so a tag out of range cannot drain itself retrying. The hub can
-  also ask it to wait longer. Between polls the radio, the MCU and the panel rail are all off - see
-  [tag power](ShelfKit-Firmware/Vusion/README.md#adaptive-check-in).
-- **Because an idle tag closes its receiver immediately**, the server *pre-arms* the hub (`Q<id>`) when
-  a command is queued, so that tag's next poll reply says "data follows" and it stays awake for it.
-- **The link** is reliable: sequence numbers, retries with jittered back-off, per-source duplicate
-  filtering, and a 3-byte on-air address so several tags and networks can share the band. Details and
-  the frame format are in [Documentation/wireless-link.md](Documentation/wireless-link.md).
-- **The server** owns two serial ports (hub and, while developing, the tag itself), renders images for
-  the panel, and serves the web UI. Everything is local: the page is plain HTML/JS on the standard
-  library's HTTP server, so the only Python dependencies are `pyserial` and `pillow`.
-- **Everything outbound is queued.** Nothing is fired at a tag when you click: a command waits for that
-  tag's next poll, because a tag only listens for seconds after one. The Queue screen shows the queue,
-  per command, with **Cancel all**.
+- **Tags poll; the hub answers.** A tag wakes, sends a tiny `POLL`, and listens for a moment. If
+  something is queued for it, the hub streams the image, and the tag writes the chunks straight into
+  the panel controller, since there is no RAM for a frame buffer.
+- **So everything is queued.** Nothing is fired at a tag when you click. Commands wait for that tag's
+  next poll, and the server *pre-arms* the hub so the poll reply says "stay awake, data follows".
+- **The link is reliable**: sequence numbers, jittered retries, duplicate filtering and a 3-byte
+  on-air address. See [Documentation/wireless-link.md](Documentation/wireless-link.md).
+- **NFC wakes a tag.** Hold a phone to it and the tag checks in within a second, then again shortly
+  after, so whatever the tap did shows up quickly.
+- **The server** is plain Python (`pyserial` and `pillow` are the only dependencies): web UI, image
+  pipeline, app host and SQLite state, on one port.
 
 ## What works today
 
 | Area | State |
 |---|---|
-| Firmware — hub | Polls answered, images and batches relayed to tags, serial command channel (115200), LED pulses, 868 MHz link, flash read-back relay, and an image command that draws on the hub's own panel (banner `dump=1 batch=1 show=1`) |
-| Firmware — tag | Polls with retry/back-off and an adaptive check-in, image reception straight to the panel (raw or ECO-compressed), BWR refresh, identity in SPI flash, OTA receiver, deep-sleep radio + sleeping MCU between polls |
-| E-paper driver | IL0373 init, 152×296 rotated portrait, black/white/red planes, BUSY-bounded waits |
-| Build | SDCC 3.6.0 + the SDCC-MDF VS Code extension, three targets (tag, hub, bootloader) over one shared vendor tree |
-| Server UI | Seven screens, light and dark: **Fleet** (shelf wall or table; per-tag and bulk **forget**), **Editor** (real previews, push to one or several tags), **Queue**, **Logs**, **Hub** (both serial panes, hub-panel settings), **Flash** (AXSDB or serial bootloader) and **Settings**. The tag **inspector** opens from anywhere: wireless **id assignment**, **firmware update**, **flash read-back**, **service labels**, **factory reset** |
-| Image pipeline | Fit (cover/contain/stretch), threshold / Floyd-Steinberg / Bayer 4×4 dither, server-rendered previews, midtone warning |
-| Image compression | Each plane is ECO chain-coded when that helps: a label is ~30 frames instead of 404, and the tag decodes it in bands straight into the panel ([details](ShelfKit-Server/README.md#image-compression)). Dithered photos still go out raw |
-| Image push | Reliable transfer over the port the Hub screen already has open, in batched frames, with cancel and progress; two tags' transfers alternate instead of one waiting for the other |
-| **Storage** | Everything the server must remember across a restart, in one SQLite file: tag aliases/notes/positions, announcement counts and ages, the last frame per tag, the rendered bitmaps, the editor's image and options, the port each pane used, and the event history behind Logs |
-| Service labels | The server draws a panel-sized label with the tag's wireless id, alias and a note, and pushes it over the air — the quickest way to match a tag in hand to a Fleet row |
-| Tag power | The radio sits in the AX5043's own deep sleep (26 MHz crystal off), the MCU sleeps (`WTFLAG_CANSLEEPCONT`, both XRAM halves kept), the panel rail is off, and the wake-up timer runs from the 32 kHz crystal at 512 Hz. After a poll whose reply says "nothing queued" the receiver is closed at once (a lost reply keeps a 250 ms grace), which is why the server pre-arms the hub. The panel refresh runs with the radio parked. **All figures are datasheet models, not measurements** — the tag has no shunt, so it prints its own time-in-state estimate (`pow …`); see [power](ShelfKit-Firmware/Vusion/README.md#power) and [power-deepdive](Documentation/power-deepdive.md) |
-| NFC field detect | **On** (`SHELF_NFC_POLL 1`): hold a phone against a tag and it wakes and checks in within a second (blue LED flash). The chip's FD pin is checked/fixed in its EEPROM at boot; the switched rail is held on for it (`SHELF_NFC_RAIL_HOLD 1`, a power cost): with the rail off PB3 floats and re-triggers, so a storm guard suspends the feature. Wake from MCU sleep via a port-change interrupt is not yet confirmed on hardware ([notes](Documentation/nfc-field-detect.md)) |
-| OTA update | **Working on hardware.** The tag receives a new application into its SPI flash, verifies the CRC, does a real chip reset (`PCON.SWRESET`) and the bootloader programs it on that reset, with a blue/green/red LED pulse ([design](Documentation/ota-update.md)) |
-| Tag identity | Random 16-bit node id on a brand new tag, stored in SPI flash; assignable over the air from the server's Fleet drawer (or `Tooling/set-id.py`); survives firmware updates ([design](Documentation/tag-identity.md)) |
-| Tag health | Every poll carries the supply voltage; the Fleet shows volts and a CR2450 percentage, red below 2.5 V |
-| Honest gaps | No templates or plain-text content, no per-tag history beyond the last frame, no auth, no partial refresh, an in-memory job queue (a server restart forgets pending commands), and every power figure still needs metering on a real tag |
-
-Nothing above is a mockup: the screenshots are the running app, taken against simulated serial data
-because a screenshot cannot include a physical tag.
-
-## Repository layout
-
-| Path | What it is |
-|---|---|
-| `ShelfKit-Firmware/` | One SDCC-MDF project per board: `Vusion/` (tag), `Vusion-Hub/` (hub), `Bootloader/` (serial bootloader), and room for the next tag type — see its [README](ShelfKit-Firmware/README.md) |
-| `ShelfKit-Server/` | The host-side app: web UI, image pipeline, image push (see its [README](ShelfKit-Server/README.md)) |
-| `ShelfKit-Firmware/Shared/` | Everything the firmwares use: Axsem SDK, prebuilt libraries, board definition, shared drivers. See [Shared/README.md](ShelfKit-Firmware/Shared/README.md) |
-| `ShelfKit-Firmware/Tooling/` | Firmware-side host scripts: the flasher, the multi-target build script (`*-latest.hex`), the over-the-air sender, `set-id.py` and `flash-read.py` |
-| `Documentation/` | Protocol notes, power and panel research, pin map, datasheets, screenshots |
-| `Resources/` | Sample images for the Editor |
-| `Data/` | Captured SPI flash dumps and the dump script |
-
-`Release/` (generated, git-ignored) holds the ready-to-flash HEX files.
-
-The two firmware targets are separate SDCC-MDF projects on purpose — each has its own `src/main.c`
-and can diverge — while the vendor SDK, board definition and shared drivers live once in `ShelfKit-Firmware/Shared/`.
+| Tag firmware | Adaptive polling with back-off, images (raw or ECO-compressed) straight to the panel, identity in SPI flash, OTA updates, NFC field wake, deep sleep between polls |
+| Hub firmware | Relays polls, images and batches, serial command channel at 115200, flash read-back relay, draws on its own panel |
+| OTA updates | **Working on hardware.** CRC-checked image in SPI flash, real chip reset, programmed by the bootloader ([design](Documentation/ota-update.md)) |
+| Server | Fleet, Editor, Queue, Logs, Hub, Flash, Apps and Settings screens; a tag inspector reachable from anywhere |
+| InkServices | App SDK, per-app SQLite stores, timers, NFC-tap hooks, phone pages at `/tag/<ID>`, duplicate-push suppression; pill, weather and hello apps |
+| InkLayout | Layout language, renderer with overflow warnings, playground, model skill file, CLI (`python -m shelfkit.inklayout render`) |
+| Storage | One SQLite file: tags, aliases, shelf positions, last frames, battery history, power measurements, settings and the event log |
+| Tag power | Radio in deep sleep, MCU sleeping, panel rail off between polls. **The figures are datasheet models, not measurements.** See [power](ShelfKit-Firmware/Vusion/README.md#power) and [the deep dive](Documentation/power-deepdive.md) |
+| Honest gaps | The command queue is in memory, so a restart forgets pending pushes. There is no auth, so keep the admin page on localhost. Tag firmware doesn't yet put its own ID into the NFC link (below). Apps run in the server process. No partial refresh yet. Power still needs metering on a real tag |
 
 ## Getting started
 
 ### 1. Firmware
 
-Requirements: [SDCC](https://sdcc.sourceforge.net/) (verified against 3.6.0) and VS Code with the
-[SDCC-MDF extension](https://marketplace.visualstudio.com/items?itemName=dzantemir.sdcc-mdf).
-
-**Open the target folder itself, not the repo root** — the extension activates on a
-`sdcc-project.json` in the workspace folder, and the `../Shared/…` paths are resolved against it.
-
-1. `File ▸ Open Folder…` → `ShelfKit-Firmware/Vusion-Hub` (or `ShelfKit-Firmware/Vusion`).
-   Each target is its own SDCC-MDF project; the repo root is not one.
-2. **Ctrl+Shift+B** — `firmware.ihx`, `.hex`, `.map` and `.mem` land in that target's `build/`.
-3. Flash it: *SDCC: Flash* already runs
-   [ShelfKit-Firmware/Tooling/axsem-flasher.py](ShelfKit-Firmware/Tooling/axsem-flasher.py), and the
-   same script works from a shell. A tag that has no bootloader yet can be flashed with both at
-   once — `build-all.py` writes `Release/vusion-full-*.hex` for exactly that.
-
-To build **all** targets at once instead of one window per project (Vusion, Vusion-Hub and the
-bootloader), with the HEX files collected and named for you:
+You need [SDCC](https://sdcc.sourceforge.net/) (verified with 3.6.0). VS Code with the
+[SDCC-MDF extension](https://marketplace.visualstudio.com/items?itemName=dzantemir.sdcc-mdf) is
+optional and handy for single-target builds; open `ShelfKit-Firmware/Vusion` or `Vusion-Hub` itself,
+not the repo root. To build everything at once:
 
 ```
 python ShelfKit-Firmware/Tooling/build-all.py
 ```
 
-It writes `Release/vusion-latest.hex`, `vusion-hub-latest.hex`, `bootloader-latest.hex` and the
-combined `vusion-full-latest.hex` — `--version 1.2.0` names them `-1.2.0` instead, and the folder is
-cleared of old HEX/MAP files on every run. See
-[ShelfKit-Firmware/Tooling/README.md](ShelfKit-Firmware/Tooling/README.md).
+This writes `Release/vusion-latest.hex` (tag), `vusion-hub-latest.hex`, `bootloader-latest.hex` and
+`vusion-full-latest.hex`. The last one is tag plus bootloader, for a tag's first flash. Flash with
+[axsem-flasher.py](ShelfKit-Firmware/Tooling/axsem-flasher.py) or from the server's Flash screen.
+The tag application nearly fills its 43,006 B OTA window, so new firmware features have to earn
+their bytes. Details are in [Tooling/README.md](ShelfKit-Firmware/Tooling/README.md).
 
-Current build (`Release/*-latest.hex`): tag ~41 KB, hub ~31 KB, bootloader ~9 KB of code; XRAM about
-7 KB of 8 KB on the tag (the ECO decode buffer is 2.5 KB) and 4.9 KB on the hub. SDCC has no spare
-internal RAM, so keep buffers in `__xdata`. The tag's OTA image window is 43,006 B, so the application
-has roughly 2 KB of headroom left — the next sizeable feature has to make room first.
-
-### 2. Host app
+### 2. The server
 
 ```
 pip install -r ShelfKit-Server/requirements.txt        # pyserial, pillow
-python ShelfKit-Server/shelfkit-server.py hub=COM4 tag=COM3
+python ShelfKit-Server/shelfkit-server.py hub=COM4
 ```
 
-It prints a URL and opens it. Ports named on the command line open at startup; anything else can be
-opened from the **Hub** screen. Then: **Hub** to watch the boards, **Fleet** to see the tags that
-announced themselves, **Editor** to pick an image, preview it and push it, **Queue** to watch it go
-out when the tag next checks in. **Flash** can also program a board from the page.
+It opens the page in your browser. **Fleet** shows tags as they check in, **Editor** pushes an image,
+and **Apps** puts an app on a tag. State lives in `ShelfKit-Server/data/shelfkit.db`; `--db PATH`
+puts it elsewhere.
 
-State lives in `ShelfKit-Server/data/shelfkit.db` — one SQLite file, created on first run. Restarting
-brings back your image and its preview, the tags with their ages, aliases, notes and shelf positions,
-the settings, the last frame pushed to each tag, and the event log. `--db PATH` keeps it elsewhere, `--no-store` forgets everything on exit,
-and deleting the file resets it. See [ShelfKit-Server/README.md](ShelfKit-Server/README.md#state-on-disk).
+### 3. Phones and NFC
 
-### 3. Driving it from scripts or another service
+Tag pages are served on the same port as everything else, at `/tag/<ID>`. To reach them from a
+phone:
 
-The server is one HTTP API away from anything else (endpoints are documented at the top of
-[ShelfKit-Server/shelfkit/webapp.py](ShelfKit-Server/shelfkit/webapp.py)):
+1. Put a reverse proxy in front and **forward only `/tag/`** (and the legacy `/t/`). The rest of
+   the port is the admin page, which can flash chips and drive serial ports.
+2. Enter the proxy's address under **Settings › Address phones use**. The Apps screen then shows
+   each tag's exact link.
+3. Write `https://<your-proxy>/tag/<ID>` to the tag with any NFC writer app.
 
-```
-GET  /api/state                       the whole world: panes, tags, editor, queue, prefs
-GET  /api/poll?c=hub=0:12,tag=0:3     new log lines per pane, plus the state
-POST /api/image   {"path": "…"}       pick the editor's image
-POST /api/preview                     render the picked image for the panel
-POST /api/send    {"addr": 256}       queue it for one tag (delivered on its next poll)
-POST /api/queue/cancel                drop everything pending
-GET  /api/preview.png?t=…&kind=device the rendered frame as a PNG
-```
+> Today's tag firmware rewrites the NFC chip at boot. Build with `SHELF_NFC_NDEF_SYNC 0` until
+> it learns to keep your link and fill in its own ID. That is the next firmware step, and it keeps
+> one shared binary for every tag.
 
-Mutating requests with a foreign `Origin` header are refused (403).
+### 4. Scripting
 
-For a shell, [ShelfKit-Server/shelfkit/hubhost.py](ShelfKit-Server/shelfkit/hubhost.py) does the same
-without the page: `serve` watches announcements and pushes new images, `send` pushes one, `ping`
-checks the hub.
+Everything the page does is a JSON API on the same port. The endpoints are listed at the top of
+[webapp.py](ShelfKit-Server/shelfkit/webapp.py) and
+[inkservices/web.py](ShelfKit-Server/shelfkit/inkservices/web.py). Requests from a foreign `Origin`
+are refused. For the shell, [hubhost.py](ShelfKit-Server/shelfkit/hubhost.py) can push an image
+without the page.
 
-## Making a release
+### 5. Making a release
 
-`Release/` is git-ignored - it is build output - so a release is a git tag plus the four
-HEX files as release assets:
+`Release/` is git-ignored build output, so a release is a git tag plus four HEX files:
 
 ```bash
-# 1. name the artefacts after the version (this also clears the previous build)
-python ShelfKit-Firmware/Tooling/build-all.py --version 1.0.0
-
-# 2. tag the commit the build came from
-git tag -a v1.0.0 -m "ShelfKit 1.0.0"
-git push origin main --tags
-
-# 3. attach the HEX files to a GitHub release for that tag:
-#    https://github.com/BeatSkip/ShelfKit-skeleton/releases/new?tag=v1.0.0
+python ShelfKit-Firmware/Tooling/build-all.py --version 1.0.0   # names the files -1.0.0
+git tag -a v1.0.0 -m "ShelfKit 1.0.0" && git push origin main --tags
 ```
 
-Attach all four: `vusion-1.0.0.hex` (tag), `vusion-hub-1.0.0.hex` (hub),
-`bootloader-1.0.0.hex` and `vusion-full-1.0.0.hex` (the tag bundle - the one to flash,
-because the app-only hex bypasses the bootloader). The `.map` files next to them are
-build output and do not belong in a release.
+Attach `vusion-1.0.0.hex`, `vusion-hub-1.0.0.hex`, `bootloader-1.0.0.hex` and
+`vusion-full-1.0.0.hex` to a GitHub release for that tag. The full bundle is the one to flash on a
+tag, because the app-only hex skips the bootloader. The `.map` files stay out.
 
-Building without `--version` produces `*-latest.hex` instead, which is what the build
-script prints as the flash command; use it while iterating, and the versioned names when
-you publish.
+## Repository layout
+
+| Path | What it is |
+|---|---|
+| `ShelfKit-Firmware/` | SDCC projects: `Vusion/` (tag), `Vusion-Hub/` (hub), `Bootloader/`, `Shared/` (SDK, drivers), `Tooling/` (build, flash, OTA, ID scripts) |
+| `ShelfKit-Server/` | The web app, image pipeline, `shelfkit/inkservices/` (app host), `shelfkit/inklayout/` (layout language) and `inkapps/` (the apps). See its [README](ShelfKit-Server/README.md) |
+| `Documentation/` | Protocol, power, NFC, OTA and panel notes, datasheets, plans, screenshots |
+| `Resources/`, `Data/` | Sample images; captured flash dumps |
 
 ## Where this is going
 
-ShelfKit is a **skeleton on purpose** — the point is to grow it. The direction:
+- **More apps from the [InkServices idea list](Documentation/InkServices.md)**: waste collection,
+  commute, calendar, chores, a message board.
+- **A dev mode** with an in-browser editor and a virtual tag, then an **AI layout chat**: describe a
+  screen and watch the virtual tag update.
+- **Install apps from git**, each in its own process, with an advisory AI review before an app is
+  enabled.
+- **Firmware**: keep the NFC link and fill in the tag's ID, poll faster for a minute after a tap,
+  partial refresh, and more panel sizes than 152×296.
+- **Integrations**: Home Assistant over MQTT, webhooks, and a persistent job queue.
 
-### More kinds of tags
-
-- **Panel abstraction.** Today the geometry, colour planes and init sequence for the GDEW026Z39 live in
-  one driver. The next step is a panel table — size, colour set (mono / BWR / BWRY / 4-grey), init
-  sequence, refresh times — so a new panel is a data file plus a driver, not a fork. Candidates:
-  GDEW029Z10, GDEW042T2, the 2.9" and 4.2" waveshare families.
-- **More board types.** The radio layer is already generic; other MCU tags (CC2510 imagotags, nRF52
-  BLE labels) should be able to join the same fleet with a different transport and the same protocol.
-- **Capability flags on the wire**, so the server learns per tag whether it has a battery gauge,
-  partial refresh, a button, or a temperature sensor — instead of assuming the Vusion's feature set.
-- **Partial refresh and rotation slots**, so a price can change without a 15-second full flash.
-
-### A real API
-
-- **Content history**: the store already keeps each tag's last frame and its bitmap across restarts,
-  but only the last one, and nothing is deduplicated across tags.
-- **A real job history**: the queue delivers and reports, but it is in memory — a restart forgets it,
-  and there is no attempt count or retry history yet.
-- **Live updates** over SSE/WebSocket instead of 200 ms polling, and an OpenAPI schema for the whole
-  surface so other tools can generate clients.
-- **Batch operations**: push to a selection, reflash a group, rotate content across slots.
-- **Auth**: the spec's single shared password, and a deliberate decision about what is safe to expose
-  beyond `127.0.0.1`.
-
-### Integrations
-
-- **Home Assistant**, first: MQTT discovery with one device per tag (state, RSSI, battery, last
-  content as an image entity), plus a `shelfkit.push` service so an automation can put a price or a
-  message on a specific shelf. The HTTP API above is already enough to prototype that.
-- Generic **MQTT/HTTP webhooks** for everything else, a **Prometheus** endpoint for link quality, and a
-  small CLI so a CI job or a cron can push content without the UI.
-- Anything that can GET and POST JSON should be able to join the fleet — that is the design goal.
-
-### Parametric templates
-
-The biggest missing feature: content that is generated, not uploaded.
-
-- **A tiny layout language** (or Jinja-ish templates) describing boxes, text, icons and QR codes on the
-  152×296 canvas, using the fixed-width bitmap fonts the panel actually renders well.
-- **Per-tag parameters**: `{{ price }}`, `{{ sku }}`, `{{ shelf }}` — values provided by the tag's
-  record, by an MQTT topic, or by Home Assistant.
-- **Deterministic rendering**, so the same parameters and template produce the same bitmap and the same
-  SHA-256. That makes "has this tag changed?" a hash comparison rather than a full transfer.
-- **Preview in the editor** using the same pipeline that renders for the panel — which is already the
-  case for uploaded images, so templates slot into an existing guarantee rather than a new one.
-
-Non-goals, so the scope stays sane: no React SPA, no drag-and-drop layer editor, no multi-user
-accounts, no per-tag latency graphs, no mobile app (the web UI is responsive, that is all).
+Deliberately out of scope: multi-user accounts, a drag-and-drop editor and a native mobile app. The
+web pages are the app.
 
 ## Documentation
 
 | Document | Contents |
 |---|---|
-| [Documentation/wireless-link.md](Documentation/wireless-link.md) | The radio protocol, frame format, retries, hub command channel, image transfer |
-| [Documentation/ota-update.md](Documentation/ota-update.md) | How an over-the-air update is stored, verified and applied, and the LED indications |
-| [Documentation/tag-identity.md](Documentation/tag-identity.md) | The identity record, the flash sector map, the switched flash rail |
-| [Documentation/power-deepdive.md](Documentation/power-deepdive.md) | The CR2450 budget model and the ranked power options |
-| [Documentation/deepsleep-debugging-fix.md](Documentation/deepsleep-debugging-fix.md) | Why polls failed after radio deep sleep, and the fix |
-| [Documentation/pa2-pa5-findings.md](Documentation/pa2-pa5-findings.md) | What the PA2 (U5) and PA5 (U4) transistor lines really switch |
-| [Documentation/nfc-field-detect.md](Documentation/nfc-field-detect.md) | NFC wake-on-field: the pin, the chip's EEPROM config, the Shakedown test sequence and findings |
-| [Documentation/ses-imagotag-vusion.md](Documentation/ses-imagotag-vusion.md) | One-page context sheet for the Vusion tag |
-| [Documentation/ECO-ESL-ImageCompression.pdf](Documentation/ECO-ESL-ImageCompression.pdf) | The chain-coding paper behind the image compression |
-| [Documentation/ax8052-errata.md](Documentation/ax8052-errata.md) | Which AX8052 silicon erratas this firmware works around, and how |
-| [Documentation/GDEW026Z39-init-reference.md](Documentation/GDEW026Z39-init-reference.md) | Where every panel init byte came from |
-| [Documentation/signal-list.md](Documentation/signal-list.md) | Pin map of the Vusion board |
-| [ShelfKit-Server/README.md](ShelfKit-Server/README.md) | The web app: screens, image pipeline, HTTP API |
-| [ShelfKit-Firmware/Tooling/README.md](ShelfKit-Firmware/Tooling/README.md) | Building, flashing, OTA sending, id assignment, flash read-back |
-| [ShelfKit-Server/docs/web-interface-implementation.md](ShelfKit-Server/docs/web-interface-implementation.md) | The interface spec the UI follows |
+| [InkServices.md](Documentation/InkServices.md) | The apps vision: what InkServices are for, the app ideas |
+| [InkLayout.md](Documentation/InkLayout.md) | The layout language, renderer, skill file and status |
+| [plans/2026-11-11-inkservices.md](Documentation/plans/2026-11-11-inkservices.md) | The implementation plan, progress and roadmap |
+| [wireless-link.md](Documentation/wireless-link.md) | Radio protocol, frame format, retries, image transfer |
+| [ota-update.md](Documentation/ota-update.md) | How an over-the-air update is stored, verified and applied |
+| [tag-identity.md](Documentation/tag-identity.md) | The identity record and flash sector map |
+| [power-deepdive.md](Documentation/power-deepdive.md) | The CR2450 budget and power options |
+| [nfc-field-detect.md](Documentation/nfc-field-detect.md) | NFC wake-on-field: pin, EEPROM config, findings |
+| [ses-imagotag-vusion.md](Documentation/ses-imagotag-vusion.md) | One-page context sheet for the tag |
+| [signal-list.md](Documentation/signal-list.md) | Pin map of the Vusion board |
+| [ShelfKit-Server/README.md](ShelfKit-Server/README.md) | The web app in depth: screens, pipeline, API, compression |
+| [Tooling/README.md](ShelfKit-Firmware/Tooling/README.md) | Building, flashing, OTA sending, ID assignment, flash read-back |
 
 ## Notes
 
 - **License:** the code in each `src/` has no license declared yet. The Axsem SDK under
-  `ShelfKit-Firmware/Shared/sdk/` and `ShelfKit-Firmware/Shared/lib/` keeps its original terms —
-  compiler headers are GPL with a linking exception, the rest is vendor-licensed.
-- `ShelfKit-Firmware/Shared/lib/*.lib` are SDCC archives built from
-  `ShelfKit-Firmware/Shared/sdk/` with the vendor's `buildsdcc`
-  makefiles; `libmf.lib` is committed in patched form (see [ShelfKit-Firmware/Tooling/README.md](ShelfKit-Firmware/Tooling/README.md)).
-- The screenshots in this README are the real UI (`?theme=dark` forces the palette for a capture)
-  driven by simulated serial data, since no photograph can include a physical tag.
+  `ShelfKit-Firmware/Shared/` keeps its original terms: compiler headers are GPL with a linking
+  exception, and the rest is vendor-licensed.
+- The screenshots are the running app with simulated serial data, since a screenshot can't include
+  a physical tag. The tag renders are the real output of the apps.
