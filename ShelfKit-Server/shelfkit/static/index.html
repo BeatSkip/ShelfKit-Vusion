@@ -485,17 +485,26 @@
         <div class="tag-case small-case">
           <div class="glass" id="inspector-glass"></div>
         </div>
-        <dl class="facts" id="inspector-facts"></dl>
+        <div class="inspector-side">
+          <dl class="facts" id="inspector-facts"></dl>
+          <div class="inspector-send">
+            <button id="inspector-push" class="primary" type="button">Push image</button>
+            <button id="inspector-service" type="button"
+                    title="Draw a label with this tag's ID, alias and notes, then send it">Send service label</button>
+          </div>
+        </div>
       </div>
 
       <p id="inspector-alert" class="warning" hidden></p>
 
-      <section class="vhist" aria-labelledby="vhist-title">
-        <h3 id="vhist-title">Battery voltage</h3>
+      <details class="tool" id="vhist-box" open>
+        <summary>Battery voltage</summary>
+        <div class="vhist">
         <div class="vhist-range">
           <select id="vhist-range" aria-label="Period">
+            <option value="run" selected>This measurement</option>
             <option value="1">Last 24 hours</option>
-            <option value="7" selected>Last 7 days</option>
+            <option value="7">Last 7 days</option>
             <option value="30">Last 30 days</option>
             <option value="90">Last 90 days</option>
             <option value="0">All readings</option>
@@ -508,14 +517,34 @@
         </div>
         <svg id="vhist-chart" class="vhist-chart" viewBox="0 0 360 170" role="img"
              aria-label="Voltage over time"></svg>
+        <p id="vhist-viewing" class="vhist-viewing" hidden>
+          <span id="vhist-viewing-text"></span>
+          <button id="vhist-back" type="button">Back to live</button>
+        </p>
         <dl id="vhist-stats" class="facts"></dl>
-      </section>
 
-      <div class="row">
-        <button id="inspector-push" class="primary" type="button">Push image</button>
-        <button id="inspector-service" type="button"
-                title="Draw a label with this tag's ID, alias and notes, then send it">Send service label</button>
-      </div>
+        <div class="vhist-archive" id="vhist-archive">
+          <p class="vhist-since" id="vhist-since"></p>
+          <div class="vhist-range">
+            <label>Why
+              <select id="vhist-reason">
+                <option value="battery">New battery</option>
+                <option value="firmware">New firmware</option>
+                <option value="other">Other</option>
+              </select>
+            </label>
+            <label class="vhist-note">Note
+              <input id="vhist-note" type="text" maxlength="200" placeholder="optional">
+            </label>
+          </div>
+          <button id="vhist-archive-btn" type="button">Archive and start a new measurement</button>
+          <p id="vhist-archive-msg" class="vhist-msg" role="status"></p>
+        </div>
+
+        <h4 class="vhist-runs-title">Archived measurements</h4>
+        <ul id="vhist-runs" class="vhist-runs"></ul>
+        </div>
+      </details>
 
       <form id="inspector-form" class="inspector-form">
         <label>Alias

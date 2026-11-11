@@ -261,6 +261,31 @@ def main() -> int:
             refused = err.code == 400
         check("a bad tag id is refused", refused)
 
+        # archiving a power measurement keeps its readings and starts a new one
+        runs = get("/api/power-runs?tag=0100")
+        check("no archived measurement yet", runs["runs"] == [] and runs["current_since"] == 0, runs)
+        archived = post("/api/power-runs", {"tag": "0100", "reason": "battery", "note": "CR2450 #2"})
+        check("the measurement is archived", archived.get("ok") is True
+              and len(archived["runs"]) == 1 and archived["current_since"] > 0, archived)
+        run = get(f"/api/power-runs?id={archived['id']}")
+        check("the archive holds its readings and stats",
+              len(run["points"]) == 2 and run["stats"]["count"] == 2
+              and run["reason"] == "battery" and run["note"] == "CR2450 #2", run)
+        try:
+            post("/api/power-runs", {"tag": "0100", "reason": "battery"})
+            empty_refused = False
+        except urllib.error.HTTPError as err:
+            empty_refused = err.code == 400
+        check("an empty measurement is not archived", empty_refused)
+        PORTS["SMOKE1"].feed("POLL src=0100 seq=03 rssi=-30 up=90s att=1 hubrssi=-33 vdd=0300\r\n")
+        time.sleep(0.2)
+        since = get("/api/power-runs?tag=0100")["current_since"]
+        check("the new measurement has only the new reading",
+              get(f"/api/voltage?tag=0100&since={since}")["count"] == 1)
+        deleted = post("/api/power-runs/delete", {"id": archived["id"]})
+        check("an archive can be deleted", deleted.get("ok") is True
+              and deleted["runs"] == [] and deleted["current_since"] == 0, deleted)
+
         # the Editor's render path - the one that used to raise
         image = str((REPO / "Resources" / "polyform-eink.png").resolve())
         post("/api/image", {"path": image})

@@ -453,6 +453,60 @@ class App:
         out["points"] = [[round(t, 1), round(v, 3)] for t, v in points]
         return out
 
+    # ── archived power measurements ──────────────────────────────────────────
+    # A measurement is one stretch of a tag's voltage history under one battery and one
+    # firmware. Archiving closes the current one - its readings, stats and the firmware the
+    # tag last reported are kept as they are - and the next measurement starts there. The
+    # raw readings stay in the voltage table as well; the archive holds its own copy.
+    POWER_REASONS = {"battery": "New battery", "firmware": "New firmware", "other": "Other"}
+    POWER_RUN_POINTS = 800
+
+    def power_runs(self, hex_id: str) -> dict:
+        hex_id = hex_id.upper()
+        if self.store is None:
+            return {"hex_id": hex_id, "current_since": 0.0, "runs": []}
+        return {"hex_id": hex_id, "current_since": self.store.last_power_run_end(hex_id),
+                "runs": self.store.power_runs(hex_id)}
+
+    def power_run(self, run_id: int) -> dict | None:
+        return self.store.power_run(run_id) if self.store is not None else None
+
+    def archive_power(self, hex_id: str, reason: str, note: str = "") -> dict:
+        hex_id = hex_id.upper()
+        if self.store is None:
+            return {"ok": False, "error": "no database"}
+        if reason not in self.POWER_REASONS:
+            return {"ok": False, "error": f"reason is one of {', '.join(self.POWER_REASONS)}"}
+        now = time.time()
+        since = self.store.last_power_run_end(hex_id)
+        history = self.voltage_history(hex_id, since, now, max_points=self.POWER_RUN_POINTS)
+        if not history["count"]:
+            return {"ok": False, "error": "no readings since the last archive: nothing to keep"}
+        fw = self._fw_of(int(hex_id, 16), now)
+        fw_text = f"{fw['version']}-{fw['build']}" if fw else None
+        note = (note or "").strip()[:200] or None
+        stats = {**history["stats"], "count": history["count"]}
+        run_id = self.store.add_power_run(hex_id, since or stats["first_at"], now,
+                                          reason, note, fw_text, stats, history["points"])
+        drain = stats.get("drain_mv_per_day")
+        self._event("power", hex_id,
+                    f"measurement archived ({self.POWER_REASONS[reason].lower()}"
+                    + (f", fw {fw_text}" if fw_text else "")
+                    + f"): {history['count']} readings over {stats['span_h']:.1f} h"
+                    + (f", {drain:.1f} mV/day" if drain is not None else ""))
+        return {"ok": True, "id": run_id, **self.power_runs(hex_id)}
+
+    def delete_power_run(self, run_id: int) -> dict:
+        if self.store is None:
+            return {"ok": False, "error": "no database"}
+        run = self.store.power_run(run_id)
+        if run is None or not self.store.delete_power_run(run_id):
+            return {"ok": False, "error": f"no archived measurement {run_id}"}
+        # its readings are still in the voltage table: they rejoin the measurement after
+        # the archive before it, or the current one if this was the newest
+        self._event("power", run["hex_id"], f"archived measurement {run_id} deleted")
+        return {"ok": True, **self.power_runs(run["hex_id"])}
+
     def _event(self, event: str, hex_id: str | None = None, detail: str | None = None) -> None:
         if self.store is not None:
             self.store.add_event(event, hex_id, detail)

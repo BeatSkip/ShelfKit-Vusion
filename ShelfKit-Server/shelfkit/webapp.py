@@ -11,6 +11,11 @@ long-lived poll connection per browser tab. The API is small and boring:
                                "allow_partial": false}  start flashing (one at a time)
     POST /api/flash/cancel     stop it (the chip may be left half-programmed)
     GET  /api/voltage?tag=0100&since=<unix>&until=<unix>   a tag's voltage readings and drain
+    GET  /api/power-runs?tag=0100   a tag's archived power measurements (+ where the current starts)
+    GET  /api/power-runs?id=7       one archived measurement with its readings
+    POST /api/power-runs       {"tag": "0100", "reason": "battery"|"firmware"|"other", "note": ""}
+                               archive the current measurement and start a new one
+    POST /api/power-runs/delete    {"id": 7}
     GET  /api/aliases.csv      every tag's alias, notes, shelf and slot as a CSV download
     POST /api/aliases          {"csv": "hex_id,alias,..."}  apply a CSV (blank cells clear)
     POST /api/prefs            {"late_after_s": 330, ...}  page settings, validated and stored
@@ -145,6 +150,20 @@ class Handler(BaseHTTPRequestHandler):
             if not tag or len(tag) > 4 or any(c not in "0123456789ABCDEF" for c in tag):
                 return self._error("tag is a hex id such as 0100")
             return self._json(self.app.voltage_history(tag, since, until))
+        if path == "/api/power-runs":
+            run = (query.get("id") or [""])[0]
+            if run:
+                try:
+                    found = self.app.power_run(int(run))
+                except ValueError:
+                    return self._error("id is a number")
+                if found is None:
+                    return self._error(f"no archived measurement {run}", HTTPStatus.NOT_FOUND)
+                return self._json(found)
+            tag = (query.get("tag") or [""])[0].strip().upper()
+            if not tag or len(tag) > 4 or any(c not in "0123456789ABCDEF" for c in tag):
+                return self._error("tag is a hex id such as 0100")
+            return self._json(self.app.power_runs(tag))
         if path == "/api/aliases.csv":
             return self._send(HTTPStatus.OK, self.app.aliases_csv().encode("utf-8"),
                               "text/csv; charset=utf-8")
@@ -232,6 +251,21 @@ class Handler(BaseHTTPRequestHandler):
                 result = self.app.set_prefs(body)
                 status = HTTPStatus.OK if result["ok"] else HTTPStatus.BAD_REQUEST
                 return self._json({**result, "state": self.app.state()}, status)
+            if parts == ["api", "power-runs"]:
+                # {"tag": "0100", "reason": "battery"|"firmware"|"other", "note": "..."}
+                tag = str(body.get("tag") or "").strip().upper()
+                if not tag or len(tag) > 4 or any(c not in "0123456789ABCDEF" for c in tag):
+                    return self._error("tag is a hex id such as 0100")
+                result = self.app.archive_power(tag, str(body.get("reason") or ""),
+                                                str(body.get("note") or ""))
+                return self._json(result, HTTPStatus.OK if result["ok"] else HTTPStatus.BAD_REQUEST)
+            if parts == ["api", "power-runs", "delete"]:
+                try:
+                    run_id = int(body.get("id"))
+                except (TypeError, ValueError):
+                    return self._error("id is a number")
+                result = self.app.delete_power_run(run_id)
+                return self._json(result, HTTPStatus.OK if result["ok"] else HTTPStatus.NOT_FOUND)
             if parts == ["api", "aliases"]:
                 result = self.app.import_aliases(str(body.get("csv") or ""))
                 return self._json({"result": result, "state": self.app.state()})

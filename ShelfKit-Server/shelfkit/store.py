@@ -19,7 +19,7 @@ import threading
 import time
 from pathlib import Path
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 MAX_EVENTS = 5000      # keep the newest N; the Logs screen never shows more
 MAX_BITMAPS = 64       # content store ceiling (each row ~15 KB of blobs)
 
@@ -85,6 +85,19 @@ CREATE TABLE IF NOT EXISTS voltage (    -- every supply-voltage reading a tag ha
     raw    INTEGER NOT NULL            -- volts * 256, as the tag sends it
 );
 CREATE INDEX IF NOT EXISTS voltage_tag_at ON voltage(hex_id, at);
+
+CREATE TABLE IF NOT EXISTS power_runs ( -- an archived power measurement: one battery / firmware
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    hex_id     TEXT NOT NULL,
+    started_at REAL NOT NULL,          -- the previous archive (or 0: from the first reading)
+    ended_at   REAL NOT NULL,          -- when it was archived; the next measurement starts here
+    reason     TEXT NOT NULL,          -- battery | firmware | other
+    note       TEXT,
+    fw         TEXT,                   -- the firmware the tag last reported, e.g. 1.1.0-34
+    stats      TEXT,                   -- JSON: App.voltage_history()'s stats at archive time
+    points     TEXT                    -- JSON [[t, volts], ...], its own copy of the readings
+);
+CREATE INDEX IF NOT EXISTS power_runs_tag ON power_runs(hex_id, ended_at);
 """
 
 
@@ -115,7 +128,7 @@ class Store:
                 for column in ("fw_version TEXT", "fw_build INTEGER", "avg_ua INTEGER",
                                "life_days INTEGER", "fw_at REAL"):
                     self._db.execute(f"ALTER TABLE tags ADD COLUMN {column}")
-            self._db.executescript(_SCHEMA)     # IF NOT EXISTS: adds the voltage table
+            self._db.executescript(_SCHEMA)     # IF NOT EXISTS: adds voltage, power_runs
         self._db.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
         self._db.commit()
 
@@ -237,6 +250,9 @@ class Store:
             self._db.execute(
                 "UPDATE voltage SET hex_id=? WHERE hex_id=?", (new_hex, old_hex)
             )
+            self._db.execute(
+                "UPDATE power_runs SET hex_id=? WHERE hex_id=?", (new_hex, old_hex)
+            )
             self._db.commit()
             return not taken
 
@@ -253,6 +269,7 @@ class Store:
                 removed += cursor.rowcount or 0
                 self._db.execute("DELETE FROM events WHERE hex_id=?", (hex_id,))
                 self._db.execute("DELETE FROM voltage WHERE hex_id=?", (hex_id,))
+                self._db.execute("DELETE FROM power_runs WHERE hex_id=?", (hex_id,))
             self._db.commit()
         return removed
 
@@ -274,6 +291,60 @@ class Store:
                 (hex_id, since, until),
             ).fetchall()
         return [(row["at"], row["raw"] / 256.0) for row in rows]
+
+    # ── archived power measurements ────────────────────────────────────────
+    def add_power_run(self, hex_id: str, started_at: float, ended_at: float, reason: str,
+                      note: str | None, fw: str | None, stats: dict | None,
+                      points: list) -> int:
+        with self._lock:
+            cursor = self._db.execute(
+                "INSERT INTO power_runs(hex_id, started_at, ended_at, reason, note, fw, stats, "
+                "points) VALUES(?,?,?,?,?,?,?,?)",
+                (hex_id, started_at, ended_at, reason, note, fw,
+                 json.dumps(stats), json.dumps(points)))
+            self._db.commit()
+            return int(cursor.lastrowid)
+
+    def last_power_run_end(self, hex_id: str) -> float:
+        """Where the current measurement starts: the newest archive, else 0."""
+        with self._lock:
+            row = self._db.execute(
+                "SELECT MAX(ended_at) AS t FROM power_runs WHERE hex_id=?", (hex_id,)).fetchone()
+        return float(row["t"]) if row and row["t"] is not None else 0.0
+
+    @staticmethod
+    def _run_row(row, with_points: bool) -> dict:
+        out = {key: row[key] for key in ("id", "hex_id", "started_at", "ended_at",
+                                         "reason", "note", "fw")}
+        try:
+            out["stats"] = json.loads(row["stats"]) if row["stats"] else None
+        except ValueError:
+            out["stats"] = None
+        if with_points:
+            try:
+                out["points"] = json.loads(row["points"]) if row["points"] else []
+            except ValueError:
+                out["points"] = []
+        return out
+
+    def power_runs(self, hex_id: str) -> list[dict]:
+        """A tag's archived measurements, newest first, without their readings."""
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT * FROM power_runs WHERE hex_id=? ORDER BY ended_at DESC",
+                (hex_id,)).fetchall()
+        return [self._run_row(row, False) for row in rows]
+
+    def power_run(self, run_id: int) -> dict | None:
+        with self._lock:
+            row = self._db.execute("SELECT * FROM power_runs WHERE id=?", (run_id,)).fetchone()
+        return self._run_row(row, True) if row else None
+
+    def delete_power_run(self, run_id: int) -> bool:
+        with self._lock:
+            cursor = self._db.execute("DELETE FROM power_runs WHERE id=?", (run_id,))
+            self._db.commit()
+        return bool(cursor.rowcount)
 
     def record_push(self, hex_id: str, name: str, bitmap_key: str | None,
                     at: float | None = None) -> None:

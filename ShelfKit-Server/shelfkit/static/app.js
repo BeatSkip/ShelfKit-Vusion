@@ -911,6 +911,9 @@ function openInspector(hex) {
     disarm();
     loadForm(tagRows().find((row) => row.hex === wanted));
     vhist.tag = wanted;
+    vhist.viewing = null;               // a different tag: back to its live measurement
+    vhist.since = null;
+    vui.msg.textContent = "";
     refreshVoltage();
   }
   ui.inspector.hidden = false;
@@ -2622,14 +2625,27 @@ boot();
 
 
 // ── battery voltage history (inspector) ───────────────────────────────────────
-const vhist = { tag: null, seq: 0 };
+// since: where the current measurement starts (the newest archive, 0 = first reading);
+// viewing: the archived measurement on the chart instead of live readings, or null
+const vhist = { tag: null, seq: 0, since: null, viewing: null, runs: [] };
 const vui = {
   range: $("vhist-range"), custom: $("vhist-custom"), from: $("vhist-from"),
   to: $("vhist-to"), chart: $("vhist-chart"), stats: $("vhist-stats"),
+  viewingBox: $("vhist-viewing"), viewingText: $("vhist-viewing-text"), back: $("vhist-back"),
+  sinceText: $("vhist-since"), reason: $("vhist-reason"), note: $("vhist-note"),
+  archive: $("vhist-archive-btn"), msg: $("vhist-archive-msg"), runs: $("vhist-runs"),
 };
+
+const POWER_REASON_TEXT = { battery: "New battery", firmware: "New firmware", other: "Other" };
+
+function fmtWhen(sec) {
+  return new Date(sec * 1000).toLocaleString(undefined, {
+    day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+}
 
 function vhistWindow() {
   const now = Date.now() / 1000;
+  if (vui.range.value === "run") return [vhist.since || 0, now];
   if (vui.range.value === "custom") {
     const since = vui.from.value ? new Date(vui.from.value).getTime() / 1000 : now - 7 * 86400;
     const until = vui.to.value ? new Date(vui.to.value).getTime() / 1000 : now;
@@ -2712,10 +2728,125 @@ function drawVoltageStats(data) {
   for (const [k, v] of rows) vui.stats.append(el("dt", null, k), el("dd", null, v));
 }
 
-async function refreshVoltage() {
+function drawRuns() {
+  vui.runs.replaceChildren();
+  vui.sinceText.textContent = vhist.since
+    ? `This measurement started ${fmtWhen(vhist.since)}, at the last archive.`
+    : "This measurement covers every reading so far (nothing archived yet).";
+  if (!vhist.runs.length) {
+    vui.runs.append(el("li", "empty", "None yet."));
+    return;
+  }
+  for (const run of vhist.runs) {
+    const s = run.stats || {};
+    const item = el("li");
+    const open = el("button", "run-open");
+    open.type = "button";
+    open.setAttribute("aria-pressed", String(vhist.viewing === run.id));
+    open.append(
+      el("span", null, `${POWER_REASON_TEXT[run.reason] || run.reason} · `
+        + `${fmtWhen(run.started_at)} → ${fmtWhen(run.ended_at)}`),
+      el("span", "run-sub", [
+        run.fw ? `fw ${run.fw}` : "fw not reported",
+        s.drain_mv_per_day != null ? `${s.drain_mv_per_day.toFixed(1)} mV/day` : null,
+        s.drain_ua_estimate != null ? `~${s.drain_ua_estimate} µA` : null,
+        s.first_v != null ? `${s.first_v.toFixed(2)} → ${s.last_v.toFixed(2)} V` : null,
+        run.note || null,
+      ].filter(Boolean).join(" · ")),
+    );
+    open.addEventListener("click", () => showRun(run.id));
+    const del = el("button", null, "Delete");
+    del.type = "button";
+    del.addEventListener("click", () => deleteRun(run));
+    item.append(open, del);
+    vui.runs.append(item);
+  }
+}
+
+function setViewing(run) {
+  vhist.viewing = run ? run.id : null;
+  vui.viewingBox.hidden = !run;
+  vui.range.disabled = Boolean(run);
+  if (run) {
+    vui.viewingText.textContent = `Archived: ${POWER_REASON_TEXT[run.reason] || run.reason}, `
+      + `${fmtWhen(run.started_at)} → ${fmtWhen(run.ended_at)}`
+      + (run.fw ? `, fw ${run.fw}` : "");
+  }
+}
+
+async function showRun(id) {
+  const mine = ++vhist.seq;
+  try {
+    const response = await fetch(`/api/power-runs?id=${id}`);
+    const run = await response.json();
+    if (mine !== vhist.seq || run.error || run.hex_id !== inspected) return;
+    setViewing(run);
+    const points = run.points || [];
+    drawVoltage({ points });
+    drawVoltageStats({ count: (run.stats && run.stats.count) || points.length, stats: run.stats });
+    drawRuns();
+  } catch (error) {
+    vui.msg.textContent = `Could not load that measurement: ${error.message}`;
+  }
+}
+
+async function deleteRun(run) {
+  if (!confirm(`Delete the archived measurement of ${fmtWhen(run.started_at)} → `
+      + `${fmtWhen(run.ended_at)}? Its readings stay in the voltage history.`)) return;
+  try {
+    const result = await postJSON("/api/power-runs/delete", { id: run.id });
+    if (vhist.viewing === run.id) setViewing(null);
+    vhist.runs = result.runs || [];
+    vhist.since = result.current_since || 0;
+    refreshVoltage();
+  } catch (error) {
+    vui.msg.textContent = `Not deleted: ${error.message}`;
+  }
+}
+
+async function archiveMeasurement() {
   if (!inspected) return;
+  const reason = vui.reason.value;
+  if (!confirm(`Archive ${inspected}'s current measurement (${POWER_REASON_TEXT[reason]}) `
+      + "and start a new one from now?")) return;
+  vui.archive.disabled = true;
+  vui.msg.textContent = "";
+  try {
+    const response = await fetch("/api/power-runs", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tag: inspected, reason, note: vui.note.value }),
+    });
+    const result = await response.json();
+    if (!result.ok) {
+      vui.msg.textContent = `Not archived: ${result.error}`;
+      return;
+    }
+    vui.note.value = "";
+    vhist.runs = result.runs || [];
+    vhist.since = result.current_since || 0;
+    vui.msg.textContent = "Archived. A new measurement starts now.";
+    setViewing(null);
+    vui.range.value = "run";
+    vui.custom.hidden = true;
+    refreshVoltage();
+  } catch (error) {
+    vui.msg.textContent = `Not archived: ${error.message}`;
+  } finally {
+    vui.archive.disabled = false;
+  }
+}
+
+async function refreshVoltage() {
+  if (!inspected || !$("vhist-box").open) return;
   const mine = ++vhist.seq;           // only the newest request may draw
   try {
+    const runsResponse = await fetch(`/api/power-runs?tag=${inspected}`);
+    const runs = await runsResponse.json();
+    if (mine !== vhist.seq || runs.error || runs.hex_id !== inspected) return;
+    vhist.runs = runs.runs || [];
+    vhist.since = runs.current_since || 0;
+    drawRuns();
+    if (vhist.viewing != null) return;  // an archived measurement is on the chart
     const [since, until] = vhistWindow();
     const response = await fetch(`/api/voltage?tag=${inspected}&since=${since}&until=${until}`);
     const data = await response.json();
@@ -2726,6 +2857,21 @@ async function refreshVoltage() {
     /* the next refresh tries again */
   }
 }
+
+// The section folds like the tools below it; the choice is remembered in this browser, and
+// nothing is fetched for it while it is closed.
+const vhistBox = $("vhist-box");
+vhistBox.open = stored("vhist.open", "1") === "1";
+vhistBox.addEventListener("toggle", () => {
+  store("vhist.open", vhistBox.open ? "1" : "0");
+  if (vhistBox.open) refreshVoltage();
+});
+
+vui.archive.addEventListener("click", archiveMeasurement);
+vui.back.addEventListener("click", () => {
+  setViewing(null);
+  refreshVoltage();
+});
 
 vui.range.addEventListener("change", () => {
   vui.custom.hidden = vui.range.value !== "custom";
