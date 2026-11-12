@@ -80,14 +80,18 @@
  * PB3 is also the bootloader's BOOT strap: with a phone in the field at reset the tag
  * enters the bootloader, and a serial adapter's DTR on PB3 fights the chip, so test with
  * the BOOT wire disconnected. */
+#ifndef SHELF_NFC_POLL
 #define SHELF_NFC_POLL          1
+#endif
 /* Only meaningful with SHELF_NFC_POLL. 1 = leave the switched rail (PA5 / U4) on, so the NFC
  * chip is powered and its open-drain output is actually driven. It costs the standby current
  * of the panel supply and the flash. 0 = the rail is driven off between uses (PA5 high, PA2
  * parked low): tried on hardware, PB3 then floats and re-triggers every cycle (a poll every
  * 1.8 s), so the storm guard suspends the feature - i.e. NFC does not work. Keep 1 until
  * there is a pull-up on PB3 or the chip is powered from an always-on rail. */
+#ifndef SHELF_NFC_RAIL_HOLD
 #define SHELF_NFC_RAIL_HOLD     1
+#endif
 /* What a phone gets from the tag. "" = an empty NDEF message: the phone detects the tag and
  * opens nothing. To open a page later, put it here in full, e.g. "https://example.com/t"
  * (at most 48 characters). With SHELF_NFC_NDEF_SYNC 1 the tag compares the chip's NDEF area

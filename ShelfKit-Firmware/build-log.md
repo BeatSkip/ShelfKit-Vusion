@@ -39,3 +39,9 @@ Appended by `Tooling/build-all.py`. `dirty` = the build had uncommitted changes,
 | 2026-11-11 20:25 | 1.2.0 | 34 | d1c8da5 dirty | Vusion 5cb1aea6aee18d3c (120890 B); Vusion-Hub e9b130473cfd3086 (89547 B); Bootloader e2310ad4eda7e837 (24931 B) (version bump: minor) |
 | 2026-11-11 20:26 | 1.1.0 | 35 | d1c8da5 dirty | Vusion ac0db3629f04f23c (120890 B); Vusion-Hub 5b05196923bd7667 (89547 B); Bootloader e2310ad4eda7e837 (24931 B) |
 | 2026-11-11 21:02 | 1.1.0 | 36 | 27287e6 dirty | Vusion 17df188fb530e811 (120890 B); Vusion-Hub 477b3bf25c282c53 (89547 B); Bootloader de00217c95532429 (24931 B) |
+| 2026-11-13 01:05 | 1.1.0 | 37 | 13752fa dirty | Vusion 4214295e6f1f6dfe (120939 B); compare A-baseline: SHELF_FIX_XOSC=0 SHELF_FIX_UART_SLEEP=0 |
+| 2026-11-13 01:05 | 1.1.0 | 38 | 13752fa dirty | Vusion e490b3d4763ff244 (121172 B); compare B-xosc-only: SHELF_FIX_UART_SLEEP=0 |
+| 2026-11-13 01:05 | 1.1.0 | 39 | 13752fa dirty | Vusion bd44c4f84062e2d8 (120933 B); compare C-sleep-only: SHELF_FIX_XOSC=0 |
+| 2026-11-13 01:05 | 1.1.0 | 40 | 13752fa dirty | Vusion c29a3f55c2b38d95 (121153 B); compare D-both-fixes: defaults |
+| 2026-11-13 01:05 | 1.1.0 | 41 | 13752fa dirty | Vusion a590d5e0b40e847c (119305 B); compare E-both-no-nfc: SHELF_NFC_POLL=0 SHELF_NFC_RAIL_HOLD=0 |
+| 2026-11-13 01:40 | 1.1.0 | 42 | 13752fa dirty | Vusion b0a0b6ac7ccc9aa4 (121153 B); Bootloader e2310ad4eda7e837 (24931 B); compare D-uart-test: SHELF_FIX_UART_SLEEP=1, for the wired serial test |

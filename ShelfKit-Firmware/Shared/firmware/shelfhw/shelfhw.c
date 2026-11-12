@@ -189,6 +189,24 @@ uint16_t shelfhw_random(void)
 #ifndef SHELF_LOG_MUTE
 #define SHELF_LOG_MUTE 0
 #endif
+/* Switches for the two power fixes of 2026-11-13, so comparison images can be built with
+ * --define (see Release/compare/README.md). 1 = fixed, 0 = the old behaviour:
+ *   SHELF_FIX_XOSC        0 = force the MCU's fast crystal oscillator on (PA0/PA1, no crystal)
+ *   SHELF_FIX_UART_SLEEP  0 = leave U0TXIE set after every log character, which blocks Sleep
+ *
+ * SHELF_FIX_UART_SLEEP is OFF by default. With it on the MCU really enters Sleep, and on
+ * hardware (builds 1.1.0-39 and -40, 2026-11-13) the tag then stopped polling: one poll after
+ * boot, then nothing until the battery was pulled - no scheduled poll, and an NFC tap gave
+ * neither the blue LED pulse nor a poll. So after the first Sleep the tag does not come back
+ * at all, by the wake-up timer or by the port change. Cause not found; see
+ * Documentation/power-findings-2026-11-13.md. Until that is solved the old Standby behaviour
+ * (about 0.1 mA) is the working one; the XOSC fix alone was the large saving. */
+#ifndef SHELF_FIX_XOSC
+#define SHELF_FIX_XOSC 1
+#endif
+#ifndef SHELF_FIX_UART_SLEEP
+#define SHELF_FIX_UART_SLEEP 0
+#endif
 #if SHELF_LOG_UART
 static uint8_t __xdata log_quiet;
 
@@ -242,7 +260,13 @@ void log_putc(uint8_t c)
     while (!(U0STATUS & 0x04))      /* wait for U0TXEMPTY */
         host_rx_pump();             /* free time: swallow anything arriving */
     U0SHREG = c;
-    U0CTRL |= 0x08;                 /* arm the TX-done flag, like iocore */
+#if !SHELF_FIX_UART_SLEEP
+    /* U0TXIE. No UART interrupt is enabled to clear it again, and libmf's wtimer_cansleep()
+     * asks uart_txidle(), which reports "busy" for as long as the bit is set: after the
+     * first logged character the MCU only ever reaches Standby, never Sleep. That is
+     * currently relied on, see SHELF_FIX_UART_SLEEP above. */
+    U0CTRL |= 0x08;
+#endif
 #endif
 }
 
@@ -341,6 +365,17 @@ static uint16_t __xdata meter_asleep_frac;  /* ... and the ticks that do not fil
 static uint32_t __xdata meter_radio_since;
 static uint32_t __xdata meter_radio;
 
+#if SHELF_LOG_UART
+/* The UART and its baud timer. Called at boot and again after every wake from Sleep: Sleep
+ * powers the peripherals down and their registers come back at reset values, and log_putc()
+ * waits for U0TXEMPTY, so a UART left unconfigured would hang the tag on its next log line. */
+static void log_uart_start(void)
+{
+    uart_timer0_baud(CLKSRC_FRCOSC, 115200, 20000000);
+    uart0_init(0, 8, 1);
+}
+#endif
+
 void shelfhw_init(void)
 {
     uint8_t i;
@@ -402,7 +437,18 @@ void shelfhw_init(void)
      * boot-looped the tag; never write PCON from the poll path). */
     PCON = (uint8_t)((PCON & 0x0C) | 0x0C);
     OSCFORCERUN |= 0x08;            /* force the 32 kHz LPX crystal (wake timer) */
-    OSCFORCERUN |= 0x04;
+    /* Bit 2 (XOSC FRUN) is NOT the radio's 26 MHz crystal: it is the MCU's own fast crystal
+     * oscillator on PA0/PA1, which on this board are the panel's D/C and chip select.
+     * AND9349/D table 50: never enable it without a crystal there, and once enabled it runs
+     * until it sees falling edges on its pins or a reset. This code used to force it on, and
+     * the bootloader still does on every reset, so switch it off explicitly: libmf clears
+     * the force bit and toggles PA0/PA1 a few times (no SPI clock, so the panel ignores it),
+     * then restores both pins. */
+#if SHELF_FIX_XOSC
+    turn_off_xosc();
+#else
+    OSCFORCERUN |= 0x04;            /* the old behaviour, for comparison builds only */
+#endif
     FRCOSCCONFIG = (6 << 3) | CLKSRC_LPXOSC;
     WTCFGB = (1 << 3) | CLKSRC_LPXOSC;
     i = 128;
@@ -434,8 +480,7 @@ void shelfhw_init(void)
      * the same rounding 38400 already had). Both boards and their bootloaders
      * have to agree, so the baud lives next to the UART setup on both sides. */
 #if SHELF_LOG_UART
-    uart_timer0_baud(CLKSRC_FRCOSC, 115200, 20000000);
-    uart0_init(0, 8, 1);
+    log_uart_start();
     log_quiet = (uint8_t)(SHELF_LOG_MUTE == 1 || SHELF_LOG_MUTE == 3);
 #endif
 
@@ -668,6 +713,9 @@ void shelfhw_poll(void)
          * fed and every poll after the first sleep went unheard. */
         GPIOENABLE = 1;
         IE = 0x40;
+#if SHELF_LOG_UART
+        log_uart_start();
+#endif
 
         if (!radio_deep) {
             axradio_commsleepexit();
