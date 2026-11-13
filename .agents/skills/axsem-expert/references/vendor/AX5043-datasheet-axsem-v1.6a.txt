@@ -1,0 +1,3145 @@
+DATASHEET
+
+AX5043
+
+Advanced high performance
+ASK and FSK narrow-band
+transceiver for 70-1050 MHz
+range
+
+Version 1.6a
+
+2
+
+   Document      Type     Datasheet
+   Document      Status
+   Document      Version  Version 1.6a
+   Product                AX5043
+
+   Version 1.6a                         Datasheet AX5043
+
+                   Table of Contents 3
+
+Table of Contents
+
+1. Overview..................................................................................................... 6
+1.1. Features ..................................................................................................... 6
+1.2. Applications ................................................................................................. 7
+2. Block Diagram............................................................................................. 8
+3. Pin Function Descriptions ........................................................................... 9
+3.1. Pinout Drawing .......................................................................................... 10
+4. Specifications............................................................................................ 11
+4.1. Absolute Maximum Ratings .......................................................................... 11
+4.2. DC Characteristics ...................................................................................... 12
+
+      Supplies .................................................................................................... 12
+      Logic......................................................................................................... 14
+4.3. AC Characteristics ...................................................................................... 15
+      Crystal Oscillator ........................................................................................ 15
+      Low-power Oscillator ................................................................................... 15
+      RF Frequency Generation Subsystem (Synthesizer) ......................................... 16
+      Transmitter................................................................................................ 19
+      Receiver .................................................................................................... 20
+      SPI Timing................................................................................................. 21
+      Wire Mode Interface Timing.......................................................................... 21
+      General Purpose ADC (GPADC) ..................................................................... 22
+5. Circuit Description .................................................................................... 23
+5.1. Voltage Regulators ..................................................................................... 24
+5.2. Crystal Oscillator ........................................................................................ 25
+5.3. Low Power Oscillator and Wake on Radio (WOR) Mode ..................................... 25
+5.4. GPIO Pins.................................................................................................. 26
+5.5. SYSCLK Output .......................................................................................... 26
+
+Version 1.6a       Datasheet AX5043
+
+4 Table of Contents
+
+5.6. Power-on-reset (POR) ................................................................................. 27
+
+5.7. RF Frequency Generation Subsystem............................................................. 27
+
+VCO.......................................................................................................... 27
+
+VCO Auto-Ranging ...................................................................................... 28
+
+Loop Filter and Charge Pump........................................................................ 28
+
+Registers ................................................................................................... 29
+
+5.8. RF Input and Output Stage (ANTP/ANTN/ANTP1) ............................................ 30
+
+LNA .......................................................................................................... 30
+
+PA ............................................................................................................ 30
+
+5.9. Digital IF Channel Filter and Demodulator ...................................................... 31
+
+Registers ................................................................................................... 31
+
+5.10. Encoder ............................................................................................. 32
+
+5.11. Framing and FIFO ............................................................................... 32
+
+Packet Modes ............................................................................................. 33
+
+RAW Modes................................................................................................ 34
+
+5.12. RX AGC and RSSI................................................................................ 34
+
+5.13. Modulator .......................................................................................... 35
+
+5.14. Automatic Frequency Control (AFC) ....................................................... 35
+
+5.15. PWRMODE Register ............................................................................. 36
+
+5.16. Serial Peripheral Interface (SPI) ............................................................ 38
+
+SPI Timing................................................................................................. 39
+
+5.17. Wire Mode Interface ............................................................................ 40
+
+Wire Mode Timing ....................................................................................... 40
+
+General Purpose ADC (GPADC) ..................................................................... 41
+
+ DAC...................................................................................................... 41
+
+6. Register Bank Description......................................................................... 42
+
+6.1. Control Register Map................................................................................... 43
+
+7. Application Information ............................................................................ 55
+
+7.1. Typical Application Diagrams........................................................................ 55
+
+Version 1.6a         Datasheet AX5043
+
+                                                                               Table of Contents 5
+
+      Match to 50 Ohm for differential antenna pins (868/433 MHz RX/TX operation) ... 55
+      Match to 50 Ohm for differential antenna pins (169 MHz RX/TX operation) .......... 56
+      Match to 50 Ohm for single-ended antenna pin (169 MHz TX operation) ............. 57
+      Using a Dipole Antenna and the internal TX/RX Switch ..................................... 58
+      Using a single-ended Antenna and the internal TX/RX Switch ............................ 59
+      Using an external high-power PA and an external TX/RX Switch ........................ 60
+      Using the single-ended PA............................................................................ 61
+      Using two Antenna...................................................................................... 62
+      Using an external VCO inductor .................................................................... 63
+      Using an external VCO................................................................................. 64
+      Using a TCXO ............................................................................................. 65
+8. QFN28 Package Information ..................................................................... 66
+8.1. Package Outline QFN28 ............................................................................... 66
+8.2. QFN28 Soldering Profile............................................................................... 67
+8.3. QFN28 Recommended Pad Layout................................................................. 68
+8.4. Assembly Process ....................................................................................... 68
+      Stencil Design & Solder Paste Application ....................................................... 68
+9. Life Support Applications .......................................................................... 70
+10. Contact Information.................................................................................. 71
+
+Version 1.6a  Datasheet AX5043
+
+6 Overview                                                    · Configurable for usage in 70 MHz -
+                                                                    1050 MHz bands
+      1. Overview
+                                                              · RF carrier frequency and FSK
+      1.1. Features                                                 deviation programmable in 1 Hz steps
+
+           Advanced multi-channel narrow-                     · Ultra fast settling RF frequency
+           band single chip UHF transceiver                         synthesizer for low-power
+           (FSK/MSK/4-FSK                                           consumption
+           /GFSK/GMSK/ASK)
+                                                              · Fully integrated RF frequency
+           Low-Power                                                synthesizer with VCO auto-ranging
+                                                                    and band-width boost modes for fast
+                · RX 9.5 mA @ 868 MHz                               locking
+                · RX 6.5 mA @ 169 MHz
+                · TX 8 mA @ 0 dBm, 22 mA @ 10 dBm,            · Configurable for either fully
+                                                                    integrated VCO, internal VCO with
+                       54 mA @ 15 dBm                               external inductor or fully external
+                · 50 nA deep sleep current                          VCO
+                · 500nA power-down current with low
+                                                              · Configurable for either fully
+                       frequency duty cycle clock running           integrated or external synthesizer
+                                                                    loop filter for a large range of
+           Extended supply voltage range                            bandwidths
+
+                · 1.8 V - 3.6 V single supply                 · Channel hopping up to 2000 hops/s
+
+           High sensitivity / High selectivity                · Automatic frequency control (AFC)
+                 receiver
+                                                              Flexible antenna interface
+                · Data rates from 1 kbps to 115.2 kbps
+                · Sensitivity -126 dBm @ 1.2 kbps,868         · Integrated RX/TX switching with
+                                                                    differential antenna pins
+                       MHz, FSK
+                · Sensitivity -105 dBm @ 100 kbps,            · Mode with differential RX pins and
+                                                                    single-ended TX pin for usage with
+                       868 MHz,                                     external Pas and for maximum PA
+                · High selectivity receiver with up to 45           efficiency at low output power
+
+                       dB adjacent channel rejection          Wakeup-on-Radio
+                · 0 dBm maximum input power
+                · > +/- 10% data-rate error tolerance         · 640 Hz or 10 kHz lowest power wake-
+                · Support for antenna diversity with                up timer
+
+                       external antenna switch                · Wake-up time programmable
+                · Short preamble modes allow the                    between 98 µs and 102 s
+
+                       receiver to work with as little as 16  Sophisticated radio controller
+                       preamble bits
+                                                              · Antenna diversity and optional
+            Transmitter                                             external RX/TX switch control
+
+                · Data-rates from 1 kbps to 115.2 kbps        · Fully automatic packet reception and
+                · High efficiency, high linearity                   transmission without micro-controller
+                                                                    intervention
+                       integrated power amplifier
+                · Power level programmable in 0.5 dB          · Supports HDLC, Raw, Wireless M-Bus
+                                                                    frames and arbitrary defined frames
+                       steps from -10 dBm to 15 dBm
+                · GFSK shaping with BT=0.3 or BT=0.5          · Automatic channel noise level tracking
+                · Unrestricted power ramp shaping
+                                                              · µs resolution timestamps for exact
+            Frequency Generation                                    timing (e.g. for frequency hopping
+                                                                    systems)
+        Version 1.6a
+                                                              · 256 Byte micro-programmable FIFO,
+                                                                    optionally supports packet sizes >
+                                                                    256 Bytes
+
+                                                              · 3 matching units for preamble byte,
+                                                                    sync-word and address
+
+                                                              · Ability to store RSSI, frequency offset
+                                                                    and data-rate offset with the packet
+                                                                    data
+
+                                                                                                  Datasheet AX5043
+
+                                              Table of Contents 7
+
+ · Multiple receiver parameter sets allow          the narrow-band 12.5 kHz, 20 kHz
+        the use of more aggressive receiver        and 25 kHz definitions.
+        parameters during preamble,
+        dramatically shortening the required  · Security applications
+        preamble length at no sensitivity
+        degradation                           · Messaging / paging
+
+ Advanced Crystal Oscillator                  · Wireless sensors
+
+ · Fast start-up and lowest power             · Wireless M-Bus applications
+        steady-state XTAL oscillator for a         according to EN 13757-4
+        wide range of crystals
+
+ · Integrated crystal tuning capacitors
+ · Possibility of applying an external
+
+        clock reference (TCXO)
+
+Miscellaneous features
+
+ · Few external components
+ · SPI microcontroller interface
+ · Extended AXSEM register set
+ · Fully integrated current/voltage
+
+        references
+ · QFN28 package
+ · Internal power-on-reset
+ · Brown-out detection
+ · 10 bit 1MS/s General Purpose ADC
+
+        (GPADC)
+
+1.2. Applications
+
+70 - 1050 MHz licensed and unlicensed
+radio systems.
+
+· AMR
+
+· FCC Part 90 6.25 kHz, 12.5 kHz and
+     25 kHz channel width, FCC Part
+     15.245, EN 300 220 V2.3.1 including
+
+Version 1.6a                                  Datasheet AX5043
+
+8 Block Diagram
+
+      2. Block Diagram
+
+                                         GPADC1                                                         DATA
+                                                  GPADC2                                                      DCLK
+
+                                         25 26                    AX5043                      11                    12
+
+                              Mixer                               ADC  Digital IF       De-   Forward Error
+                                                                        channel    modulator      Correction
+                                         IF Filter &                                                             Encoder
+                     LNA                 AGC PGAs                         filter                                                Framing
+
+ANTP 3                                                            AGC                                                                         Radio Controller
+ANTN 4                                                                                                                                            timing and packet
+
+                                                                                   Modulator                                                           handling
+                                                                                                                                                                   FIFO
+
+                     PA diff
+
+ANTP1 5
+
+                     PA se                FOUT                         Chip configuration                   Communication Controller &
+                                  FXTAL                                                                               Serial Interface
+                                         RF Frequency                         POR
+                                           Generation                    References                    Registers
+                                           Subsystem
+                                                                         Low Power                                                                         SPI
+                                            RF Output                     Oscillator          Wake on Radio
+                                         70 MHz-1GHz                   640 Hz/10kHz
+
+          Crystal             Divider                              Voltage
+         Oscillator                  13                           Regulator
+
+             typ.                                                    1,7 23
+          16 MHz
+
+                                                                                              19 20 21
+
+         28  27                                           8 9 10                                                        14 15 16 17
+
+         CLK16P
+                        CLK16N
+                                       SYSCLK
+                                                              FILT
+                                                                    L 1
+                                                                          L 2
+                                                                                               VDD_ANA
+                                                                                                          VDD_IO
+                                                                                                                                                        IR Q
+                                                                                                                                                              PWRAMP
+                                                                                                                                                                    ANTSEL
+                                                                                                                                                                                                           SEL
+                                                                                                                                                                                                                 CLK
+                                                                                                                                                                                                                       MISO
+                                                                                                                                                                                                                             MOSI
+
+                                         Figure 1 Functional block diagram of the AX5043
+
+Version 1.6a                                                                                                            Datasheet AX5043
+
+                                                     Pin Function Descriptions 9
+
+3. Pin Function Descriptions
+
+Symbol        Pin(s)  Type Description
+VDD_ANA           1
+GND               2   P  Analog power output, decouple to neighboring GND
+ANTP              3
+ANTN              4   P  Ground, decouple to neighboring VDD_ANA
+ANTP1             5
+GND               6   A Differential antenna input/output
+VDD_ANA           7
+FILT              8   A Differential antenna input/output
+L2                9
+L1               10   A Single-ended antenna output
+
+DATA             11   P  Ground, decouple to neighboring VDD_ANA
+
+DCLK             12   P  Analog power output, decouple to neighboring GND
+
+SYSCLK           13   A Optional synthesizer filter
+
+SEL              14            Optional synthesizer inductor, should be shorted with L1 if
+CLK              15   A not used.
+MISO             16
+MOSI             17            Optional synthesizer inductor, should be shorted with L2 if
+NC               18   A not used.
+
+IRQ              19             In wire mode: Data in-out/output
+                                Can be programmed to be used as a general purpose I/O
+PWRAMP           20   I/O pin
+                                Selectable internal 65 k pull-up resistor
+ANTSEL           21
+                                In wire mode: Clock output
+NC               22             Can be programmed to be used as a general purpose I/O
+VDD_IO           23   I/O pin
+NC               24             Selectable internal 65 k pull-up resistor
+
+Version 1.6a                    Default functionality: Crystal oscillator (or divided) clock
+                                output
+                      I/O Can be programmed to be used as a general purpose I/O
+                                pin
+                                Selectable internal 65 k pull-up resistor
+
+                      I  Serial peripheral interface select
+
+                      I  Serial peripheral interface clock
+
+                      O Serial peripheral interface data output
+
+                      I  Serial peripheral interface data input
+
+                      N Must be left unconnected
+
+                                Default functionality: Transmit and receive interrupt
+                                Can be programmed to be used as a general purpose I/O
+                      I/O pin
+                                Selectable internal 65 k pull-up resistor
+
+                                Default functionality: Power amplifier control output
+                                Can be programmed to be used as a general purpose I/O
+                      I/O pin
+                                Selectable internal 65 k pull-up resistor
+
+                                Default functionality: Diversity antenna selection output
+                                Can be programmed to be used as a general purpose I/O
+                      I/O pin
+                                Selectable internal 65 k pull-up resistor
+
+                      N Must be left unconnected
+
+                      P  Power supply 1.8 V - 3.3 V
+
+                      N Must be left unconnected
+
+                                                                 Datasheet AX5043
+
+10 Pin Function Descriptions
+
+GPADC1               25                    A GPADC input
+GPADC2               26
+CLK16N               27                    A GPADC input
+CLK16P               28
+GND           Center pad                   A Crystal oscillator input/output
+
+                                           A Crystal oscillator input/output
+
+                                           P  Ground on center pad of QFN, must be connected
+
+A =  analog signal                            I/O = digital input/output signal
+I =  digital input signal                     N = not to be connected
+O =  digital output signal                    P = power or ground
+
+All digital inputs are Schmitt trigger inputs, digital input and output levels are LVCMOS/LVTTL compatible and
+
+5V tolerant.
+
+3.1. Pinout Drawing
+
+                                           CLK16P
+                                                CLK16N
+                                                      GPADC2
+                                                            GPADC1
+                                                                  N C
+                                                                         VDD_IO
+                                                                               N C
+
+                                           28 27 26 25 24 23 22
+
+                            VDD_ANA 1         AX5043                                  21 ANTSEL
+                                    GND 2                                             20 PWRAMP
+                                   ANTP 3                                             19 IRQ
+                                                                                      18 NC
+                                  ANTN 4                                              17 MOSI
+                                 ANTP1 5                                              16 MISO
+                                                                                      15 CLK
+                                    GND 6
+                            VDD_ANA 7
+
+                                           8 9 10 11 12 13 14
+
+                                           FILT
+                                                  L2
+                                                       L1
+
+                                                              DATA
+                                                                    DCLK
+                                                                          SYSCLK
+
+                                                                                 SEL
+
+                              Figure 2: Pinout drawing (Top view)
+
+Version 1.6a                                                                                     Datasheet AX5043
+
+                                                            Specifications 11
+
+4. Specifications
+
+4.1. Absolute Maximum Ratings
+
+Stresses above those listed under Absolute Maximum Ratings may cause permanent
+damage to the device.
+This is a stress rating only; functional operation of the device at these or any other
+conditions above those listed in the operational sections of this specification is not
+implied.
+Exposure to absolute maximum rating conditions for extended periods may affect device
+reliability.
+
+SYMBOL        DESCRIPTION                 CONDITION  MIN    MAX   UNIT
+VDD_IO                                                -0.5   5.5     V
+IDD           Supply voltage              HBM               100    mA
+Ptot          Supply current                          -10   800
+Pi            Total power consumption                -100    15    mW
+              Absolute maximum input                              dBm
+II1           power at receiver input                 -0.5   10
+              DC current into any pin                 -0.5         mA
+II2           except ANTP, ANTN,                     -2000  100
+IO            ANTP1                                   -40    40    mA
+              DC current into pins ANTP,              -65    5.5   mA
+Via           ANTN, ANTP1                                    5.5     V
+              Output Current                                2000     V
+Ves           Input voltage ANTP,                            85      V
+Tamb          ANTN, ANTP1 pins                              150     °C
+Tstg          Input voltage digital pins                    150     °C
+Tj            Electrostatic handling                                °C
+              Operating temperature
+              Storage temperature
+              Junction Temperature
+
+Version 1.6a                                                Datasheet AX5043
+
+12 Specifications
+
+4.2. DC Characteristics
+Supplies
+
+SYMBOL DESCRIPTION                          CONDITION                        MIN TYP MAX UNIT
+
+TAMB      Operational ambient                                                -40 27  85   °C
+VDD_IO    temperature
+VBOUT     I/O and voltage regulator                                          1.8 3.0 3.6  V
+IDSLEEP   supply voltage
+IPDOWN    Brown-out threshold               Note 1                           1.3          V
+IWOR      Deep-sleep current:
+ISTANDBY  All analog and digital functions  PWRMODE=0x01                     50           nA
+          are powered down
+IRX       Power-down current:               PWRMODE=0x00                     400          nA
+          Register file contents
+ITX-DIFF  preserved                         PWRMODE=0x0B                     500          nA
+          Wakeup-on-radio mode:
+ITX-SE    Low power timer and WOR           PWRMODE=0x05                     230          µA
+          state-machine are running at
+          640 Hz                            868 MHz, datarate 6 kbps         9.5
+          Standby-current:                  169 MHz, datarate 6 kbps
+          All power domains are             868 MHz, datarate 100 kbps       6.5
+          powered up, crystal oscillator    169 MHz, datarate 100 kbps
+          and references are running.       868 MHz, 16 dBm, FSK, Note 2,    11           mA
+          Current consumption RX            RF Frequency Subsystem:
+                                            Internal VCO and loop-filter     7.5
+          PWRMODE=0x09                      Antenna configuration:
+          RF Frequency Subsystem:           Differential PA                  51           mA
+          internal VCO and internal         868 MHz, 0 dBm, FSK,
+          loop-filter                       estimated, RF Frequency          8            mA
+                                            Subsystem:
+          Current consumption TX            Internal VCO and loop-filter
+          differential                      Antenna configuration:
+                                            Single ended PA, internal RX/TX
+          Current consumption TX            switching
+          single ended
+
+Notes:    1. Digital circuitry is functional down to typically 1 V.
+          2. Measured with matching network V1
+
+For information on current consumption in complex modes of operation tailored to your
+application, see the software AX-RadioLab for AX5043.
+
+Version 1.6a                                                                 Datasheet AX5043
+
+                                                    Specifications 13
+
+Note on current consumption in TX mode
+
+To achieve best output power the matching network has to be optimized for the desired
+output power and frequency. As a rule of thumb a good matching network produces
+about 50% efficiency with the AX5043 power amplifier although over 90% are
+theoretically possible. A typical matching network has between 1 dB and 2 dB loss (Ploss).
+The theoretical efficiencies are the same for the single ended PA (ANTP1) and differential
+PA (ANTP and ANTN) therefore only one current value is shown in the table below. We
+recommend to use the single ended PA for low output power and the differential PA for
+high power. The differential PA is multiplexed with the LNA on pins ANTP and ANTN.
+Therefore constraints for the RX matching have to be considered for the differential PA
+matching.
+
+The current consumption can be calculated as
+
+ITX[mA]=1/PAefficiency*10^((Pout[dBm]+Ploss[dB])/10)/1.8V+Ioffset
+
+Ioffset is about 6 mA for the fully integrated VCO at 400 MHz to 1050 MHz, and 3 mA for
+the VCO with external inductor at 169 MHz. The following table shows calculated current
+consumptions versus output power for Ploss = 1 dB, PAefficiency = 0.5, Ioffset= 6 mA at 868
+MHz and Ioffset= 3.5 mA at 169 MHz
+
+              Pout [dBm]        Itxcalc [mA]
+
+                          868 MHz  169 MHz
+
+              0           7.5                 4.5
+
+              1           7.9                 4.9
+
+              2           8.4                 5.4
+
+              3           9.0                 6.0
+
+              4           9.8                 6.8
+
+              5           10.8                7.8
+
+              6           12.1                9.1
+
+              7           13.7                10.7
+
+              8           15.7                12.7
+
+              9           18.2                15.2
+
+              10          21.3                18.3
+
+              11          25.3                22.3
+
+              12          30.3                27.3
+
+              13          36.7                33.7
+
+              14          44.6                41.6
+
+              15          54.6                51.6
+
+Both AX5043 power amplifiers run from the regulated VDD_ANA supply and not directly
+from the battery. This has the advantage that the current and output power do not vary
+much over supply voltage and temperature.
+
+Version 1.6a                                        Datasheet AX5043
+
+14 Specifications
+
+Logic
+
+SYMBOL DESCRIPTION                               CONDITION          MIN            TYP  MAX UNIT
+                                                                                   1.9
+Digital Inputs                                                                     1.2
+
+                    Schmitt trigger low to high                                     65       V
+VT+
+
+                    threshold point
+
+                    Schmitt trigger high to low                                              V
+VT-
+
+                    threshold point
+
+VIL      Input voltage, low                                                             0.8  V
+
+VIH      Input voltage, high                                        2.0                      V
+
+IL       Input leakage current                                      -10                 10   µA
+
+Rpullup  Pull-up resistors                       Pull-ups enabled                            k
+         Pins DATA, DCLK, SYSCLK, IRQ,            in the relevant
+         PWRAMP, ANTSEL                          pin configuration
+
+                                                       registers
+
+Digital Outputs
+
+IOH      Output Current, high                    VDD_IO=3 V                                  mA
+                                                                                4
+
+                                                  VOH= 2.4 V
+
+IOL      Output Current, low                     VDD_IO=3 V 4                                mA
+                                                  VOL= 0.4 V
+
+IOZ      Tri-state output leakage current                           -10                 10   µA
+
+Version 1.6a                                                                            Datasheet AX5043
+
+                                                                                 Specifications 15
+
+4.3. AC Characteristics
+Crystal Oscillator
+
+SYMBOL        DESCRIPTION                      CONDITION             MIN   TYP   MAX   UNIT
+
+fXTAL         Crystal frequency                Notes 1, 2            10    16    50    MHz
+
+gmosc         Oscillator transconductance      Self-regulated see 0.2            20    mS
+              control range                    note 3
+
+                                                                               XTALCAP = 0x00 3 pF
+                      Programmable tuning capacitors default
+Cosc at pins CLK16N and CLK16P XTALCAP = 0x01 8.5 pF
+
+                                               XTALCAP = 0xFF              40          pF
+
+Cosc-lsb      Programmable tuning capacitors, XTALCAP = 0x01 -             0.5         pF
+
+              increment per LSB of XTALCAP     0xFF
+
+fext          External clock input (TCXO)      Notes 2, 4            10    16    50    MHz
+
+RINosc        Input DC impedance                                     10                k
+
+NDIVSYSCLK    Divider ratio fSYSCLK = fXTAL /                        20 24 210
+              NDIVSYSCLK
+
+Notes        Tolerances and start-up times depend on the crystal used. Depending on the RF frequency and channel spacing the IC must be
+         1.  calibrated to the exact crystal frequency using the readings of the register TRKFREQ
+         2.  The choice of crystal oscillator or TCXO frequency depends on the targeted regulatory regime for TX, see separate documentation on
+         3.  meeting regulatory requirements.
+         4.  The oscillator transconductance is regulated for fastest start-up time during start-up and for lowest power during steady state oscillation.
+             This means that values will depend on the crystal used.
+             If an external clock (TCXO) is used, it should be input via an AC coupling at pin CLK16P with the oscillator powered up and
+             XTALCAP=0x00
+
+Low-power Oscillator
+
+SYMBOL        DESCRIPTION                      CONDITION             MIN   TYP   MAX   UNIT
+fosc-slow                                                            480   640   800     Hz
+fosc-fast     Oscillator frequency slow mode   No calibration        630   640   650     Hz
+              LPOSC FAST=0                                            7.6  10.2  12.8   kHz
+                                               Internal calibration   9.8  10.2  10.8   kHz
+              Oscillator frequency fast mode   vs. crystal clock
+              LPOSC FAST=1                     has been
+                                               performed
+
+                                               No calibration
+
+                                               Internal calibration
+                                               vs. crystal clock
+                                               has been
+                                               performed
+
+Version 1.6a                                                                     Datasheet AX5043
+
+16 Specifications
+
+RF Frequency Generation Subsystem (Synthesizer)
+
+SYM        DESCRIPTION                            CONDITION                       MIN TYP MAX UNIT
+
+fREF       Reference frequency                                                    10 16         50    MHz
+
+Dividers
+
+NDIVref Reference divider ratio range             Controlled directly with register 20           23
+NDIVm Main divider ratio range                    REFDIV                                        66.5
+                                                  Controlled indirecty with register 4.5
+                                                  FREQ
+
+NDIVRF RF divider range                           Controlled directly with register 1 2
+Charge Pump                                       RFDIV
+
+ICP        Charge pump current                    Programmable in increments of 8.5             2168  µA
+                                                  8.5 µA via register PLLCPI
+
+Internal VCO (VCOSEL=0)
+
+fRF        RF frequency range                     RFDIV=1                         400           525   MHz
+                                                                                                1050
+                                                  RFDIV=0                         800
+
+fstep      RF frequency step                      RFDIV=1, fxtal=16.000000 MHz            0.98        Hz
+BW
+           Synthesizer loop bandwidth             The synthesizer loop bandwidth
+Tstart
+           Synthesizer start-up time if           and start-up time can be
+           crystal oscillator and reference
+           are running                            programmed with registers       50            500   kHz
+
+                                                  PLLLOOP and PLLCPI.
+
+                                                  For recommendations see the
+
+                                                  AX5043 Programming Manual,
+
+                                                  the AX-RadioLab software and
+
+                                                  AX5043 Application Notes on     5             25    µs
+
+                                                  compliance with regulatory
+
+                                                  regimes.
+
+PN868      Synthesizer phase noise 868 MHz        10 kHz offset from carrier              -95         dBc/Hz
+           fREF = 48 MHz                          1 MHz offset from carrier               -120
+
+PN433      Synthesizer phase noise 433 MHz        10 kHz offset from carrier              -105        dBc/Hz
+           fREF = 48 MHz                          1 MHz offset from carrier               -120
+
+VCO with external inductors (VCOSEL=1, VCO2INT=1)
+
+fRFrng_lo  RF frequency range                     RFDIV=1                         70            262
+fRFrng_hi  For choice of Lex t values as well as  RFDIV=0
+           VCO gains see Figure 3 and Figure                                                          MHz
+           4
+                                                                                  140           525
+
+PN169      Synthesizer phase noise 169 MHz        10 kHz from carrier                     -97         dBc/Hz
+           Lex t=47 nH (wire wound 0603)          1 MHz from carrier                      -115
+           RFDIV=0, fREF = 16 MHz
+           Note: phase noises can be
+           improved with higher fREF
+
+External VCO (VCOSEL=1, VCO2INT=0)
+
+fRF        RF frequency range fully external      Note: The external VCO          70            1000 MHz
+Vamp       VCO                                    frequency needs to be 2xfRF
+VinL       Differential input amplitude at L1,                                            0.7         V
+Vctrl      L2 terminals                           Available at terminal FILT in
+           Input voltage levels at L1, L2         external loop filter mode       0             1.8   V
+           terminals
+                                                                                  0             1.8   V
+           Control voltage range
+
+Version 1.6a                                                                              Datasheet AX5043
+
+                                                                          Specifications 17
+
+              Figure 3 VCO with external inductors: frequency vs Lext
+                   Figure 4 VCO with external inductors: Kvco vs Lext
+
+Version 1.6a  Datasheet AX5043
+
+18 Specifications
+
+The following table shows the typical frequency ranges for frequency synthesis with
+external VCO inductor for different inductor values.
+
+                   Lext [nH] Freq [MHz] Freq [MHz] PLL Range
+
+                        RFDIV=0 RFDIV = 1
+
+                   8.2  482  241           0
+
+                   8.2  437  219           15
+
+                   10   432  216           0
+
+                   10   390  195           15
+
+                   12   415  208           0
+
+                   12   377  189           15
+
+                   15   380  190           0
+
+                   15   345  173           15
+
+                   18   345  173           0
+
+                   18   313  157           15
+
+                   22   308  154           0
+
+                   22   280  140           14
+
+                   27   285  143           0
+
+                   27   258  129           15
+
+                   33   260  130           0
+
+                   33   235  118           15
+
+                   39   245  123           0
+
+                   39   223  112           14
+
+                   47   212  106           0
+
+                   47   194  97            14
+
+                   56   201  101           0
+
+                   56   182  91            15
+
+                   68   178  89            0
+
+                   68   161  81            15
+
+                   82   160  80            1
+
+                   82   146  73            14
+
+                   100  149  75            1
+
+                   100  136  68            14
+
+                   120  136  68            0
+
+                   120  124  62            14
+
+For tuning or changing of ranges a capacitor can be added in parallel to the inductor.
+
+Version 1.6a                                                  Datasheet AX5043
+
+                                                                                      Specifications 19
+
+Transmitter
+
+SYMBOL DESCRIPTION                             CONDITION         MIN  TYP             MAX                                        UNIT
+                                                                                                                                 kbps
+SBR           Signal bit rate                  Note 1             1                   115.2                                      dBm
+PTX868                                         -40 °C to +85 °C  -10                    15
+PTX868-step   Transmitter power @ 868 MHz      Note 2                                                                              dB
+dPTXtemp                                       1.8 V to 3.6 V               +/- 0.5    0.5                                         dB
+dPTXVdd       Programming step size output     Note 2                       +/- 0.5                                                dB
+              power                            868 MHz
+Padj                                                                             -44                                              dBc
+              Transmitter power variation vs.  433 MHz
+PTX868-harm2  temperature                                                        -51                                              dBc
+PTX868-harm3                                   868 MHz, Note 2                   -40                                              dBc
+PTX433-harm2  Transmitter power variation vs.                                    -60
+PTX433-harm3  VDD_IO                           433 MHz, Note 2                   -40
+                                                                                 -40
+              Adjacent channel power
+              GFSK BT=0.5,
+              500 Hz deviation, 1.2kbps,
+              25 kHz channel spacing, 10 kHz
+              channel BW
+              Emission @ 2nd harmonic
+              Emission @ 3rd harmonic
+              Emission @ 2nd harmonic
+              Emission @ 3rd harmonic
+
+Notes        Pout = 12 TXPWRCOEFFB · Pmax
+         1.                2 -1
+         2.
+             Measured on DVK-1 module with the differential antenna interface documented in section 7: Application Information.
+
+Version 1.6a                                                                          Datasheet AX5043
+
+20 Specifications
+
+Receiver
+
+SYM          DESCRIPTION                       CONDITION                       MIN TYP       MAX UNIT
+
+SBR          Signal bit rate                                                      1          115.2 kbps
+ISBER868                                                                                                   dBm
+             Input sensitivity at BER  = 10-3  FSK, h = 0.5, 100 kbps           -126  -105
+ISPER868     for 868 MHz operation,            FSK, h = 0.5, 10 kbps                  -116
+             continuous data                   FSK, 500 Hz deviation,          +/-15  -126
+ISWOR868                                       1.2 kbps                        +/-10  -103
+IL           Input sensitivity at PER = 1%     FSK, h = 0.5, 100 kbps                 -115        dBm
+CP1dB        for 868 MHz operation, 144 bit    FSK, h = 0.5, 10 kbps                  -125
+RSSIR        packet data                       FSK, 500 Hz deviation,                 -102        dBm
+RSSIS1                                         1.2 kbps
+RSSIS2       Input sensitivity at PER = 1%                                             -35   10   dBm
+RSSIS3       for 868 MHz operation, 144 bit    FSK, h = 0.5, 100 kbps
+SEL868       packet data, WOR-mode                                                    0.625       dBm
+BLK868       Maximum input level               2 tones separated by
+             Input referred compression        100 kHz                                 0.1   -36  dB
+RAFC         point                             FSK, 500 Hz deviation,                    1
+                                               1.2 kbps                                 40
+RDROFF       RSSI control range                Before digital channel filter;           78
+                                               calculated from register
+             RSSI step size                    AGCCOUNTER                                         dB
+                                               Behind digital channel filter;
+             RSSI step size                    calculated from registers                          dB
+             RSSI step size                    AGCCOUNTER, TRKAMPL                                dB
+             Adjacent channel suppression      Behind digital channel filter;                     dB
+             Blocking at +/- 10 MHz offset     reading register RSSI                              dB
+                                               FSK 4.8 kbps, h= 0.5,
+             AFC pull-in range                 25 kHz channels                                    %
+                                               Note 1
+             Bitrate offset pull-in range      FSK 4.8 kbps,                                      %
+                                               Note 2
+                                               The AFC pull-in range can
+                                               be programmed with the
+                                               MAXRFOFFSET registers.
+                                               The AFC response time can
+                                               be programmed with the
+                                               FREQGAIND register.
+                                               The bitrate pull-in range can
+                                               be programmed with the
+                                               MAXDROFFSET registers.
+
+Notes        Interferer/Channel @ BER = 10-3, channel level is +3 dB above the typical sensitivity, the interfering signal is CW; channel signal is
+         1.  modulated with shaping
+         2.  Channel/Blocker @ BER = 10-3, channel level is +3 dB above the typical sensitivity, the blocker signal is CW; channel signal is
+             modulated with shaping
+
+Version 1.6a                                                                            Datasheet AX5043
+
+                                                                                                      Specifications 21
+
+SPI Timing
+
+SYMBOL       DESCRIPTION                          CONDITION                                 MIN  TYP  MAX    UNIT
+                                                  Note 1
+Tss          SEL falling edge to CLK rising edge                                             10        10      ns
+Tsh          CLK falling edge to SEL rising edge                                             10        10      ns
+Tssd         SEL falling edge to MISO driving                                                 0        10      ns
+Tssz         SEL rising edge to MISO high-Z                                                   0                ns
+Ts           MOSI setup time                                                                 10                ns
+Th           MOSI hold time                                                                  10                ns
+Tco          CLK falling edge to MISO output                                                                   ns
+Tck          CLK period                                                                      50                ns
+Tcl          CLK low duration                                                                40                ns
+Tch          CLK high duration                                                               40                ns
+
+Notes        For SPI access during power-down mode the period should be relaxed to 100 ns.
+         1.
+
+For a figure showing the SPI timing parameters see section 5.16: Serial Peripheral
+Interface (SPI).
+
+Wire Mode Interface Timing
+
+SYMBOL DESCRIPTION                                CONDITION                                 MIN  TYP  MAX UNIT
+
+Tdck         DCLK period                          Depends on bit 1.6                                  10000  µs
+Tdcl                                              rate programming
+Tdch
+Tds          DCLK low duration                                                              25        75     %
+
+Tdh          DCLK high duration                                                             25        75     %
+
+Tdco         DATA setup time relative to 10                                                                  ns
+             active DCLK edge
+
+             DATA hold time relative to active 10                                                            ns
+             DCLK edge
+
+             DATA output change relative to                                                           10     ns
+             active DCLK edge
+
+For a figure showing the wire mode interface timing parameters see section 5.17: Wire
+Mode Interface.
+
+Version 1.6a                                                                                          Datasheet AX5043
+
+22 Specifications
+
+General Purpose ADC (GPADC)
+
+SYMBOL    DESCRIPTION                        CONDITION  MIN   TYP    MAX    UNIT
+                                                        0.03    10      1
+Res       Nominal ADC resolution                                              bit
+Fconv     Conversion rate                                 0     60   +/- 1  MS/s
+DR        Dynamic range                                       +/- 1     2
+INL       Integral nonlinearity                                               dB
+DNL       Differential nonlinearity                             50           LSB
+Zin       Input Impedance                                      0.8           LSB
+VDC-IN    Input DC level                                                      k
+VIN-DIFF  Input signal range (differential)
+                                                                               V
+                                                                               V
+
+Version 1.6a                                                         Datasheet AX5043
+
+                        Circuit Description 23
+
+5. Circuit Description
+
+The AX5043 is a true single chip ultra-low power narrow-band CMOS transceiver for use
+in licensed and unlicensed bands from 70 and 1050 MHz. The on-chip transceiver
+consists of a fully integrated RF front-end with modulator, and demodulator. Base band
+data processing is implemented in an advanced and flexible communication controller
+that enables user friendly communication via the SPI interface.
+
+AX5043 can be operated from a 1.8 V to 3.6 V power supply over a temperature range
+of -40oC to 85oC. It consumes 7 - 51 mA for transmitting at 868 MHz carrier frequency, 4
+- 48 mA for transmitting at 168 MHz depending on the output power In receive
+operation AX5043 consumes 9 - 11 mA at 868 MHz carrier frequency and 6.5 - 8.5 mA
+at 168 MHz.
+
+The AX5043 features make it an ideal interface for integration into various battery
+powered solutions such as ticketing or as transceiver for telemetric applications e.g. in
+sensors. As primary application, the transceiver is intended for UHF radio equipment in
+accordance with the European Telecommunication Standard Institute (ETSI) specification
+EN 300 220-1 and the US Federal Communications Commission (FCC) standard Title 47
+CFR part 15 as well as Part 90. AX5043 is compliant with the respective narrow-band
+regulations. Additionally AX5043 is suited for systems targeting compliance with
+Wireless M-Bus standard EN 13757-4:2005. Wireless M-Bus frame support (S, T, R) is
+built-in.
+
+AX5043 supports any data rate from 1 kbps to 115.2 kbps for FSK, 4-FSK, GFSK,
+GMSK , MSK and ASK. To achieve optimum performance for specific data rates and
+modulation schemes several register settings to configure the AX5043 are necessary,
+for details see the AXSEM RadioLab Software which calculates the necessary register
+settings and the AX5043 Programming Manual.
+
+The AX5043 can be operated in two fundamentally different modes.
+
+In frame mode data is sent and received via the SPI port in frames. Pre- and post-
+ambles as well as checksums can be generated automatically. Interrupts control the data
+flow between a micro-controller and the AX5043.
+
+In wire mode the IC behaves as an extension of any wire. The internal communication
+controller is disabled and the modem data is directly available on a dedicated pin
+(DATA). The bit clock is also output on a dedicated pin (DCLK). In this mode the user can
+connect the data pin to any port of a micro-controller or to a UART, but has to control
+coding, checksums, pre and post ambles. The user can choose between synchronous and
+asynchronous wire mode, asynchronous wire mode performs RS232 start bit recognition
+and re-synchronization for transmit.
+
+Both modes can be used both for transmit and receive. In both cases the AX5043
+behaves as a SPI slave interface. Configuration of the AX5043 is always done via the
+SPI interface.
+
+The receiver and the transmitter support multi-channel operation for all data rates and
+modulation schemes.
+
+Version 1.6a            Datasheet AX5043
+
+24 Circuit Description
+
+         5.1. Voltage Regulators
+
+          The AX5043 uses an on-chip voltage regulator system to create stable supply voltages
+          for the internal circuitry from the primary supply VDD_IO. The I/O level of the digital
+          pins is VDD_IO.
+
+          Pins VDD_ANA are supplied for external decoupling of the power supply used for the on-
+          chip PA.
+
+          The voltage regulator system must be set into the appropriate state before receive or
+          transmit operations can be initiated. This is handled automatically when programming
+          the device modes via the PWRMODE register.
+
+          Register POWSTAT contains status bits that can be read to check if the regulated voltages
+          are ready (bit SVIO) or if VDD_IO has dropped below the brown-out level of 1.3V (bit
+          SSUM).
+
+          In power-down mode the core supply voltages for digital and analog functions are
+          switched off to minimize leakage power. Most register contents are preserved but access
+          to the FIFO is not possible and FIFO contents are lost. SPI access to registers via SPI is
+          possible, but at lower speed.
+
+          In deep-sleep mode all supply voltages are switched off. All digital and analog functions
+          are disabled. All register contents are lost. To leave deep-sleep mode the pin SEL has to
+          be pulled low. This will initiate startup and reset of the AX5043. Then the MISO line
+          should be polled, as it will be held low during initialization and will rise to high at the end
+          of the initialization, when the chip becomes ready for operation.
+
+Version 1.6a  Datasheet AX5043
+
+              Circuit Description 25
+
+5.2. Crystal Oscillator
+
+The AX5043 is normally operated with an external TCXO, which is required by most
+narrow-band regulation with a tolerance of 0.5 ppm to 1.5 ppm depending on the
+regulation. The on-chip crystal oscillator allows the use of an inexpensive quartz crystal
+as the RF generation subsystem's timing reference when possible from a regulatory point
+of view.
+
+A wide range of reference frequencies can be handled by the crystal oscillator circuit. As
+the reference frequency impacts both the spectral performance of the transmitter as well
+as the current consumption of the receiver, the choice of reference frequency should be
+made according to the regulatory regime targeted by the application. For guide-lines see
+the separate Application Notes for usage of AX5043 in compliance with various
+regulatory regimes.
+
+The oscillator circuit is enabled by programming the PWRMODE register. At power-up it
+is enabled.
+
+To adjust the circuit's characteristics to the quartz crystal being used, without using
+additional external components, the tuning capacitance of the crystal oscillator can be
+programmed. The transconductance of the oscillator is automatically regulated, to allow
+for fastest start-up times together with lowest power operation during steady-state
+oscillation.
+
+The integrated programmable tuning capacitor bank makes it possible to connect the
+oscillator directly to pins CLK16N and CLK16P without the need for external capacitors. It
+is programmed using bits XTALCAP[5:0] in register XTALCAP.
+
+To synchronize the receiver frequency to a carrier signal, the oscillator frequency could
+be tuned using the capacitor bank however, the recommended method to implement
+frequency synchronization is to make use of the high resolution RF frequency generation
+sub-system together with the Automatic Frequency Control, both are described further
+down.
+
+Alternatively a single ended reference (TXCO, CXO) may be used. The CMOS levels
+should be applied to CLK16P via an AC coupling with the crystal oscillator enabled.
+
+5.3. Low Power Oscillator and Wake on Radio (WOR) Mode
+
+The AX5043 features an internal lowest power fully integrated oscillator. In default
+mode the frequency of oscillation is 640 Hz +/- 1.5%, in fast mode it is 10.2 kHz +/-
+1.5%. These accuracies are reached after the internal hardware has been used to
+calibrate the low power oscillator versus the RF reference clock. This procedure can be
+run in the background during transmit or receive operations.
+
+The low power oscillator makes a WOR mode with a power consumption of 400nA
+possible.
+
+If Wake on Radio Mode is enabled, the receiver wakes up periodically at a user selectable
+interval, and checks for a radio signal on the selected channel. If no signal is detected,
+
+Version 1.6a  Datasheet AX5043
+
+26 Circuit Description
+
+the receiver shuts down again. If a radio signal is detected, and a valid packet is
+received, the micro-controller is alerted by asserting an interrupt.
+
+The AX5043 can thus autonomously poll for radio signals, while the micro-controller can
+stay powered down, and only wakes up once a valid packet is received. This allows for
+very low average receiver power, at the expense of longer preambles at the transmitter.
+
+5.4. GPIO Pins
+
+Pins DATA, DCLK, SYSCLK, IRQ, PWRAMP, ANTSEL can be used as general purpose I/O
+pins by programming pin configuration registers PINFUNCSYSCLK, PINFUNCDCLK,
+PINFUNCDATA, PINFUNCIRQ, PINFUCNANTSEL, PINFUNCPWRAMP. Pin input values can
+be read via register PINSTATE. Pull-ups are disabled if output data is programmed to the
+GPIO pin
+
+                                                       VDD_IO
+
+                        enable weak pull-up  VDD_IO    65 k
+                        enable output
+
+                        output data
+
+                        input data
+
+                                    Figure 5 GPIO pin
+
+5.5. SYSCLK Output
+
+The SYSCLK pin outputs either the reference clock signal divided by a programmable
+power of two or the low power oscillator clock. Divisions from 1 to 1024 are possible. For
+divider ratios > 1 the duty cycle is 50%. Bits SYSCLK[4:0] in the PINFUNCSYSCLK
+register set the divider ratio. The SYSCLK output can be disabled.
+
+After power-up SYSCLK outputs 1/16 of the crystal oscillator clock, making it possible to
+use this clock to boot a micro-controller.
+
+Version 1.6a                                                   Datasheet AX5043
+
+              Circuit Description 27
+
+5.6. Power-on-reset (POR)
+
+AX5043 has an integrated power-on-reset block. No external POR circuit is required.
+After POR the AX5043 can be reset by first setting the SPI SEL pin to high for at least
+100ns, then setting followed by resetting the bit RST in the PWRMODE register.
+After POR or reset all registers are set to their default values.
+
+5.7. RF Frequency Generation Subsystem
+
+The RF frequency generation subsystem consists of a fully integrated synthesizer, which
+multiplies the reference frequency from the crystal oscillator to get the desired RF
+frequency. The advanced architecture of the synthesizer enables frequency resolutions of
+1 Hz, as well as fast settling times of 5 - 50 µs depending on the settings (see section
+4.3: AC Characteristics). Fast settling times mean fast start-up and fast RX/TX switching,
+which enables low-power system design.
+
+For receive operation the RF frequency is fed to the mixer, for transmit operation to the
+power-amplifier.
+
+The frequency must be programmed to the desired carrier frequency.
+
+The synthesizer loop bandwidth can be programmed, this serves three purposes:
+
+     1. Start-up time optimization, start-up is faster for higher synthesizer loop
+          bandwidths
+
+     2. TX spectrum optimization, phase-noise at 300 kHz to 1 MHz distance from the
+          carrier improves with lower synthesizer loop bandwidths
+
+     3. Adaptation of the bandwidth to the data-rate. For transmission of FSK and MSK it
+          is required that the synthesizer bandwidth must be in the order of the data-rate.
+
+VCO
+
+An on-chip VCO converts the control voltage generated by the charge pump and loop
+filter into an output frequency. This frequency is used for transmit as well as for receive
+operation. The frequency can be programmed in 1 Hz steps in the FREQ registers. For
+operation in the 433 MHz band, the RFDIV bit in the PLLVCODIV register must be
+programmed.
+
+The fully integrated VCO allows to operate the device in the frequency ranges 800 -
+1050 MHz and 400 - 525 MHz.
+
+The carrier frequency range can be extended to 140 - 525 MHz and 70 - 262 MHz by
+using an appropriate external inductor between device pins L1 and L2. The bit VCO2INT
+in the PLLVCODIV register must be set high to enter this mode.
+
+Version 1.6a  Datasheet AX5043
+
+28 Circuit Description
+
+          It is also possible to use a fully external VCO by setting bits VCO2INT=0 and VCOSEL=1
+          in the PLLVCODIV register. A differential input at a frequency of double the desired RF
+          frequency must be input at device pins L1 and L2. The control voltage for the VCO can
+          be output at device pin FILT when using external filter mode. The voltage range of this
+          output pin is 0 - 1.8 V.
+          This mode of operation is recommended for special applications where the phase noise
+          requirements are not met when using the fully internal VCO or the internal VCO with
+          external inductor.
+
+         VCO Auto-Ranging
+
+          The AX5043 has an integrated auto-ranging function, which allows to set the correct
+          VCO range for specific frequency generation subsystem settings automatically. Typically
+          it has to be executed after power-up. The function is initiated by setting the RNG_START
+          bit in the PLLRANGINGA or PLLRANGINGB register. The bit is readable and a 0 indicates
+          the end of the ranging process. Setting RNG_START in the PLLRANGINGA register
+          ranges the frequency in FREQA, while setting RNG_START in the PLLRANGINGB register
+          ranges the frequency in FREQB. The RNGERR bit indicates the correct execution of the
+          auto-ranging.
+
+          VCO auto-ranging works with the fully integrated VCO and with the internal VCO with
+          external inductor.
+
+         Loop Filter and Charge Pump
+
+          The AX5043 internal loop filter configuration together with the charge pump current
+          sets the synthesizer loop band width. The internal loop-filter has three configurations
+          that can be programmed via the register bits FLT[1:0] in registers PLLLOOP or
+          PLLLOOPBOOST the charge pump current can be programmed using register bits
+          PLLCPI[7:0] in registers PLLCPI or PLLCPIBOOST. Synthesizer bandwidths are typically 50
+          - 500 kHz depending on the PLLLOOP or PLLLOOPBOOST settings, for details see the
+          section 4.3: AC Characteristics.
+
+          The AX5043 can be setup in such a way that when the synthesizer is started, the
+          settings in the registers PLLLOOPBOOST and PLLCPIBOOST are applied first for a
+          programmable duration before reverting to the settings in PLLLOOP and PLLCPI. This
+          feature enables automated fastest start-up.
+
+          Setting bits FLT[1:0]=00 bypasses the internal loop filter and the VCO control voltage is
+          output to an external loop filter at pin FILT. This mode of operation is recommended for
+          achieving lower bandwidths than with the internal loop filter and for usage with a fully
+          external VCO.
+
+Version 1.6a  Datasheet AX5043
+
+                                                                      Circuit Description 29
+
+Registers
+
+Register      Bits      Purpose
+
+PLLLOOP       FLT[1:0]  Synthesizer loop filter bandwidth and selection of external loop filter,
+PLLLOOPBOOST            recommended usage is to increase the bandwidth for faster settling time,
+PLLCPI                  bandwidth increases of factor 2 and 5 are possible.
+PLLCPIBOOST
+                        Synthesizer charge pump current, recommended usage is to decrease the
+PLLVCODIV               bandwidth (and improve the phase-noise) for low data-rate transmissions.
+
+FREQA, FREQB  REFDIV Sets the synthesizer reference divider ratio.
+PLLRANGINGA,
+PLLRANGINGB   RFDIV Sets the synthesizer output divider ratio.
+
+              VCOSEL Selects either the internal or the external VCO
+
+              VCO2INT Selects either the internal VCO inductor or an external inductor between pins L1
+                              and L2
+
+                        Programming of the carrier frequency
+
+                        Initiate VCO auto-ranging and check results
+
+Version 1.6a                                                          Datasheet AX5043
+
+30 Circuit Description
+
+         5.8. RF Input and Output Stage (ANTP/ANTN/ANTP1)
+
+          The AX5043 has two main antenna interface modes:
+
+               1. Both RX and TX use differential pins ANTP and ANTN. RX/TX switching is handled
+                     internally. This mode is recommended for highest output powers, highest
+                     sensitivities and for direct connection to dipole antennas. Also see Figure 13.
+
+               2. RX uses the differential antenna pins ANTP and ANTN. TX uses the single ended
+                     antenna pin ANTP1. RX/TX switching is handled externally. This can be done
+                     either with an external RX/TX switch or with a direct tie configuration. This mode
+                     is recommended for low output powers at high efficiency (Figure 16) and for
+                     usage with external power amplifiers (Figure 15).
+
+          Pin PWRAMP can be used to control an external RX/TX switch when operating the device
+          together with an external PA (Figure 15). Pin ANTSEL can be used to control an external
+          antenna switch when receiving with two antennas (Figure 17).
+
+          When antenna diversity is enabled, the radio controller will, when not in the middle of
+          receiving a packet, periodically probe both antennas and select the antenna with the
+          highest signal strength. The radio controller can be instructed to periodically write both
+          RSSI values into the FIFO. Antenna diversity mode is fully automatic.
+
+         LNA
+
+          The LNA amplifies the differential RF signal from the antenna and buffers it to drive the
+          I/Q mixer. An external matching network is used to adapt the antenna impedance to the
+          IC impedance. A DC feed to GND must be provided at the antenna pins. For
+          recommendations, see section 7: Application Information.
+
+         PA
+
+          In TX mode the PA drives the signal generated by the frequency generation subsystem
+          out to either the differential antenna terminals or to the single ended antenna pin. The
+          antenna terminals are chosen via the bits TXDIFF and TXSE in register MODECFGA.
+
+          The output power of the PA is programmed via the register TXPWRCOEFFB.
+
+          The PA can be digitally pre-distorted for high linearity.
+
+          The output amplitude can be shaped (raised cosine), this mode is selected with bit
+          AMPLSHAPE in register MODECFGA. PA ramping is programmable in increments of the
+          bit time and can be set to 1 - 8 bit times via bits SLOWRAMP in register MODECFGA.
+
+          Output power as well as harmonic content will depend on the external impedance seen
+          by the PA, recommendations are given in the section 7: Application Information.
+
+Version 1.6a  Datasheet AX5043
+
+                                      Circuit Description 31
+
+5.9. Digital IF Channel Filter and Demodulator
+
+The digital IF channel filter and the demodulator extract the data bit-stream from the
+incoming IF signal. They must be programmed to match the modulation scheme as well
+as the data-rate. Inaccurate programming will lead to loss of sensitivity.
+
+The channel filter offers bandwidths of 995 Hz up to 221 kHz.
+
+The AXSEM RadioLab software calculates the necessary register settings for optimal
+performance and details can be found in the AX5043 Programming Manual. An overview
+of the registers involved is given in the following table as reference. The register setups
+typically must be done once at power-up of the device.
+
+Registers
+
+Register                     Remarks
+
+DECIMATION                   This register programs the bandwidth of the digital channel filter.
+RXDATARATE2... RXDATARATE0
+MAXDROFFSET2...MAXDROFFSET0  These registers specify the receiver bit rate, relative to the channel filter
+MAXRFOFFSET2...MAXRFOFFSET0  bandwidth.
+
+TIMEGAIN,DRGAIN              These registers specify the maximum possible data rate offset
+
+MODULATION                   These registers specify the maximum possible RF frequency offset
+PHASEGAIN, FREQGAINA,
+FREQGAINB, FREQGAINC,        These registers specify the aggressiveness of the receiver bit timing
+FREQGAIND, AMPLGAIN          recovery. More aggressive settings allow the receiver to synchronize with
+AGCGAIN                      shorter preambles, at the expense of more timing jitter and thus a
+TXRATE                       higher bit error rate at a given signal-to-noise ratio.
+
+FSKDEV                       This register selects the modulation to be used by the transmitter and
+                             the receiver, i.e. whether ASK, FSK should be used.
+
+                             These registers control the bandwidth of the phase, frequency offset and
+                             amplitude tracking loops.
+
+                             This register controls the AGC (automatic gain control) loop slopes, and
+                             thus the speed of gain adjustments. The faster the bit-rate, the faster
+                             the AGC loop should be.
+
+                             These registers control the bit rate of the transmitter.
+
+                             These registers control the frequency deviation of the transmitter in FSK
+                             mode. The receiver does not explicitly need to know the frequency
+                             deviation, only the channel filter bandwidth has to be set wide enough
+                             for the complete modulation to pass.
+
+Version 1.6a                          Datasheet AX5043
+
+32 Circuit Description
+
+5.10. Encoder
+
+The encoder is located between the Framing Unit, the Demodulator and the Modulator. It
+can optionally transform the bit-stream in the following ways:
+
+     · It can invert the bit stream.
+
+     · It can perform differential encoding. This means that a zero is transmitted as no
+          change in the level, and a one is transmitted as a change in the level.
+
+     · It can perform Manchester encoding. Manchester encoding ensures that the
+          modulation has no DC content and enough transitions (changes from 0 to 1 and
+          from 1 to 0) for the demodulator bit timing recovery to function correctly, but
+          does so at a doubling of the data rate.
+
+     · It can perform spectral shaping (also know as whitening). Spectral shaping
+          removes DC content of the bit stream, ensures transitions for the demodulator bit
+          timing recovery, and makes sure that the transmitted spectrum does not have
+          discrete lines even if the transmitted data is cyclic. It does so without adding
+          additional bits, i.e. without changing the data rate. Spectral Shaping uses a self
+          synchronizing feedback shift register.
+
+The encoder is programmed using the register ENCODING, details and recommendations
+on usage are given in the AX5043 Programming Manual.
+
+5.11. Framing and FIFO
+
+Most radio systems today group data into packets. The framing unit is responsible for
+converting these packets into a bit-stream suitable for the modulator, and to extract
+packets from the continuous bit-stream arriving from the demodulator.
+
+The Framing unit supports two different modes:
+
+     · Packet modes
+
+     · Raw modes
+
+The micro-controller communicates with the framing unit through a 256 byte FIFO. Data
+in the FIFO is organized in Chunks. The chunk header encodes the length and what data
+is contained in the payload. Chunks may contain packet data, but also RSSI, Frequency
+offset, Timestamps, etc.
+
+The AX5043 contains one FIFO. Its direction is switched depending on whether transmit
+or receive mode is selected.
+
+The FIFO can be operated in polled or interrupt driven modes. In polled mode, the micro-
+controller must periodically read the FIFO status register or the FIFO count register to
+determine whether the FIFO needs servicing.
+
+Version 1.6a            Datasheet AX5043
+
+                                                                             Circuit Description 33
+
+In interrupt mode EMPTY, NOT EMPTY, FULL, NOT FULL and programmable level
+interrupts are provided. The AX5043 signals interrupts by asserting (driving high) its
+IRQ line. The interrupt line is level triggered, active high. Interrupts are acknowledged
+by removing the cause for the interrupt, i.e. by emptying or filling the FIFO.
+
+Basic FIFO status (EMPTY, FULL, Overrun, Underrun, FIFO fill level above threshold, FIFO
+free space above threshold) are also provided during each SPI access on MISO while the
+micro- controller shifts out the register address on MOSI. See the SPI interface section
+for details. This feature significantly reduces the number of SPI accesses necessary
+during transmit and receive.
+
+Packet Modes
+
+The AX5043 offers different packet modes. For arbitrary packet sizes HDLC is
+recommended since the flag and bit-stuffing mechanism. The AX5043 also offers packet
+modes with fixed packet length with a byte indicating the length of the packet.
+
+In packet modes a CRC can be computed automatically.
+
+HDLC1 Mode is the main framing mode of the AX5043. In this mode, the AX5043
+performs automatic packet delimiting, and optional packet correctness check by inserting
+and checking a cyclic redundancy check (CRC) field.
+
+The packet structure is given in the following table.
+
+Flag Address Control  Information                                            FCS  (Optional
+                                                                                  Flag)
+
+8 bit 8 bit   8 or 16 bit Variable length, 0 or more bits in multiples of 8  16 / 32 bit 8 bit
+
+HDLC packets are delimited with flag sequences of content 0x7E.
+
+In AX5043 the meaning of address and control is user defined. The Frame Check
+Sequence (FCS) can be programmed to be CRC-CCITT, CRC-16 or CRC-32.
+
+The receiver checks the CRC, the result can be retrieved from the FIFO, the CRC is
+appended to the received data.
+In Wireless M-Bus Mode2, the packet structure is given in the following table.
+
+1 Note: HDLC mode follows High-Level Data Link Control (HDLC, ISO 13239) protocol.
+2 Note: Wireless M-Bus mode follows EN13757-4
+
+Version 1.6a                                                                      Datasheet AX5043
+
+34 Circuit Description
+
+Preamble L    C         M  A  FCS Optional Data Block (optionally  FCS
+                                                                   16 bit
+                              repeated with FCS)
+
+variable 8 bit 8 bit 16 bit 48 bit 16 bit 8 - 96 bit
+
+For details on implementing a HDLC communication as well as Wireless M-Bus please use
+the AXSEM RadioLab software and see the AX5043 Programming Manual.
+
+RAW Modes
+
+In Raw mode, the AX5043 does not perform any packet delimiting or byte
+synchronization. It simply serializes transmit bytes and de-serializes the received bit-
+stream and groups it into bytes. This mode is ideal for implementing legacy protocols in
+software.
+
+Raw mode with preamble match is similar to raw mode. In this mode, however, the
+receiver does not receive anything until it detects a user programmable bit pattern
+(called the preamble) in the receive bit-stream. When it detects the preamble, it aligns
+the de-serialization to it.
+
+The preamble can be between 4 and 32 bits long.
+
+5.12. RX AGC and RSSI
+
+AX5043 features three receiver signal strength indicators (RSSI):
+
+     1. RSSI before the digital IF channel filter.
+          The gain of the receiver is adjusted in order to keep the analog IF filter output
+          level inside the working range of the ADC and demodulator. The register
+          AGCCOUNTER contains the current value of the AGC and can be used as an RSSI.
+          The step size of this RSSI is 0.625 dB. The value can be used as soon as the RF
+          frequency generation sub-system has been programmed.
+
+     2. RSSI behind the digital IF channel filter.
+          The register RSSI contains the current value of the RSSI behind the digital IF
+          channel filter. The step size of this RSSI is 1 dB.
+
+     3. RSSI behind the digital IF channel filter high accuracy.
+          The demodulator also provides amplitude information in the TRK_AMPLITUDE
+          register. By combining both the AGCCOUNTER and the TRK_AMPLITUDE registers,
+          a high resolution (better than 0.1dB) RSSI value can be computed at the expense
+          of a few arithmetic operations on the micro-controller. The AXSEM RadioLab
+          software calculates the necessary register settings for best performance and
+          details can be found in the AX5043 Programming Manual.
+
+Version 1.6a                                                       Datasheet AX5043
+
+                                                                                      Circuit Description 35
+
+5.13. Modulator
+
+Depending on the transmitter settings the modulator generates various inputs for the
+PA:
+
+   Modulation  Bit = 0                      Bit = 1        Main Lobe         Max. Bitrate
+                                                           Bandwidth
+                                            PA on
+   ASK         PA off                       f=+fdeviation  BW=BITRATE        115.2 kBit/s
+                                                           BW=(1+h) BITRATE  115.2 kBit/s
+   FSK/MSK/GFSK/GMSK f=-fdeviation
+
+h              = modulation index. It is the ratio of the deviation compared to the bit-
+
+rate; fdeviation = 0.5hBITRATE, AX5043 can demodulate signals with h < 32.
+
+ASK            = amplitude shift keying
+
+FSK            = frequency shift keying
+
+MSK            = minimum shift keying; MSK is a special case of FSK, where h = 0.5, and
+
+therefore fdeviation = 0.25BITRATE; the advantage of MSK over FSK is that it can be
+
+demodulated more robustly.
+
+All modulation schemes, except 4-FSK, are binary.
+
+Amplitude can be shaped using a raised cosine waveform. Amplitude shaping will also be
+performed for constant amplitude modulation ((G)FSK, (G)MSK) for ramping up and
+down the PA. Amplitude shaping should always be enabled.
+
+Frequency shaping can either be hard (FSK, MSK), or Gaussian (GMSK, GFSK), with
+selectable BT=0.3 or BT=0.5.
+
+Modulation DiBit = 00 DiBit = 01 DiBit = 11 DiBit = 10                     Main Lobe  Max. Bitrate
+                                                                           Bandwidth  115.2 kBit/s
+
+4-FSK         f=-3fdeviation f=-fdeviation  f=+fdeviation  f=+3fdeviation  BW=(1+3h)
+                                                                           BITRATE
+
+4-FSK Frequency shaping is always hard.
+
+5.14. Automatic Frequency Control (AFC)
+
+The AX5043 features an automatic frequency tracking loop which is capable of tracking
+the transmitter frequency within the RX filter band width. On top of that the AX5043
+has a frequency tracking register TRKRFFREQ to synchronize the receiver frequency to a
+carrier signal. For AFC adjustment, the frequency offset can be computed with the
+following formula:
+
+Version 1.6a                                                                          Datasheet AX5043
+
+36 Circuit Description
+
+         f = 32 TRKRFFREQ f XTAL .
+                      2
+
+          The pull-in range of the AFC can be programmed with the MAXRFOFFSET Registers.
+
+5.15. PWRMODE Register
+The PWRMODE register controls, which parts of the chip are operating.
+
+PWRMODE       Name       Description
+  register
+
+0000          POWERDOWN  All digital and analog functions, except the register file, are disabled. The core
+                         supply voltages are switched off to conserve leakage power. Register
+0001          DEEPSLEEP  contents are preserved and accessible registers via SPI, but at a slower
+                         speed.
+0101          STANDBY    Access to the FIFO is not possible and the contents are not preserved.
+0110          FIFO       POWERDOWN mode is only entered once the FIFO is empty.
+1000          SYNTHRX
+1001          FULLRX     AX5043 is fully turned off. All digital and analog functions are disabled. All
+1011          WOR        register contents are lost.
+1100          SYNTHTX    To leave DEEPSLEEP mode the pin SEL has to be pulled low. This will initiate
+1101          FULLTX     startup and reset of the AX5043. Then the MISO line should be polled, as it
+                         will be held low during initialization and will rise to high at the end of the
+                         initialization, when the chip becomes ready for operation.
+
+                         The crystal oscillator and the reference are powered on; receiver and
+                         transmitter are off. Register contents are preserved and accessible registers
+                         via SPI.
+                         Access to the FIFO is not possible and the contents are not preserved.
+                         STANDBY is only entered once the FIFO is empty.
+
+                         The reference is powered on. Register contents are preserved and accessible
+                         registers via SPI.
+                         Access to the FIFO is possible and the contents are preserved.
+
+                         The synthesizer is running on the receive frequency. Transmitter and receiver
+                         are still off. This mode is used to let the synthesizer settle on the correct
+                         frequency for receive.
+
+                         Synthesizer and receiver are running.
+
+                         Receiver wakeup-on-radio mode.
+                         The mode the same as POWERDOWN, but the 640 Hz internal low power
+                         oscillator is running.
+
+                         The synthesizer is running on the transmit frequency. Transmitter and
+                         receiver are still off. This mode is used to let the synthesizer settle on the
+                         correct frequency for transmit.
+
+                         Synthesizer and transmitter are running. Do not switch into this mode before
+                         the synthesizer has completely settled on the transmit frequency (in
+                         SYNTHTX mode), otherwise spurious spectral transmissions will occur.
+
+For the corresponding currents see table in section 4.2.
+
+Version 1.6a                                                           Datasheet AX5043
+
+                                                     Circuit Description 37
+
+A typical PWRMODE sequence for a transmit session :
+
+   Step PWRMODE Remarks
+
+1     POWERDOWN
+
+2     STANDBY    The settling time is dominated by the crystal used, typical value 3ms.
+
+3     FULLTX     Data transmission
+
+4     POWERDOWN
+
+A typical PWRMODE sequence for a receive session :
+
+   Step PWRMODE[3:0] Remarks
+
+   1  POWERDOWN
+
+   2  STANDBY    The settling time is dominated by the crystal used, typical value 3ms
+
+   3  FULLRX     Data reception
+
+   4  POWERDOWN
+
+Version 1.6a                                         Datasheet AX5043
+
+38 Circuit Description
+
+5.16. Serial Peripheral Interface (SPI)
+
+The AX5043 can be programmed via a four wire serial interface according SPI using the
+pins CLK, MOSI, MISO and SEL. Registers for setting up the AX5043 are programmed
+via the serial peripheral interface in all device modes.
+
+When the interface signal SEL is pulled low, a configuration data stream is expected on
+the input signal pin MOSI, which is interpreted as D0...Dx, A0...Ax, R_N/W. Data read
+from the interface appears on MISO.
+
+Figure 6 shows a write/read access to the interface. The data stream is built of an
+address byte including read/write information and a data byte. Depending on the R_N/W
+bit and address bits A[6..0], data D[7..0] can be written via MOSI or read at the pin
+MISO. R_N/W = 0 means read mode, R_N/W = 1 means write mode.
+
+Most registers are 8 bits wide and accessed using the waveforms as detailed in Figure 7.
+The most important registers are at the beginning of the address space, i.e. at addresses
+less than 0x70. These registers can be accessed more efficiently using the short address
+form, which is detailed in Figure 6.
+
+Some registers are longer than 8 bits. These registers can be accessed more quickly than
+by reading and writing individual 8 bit parts. This is illustrated in Figure 8. Accesses are
+not limited by 16 bits either, reading and writing data bytes can be continued as long as
+desired. After each byte, the address counter is incremented by one. Also, this access
+form works with long addresses.
+
+During the address phase of the access, the AX5043 outputs the most important status
+bits. This feature is designed to speed up the software decision on what to do in an
+interrupt handler.
+
+The status bits contain the following information:
+
+SPI bit Status          Meaning / Register Bit
+  cell
+                        1 (when transitioning out of deep sleep mode, this bit transitions from 0 Æ 1 when
+0  -                    the power becomes ready)
+                        PLL LOCK
+1  S14                  FIFO OVER
+                        FIFO UNDER
+2  S13                  FIFO FULL
+                        FIFO EMPTY
+3  S12                  FIFOSTAT(1)
+                        FIFOSTAT(0)
+4  S11                  PWRGOOD (not BROWNOUT)
+                        PWR INTERRUPT PENDING
+5  S10                  RADIO EVENT PENDING
+                        XTAL OSCILLATOR RUNNING
+6  S9                   WAKEUP INTERRUPT PENDING
+
+7  S8
+
+8  S7
+
+9  S6
+
+10 S5
+
+11 S4
+
+12 S3
+
+Version 1.6a            Datasheet AX5043
+
+                                                                                           Circuit Description 39
+
+13 S2                  LPOSC INTERRUPT PENDING
+14 S1                  GPADC INTERRUPT PENDING
+15 S0                   internal
+
+Note: Bit cells 8-15 (S7...S0) are only available in two address byte SPI access formats.
+
+SPI Timing
+
+                  Tss  Tck TchTcl Ts Th                                                    Tsh
+
+        SEL
+
+        CLK
+
+MOSI              R/W A6 A5 A4 A3 A2 A1 A0 D7 D6 D5 D4 D3 D2 D1 D0
+
+MISO                   S6 S5 S4 S3 S2 S1 S0 D7 D6 D5 D4 D3 D2 D1 D0
+
+             Tssd      Tco                                                                 Tssz
+
+                       Figure 6 SPI 8 bit read/write access with timing
+
+    SS       R/W       A11 A10 A9 A8 A7 A6 A5 A4 A3 A2 A1 A0 D7 D6 D5 D4 D3 D2 D1 D0
+  SCK
+MOSI              S14 S13 S12 S11 S10 S9 S8 S7 S6 S5 S4 S3 S2 S1 S0 D7 D6 D5 D4 D3 D2 D1 D0
+MISO
+
+                       Figure 7 SPI 8 bit long address read/write access
+
+    SS       R/W A6 A5 A4 A3 A2 A1 A0 D7 D6 D5 D4 D3 D2 D1 D0 D7 D6 D5 D4 D3 D2 D1 D0
+  SCK                   S6 S5 S4 S3 S2 S1 S0 D7 D6 D5 D4 D3 D2 D1 D0 D7 D6 D5 D4 D3 D2 D1 D0
+MOSI
+MISO
+
+                       Figure 8 SPI 16 bit long read/write access
+
+Version 1.6a                                                                               Datasheet AX5043
+
+40 Circuit Description
+
+         5.17. Wire Mode Interface
+
+          In wire mode the transmitted or received data are transferred from and to the AX5043
+          using the pins DATA and DCLK. DATA is an input when transmitting and an output when
+          receiving.
+
+          The direction can be chosen by programming the PWRMODE register.
+
+          Wire mode offers two variants: synchronous or asynchronous.
+
+          In synchronous wire mode the, the AX5043 always drives DCLK. Transmit data must be
+          applied to DATA synchronously to DCLK, and receive data must be sampled
+          synchronously to DCLK. Timing is given in Figure 9. In asynchronous wire mode, a low
+          voltage RS232 type UART can be connected to DATA. DCLK is optional in this mode. The
+          UART must be programmed to send two stop bits, but must be able to accept only one
+          stop bit. Both the UART data rate and the AX5043 transmit and receive bit rate must
+          match. The AX5043 synchronizes the RS232 signal to its internal transmission clock, by
+          inserting or deleting a stop bit.
+
+          Wiremode is also available in 4-FSK mode. The two bits that encode one symbol are
+          serialized on the DATA pin. The PWRAMP pin can be used as a synchronisation pin to
+          allow symbol (dibit) boundaries to be reconstructed. Gray coding is used to reduce the
+          number of bit errors in case of a wrong decision. The AXSEM RadioLab software
+          calculates the necessary register settings for best performance and details can be found
+          in the AX5043 Programming Manual.
+
+          Registers for setting up the AX5043 are programmed via the serial peripheral interface
+          (SPI).
+
+         Wire Mode Timing
+
+                                 Tdck Tdch Tdcl  Tds Tdh
+                                                             Tdco
+              DCLK (DCLKI=0)
+              DCLK (DCLKI=1)
+
+                      DATA (TX)
+                      DATA (RX)
+
+                                 Figure 9 Wire mode interface timing
+
+Version 1.6a                                                          Datasheet AX5043
+
+                                                                              Circuit Description 41
+
+General Purpose ADC (GPADC)
+
+The AX5043 features a general purpose ADC. The ADC input pins are GPADC1 and
+GPADC2. The ADC converts the voltage difference between applied between pins
+GPADC1 and GPADC2.
+
+The GPADC can only be used if the receiver is disabled. To enable the GPADC write 1 to
+the GPADC13 bit in the GPADCCTRL register. To start a single conversion, write 1 to the
+BUSY bit in the GPADCCTRL register. Then wait for the BUSY bit to clear, or the GPADC
+Interrupt to be asserted. The GPADC Interrupt is cleared by reading the result register
+GPADC13VALUE.
+
+If continuous sampling is desired, set the CONT bit in register GPADCCTRL. The desired
+sampling rate can be specified in the GPADCPERIOD register.
+
+ DAC
+
+One digital Pin (ANTSEL or PWRAMP) may be used as a  Digital-to-Analog Converter. A
+simple RC lowpass filter is needed to smooth the output. The DAC may be used to output
+RSSI, many demodulator variables, or a constant value under software control.
+
+Version 1.6a  Datasheet AX5043
+
+42 Register Bank Description
+
+         6. Register Bank Description
+
+          This section describes the bits of the register bank as reference. The registers are
+          grouped by functional block to facilitate programming. The AXSEM RadioLab software
+          calculates the necessary register settings for best performance and details can be found
+          in the AX5043 Programming Manual.
+          An R in the retention column means that this register's contents are not lost during
+          power-down mode.
+          No checks are made whether the programmed combination of bits makes sense! Bit 0 is
+          always the LSB.
+
+ Note Whole registers or register bits marked as reserved should be kept at their default
+          values.
+
+ Note All addresses not documented here must not be accessed, neither in reading nor in
+          writing.
+
+ Note The retention column indicates if the register contents are preserved in power-down
+          mode.
+
+Version 1.6a  Datasheet AX5043
+
+                                                                                                                                        Register Bank Description        43
+
+6.1. Control Register Map
+
+Add  Name                   Re  Reset                                                     Bit                                                        Description
+                      Dir t
+
+                                            7                      6     5           4         3           2          1         0
+
+Revision & Interface Probing                                   XOEN
+                                                               SREF
+000 REVISION          R R 01010110 SILICONREV(7:0)             SREF                                                                     Silicon Revision
+                                                               MSREF                                                                    Scratch Register
+001 SCRATCH           RW R 11000101 SCRATCH(7:0)               -
+
+Operating Mode
+
+002 PWRMODE           RW R 011-0000 RST                               REFEN WDS           PWRMODE(3:0)                                  Power Mode
+
+Voltage Regulator
+
+003 POWSTAT           R R -------- SSUM                               SVREF   SVANA       SVMODEM       SBEVANA    SBEVMODEM    SVIO    Power Management Status
+                                                                      SSVREF  SSVANA      SSVMODEM      SSBEVANA   SSBEVMODEM   SSVIO   Power Management Sticky Status
+004 POWSTICKYSTAT R R -------- SSSUM                                  MSVREF  MS VANA     MS VMODEM     MSBE VANA  MSBE VMODEM  MSVIO   Power Management Interrupt Mask
+
+005 POWIRQMASK        RW R 00000000 MPWR GOOD
+
+Interrupt Control
+
+006 IRQMASK1          RW R --000000 -                                 IRQMASK(13:8)                                                     IRQ Mask
+
+007 IRQMASK0          RW R 00000000 IRQMASK(7:0)                                                                                        IRQ Mask
+
+008 RADIOEVENTMASK1 RW R        -------0 -                     -      -       -           -             -          -            RADIO
+                                                                                                                                EVENT
+                                                                                                                                MASK(8) Radio Event Mask
+
+009 RADIOEVENTMASK0 RW R        00000000 RADIO EVENT MASK(7:0)                                                                          Radio Event Mask
+
+00A IRQINVERSION1 RW R          --000000 -                     -      IRQINVERSION(13:8)                                                IRQ Inversion
+
+00B IRQINVERSION0 RW R          00000000 IRQINVERSION(7:0)                                                                              IRQ Inversion
+
+00C IRQREQUEST1       R R       -------- -                     -      IRQREQUEST(13:8)                                                  IRQ Request
+
+00D IRQREQUEST0       R R       -------- IRQREQUEST(7:0)                                                                                IRQ Request
+
+00E RADIOEVENTREQ1 R            -------- -                     -      -       -           -             -          -            RADIO   Radio Event Request
+                                                                                                                                EVENT
+                                                                                                                                REQ(8)
+
+00F RADIOEVENTREQ0 R            -------- RADIO EVENT REQ(7:0)                                                                           Radio Event Request
+
+Modulation & Framing
+
+010 MODULATION        RW R      ---01000 -                     -      -       RX HALF MODULATION(3:0)                                   Modulation
+
+Version 1.6a                                                                                                                                           Datasheet AX5043
+
+44 Register Bank Description
+
+011 ENCODING              RW R  ---00010 -               -      -        SPEED      ENC MANCH ENC SCRAM           ENC DIFF  ENC INV Encoder/Decoder Settings
+                                -0000000 FRMRX                                      FRMMODE(2:0)                            FABORT Framing settings
+                                11111111 CRCINIT(31:24)                  ENC
+                                11111111 CRCINIT(23:16)                  NOSYNC                                                           CRC Initialisation Data
+                                11111111 CRCINIT(15:8)                                                                                    CRC Initialisation Data
+012 FRAMING               RW R  11111111 CRCINIT(7:0)    CRCMODE(2:0)                                                                     CRC Initialisation Data
+                                                                                                                                          CRC Initialisation Data
+014 CRCINIT3              RW R
+
+015 CRCINIT2              RW R
+
+016 CRCINIT1              RW R
+
+017 CRCINIT0              RW R
+
+Forward Error Correction
+
+018 FEC                   RW R  00000000 SHORT MEM       RSTVI  FEC NEG FEC POS FECINPSHIFT(2:0)                            FEC ENA FEC (Viterbi) Configuration
+019 FECSYNC               RW R  01100010 FECSYNC(7:0)    TERBI                                                                            Interleaver Synchronisation Threshold
+01A FECSTATUS             R R   -------- FEC INV                                                                                          FEC Status
+Status                                                   MAXMETRIC(6:0)
+01C RADIOSTATE
+                          R - ----0000 -                 -      -        -          RADIOSTATE(3:0)                                 Radio Controller State
+                                                                                                                                    Crystal Oscillator Status
+01D XTALSTATUS            R R -------- -                 -      -        -          -              -              -         XTAL
+Pin Configuration                                                                                                           RUN
+
+                                                                PS PWR                                                      PS SYS
+
+020 PINSTATE              R R   -------- -               -      AMP      PS ANT SEL PS IRQ         PS DATA        PS DCLK   CLK     Pinstate
+021 PINFUNCSYSCLK         RW R  0--01000 PU SYSCLK
+022 PINFUNCDCLK           RW R  00---100 PU DCLK         -      -        PFSYSCLK(4:0)                                              SYSCLK Pin Function
+023 PINFUNCDATA           RW R  10---111 PU DATA
+024 PINFUNCIRQ            RW R  00---011 PU IRQ          PI DCLK -       -          -              PFDCLK(2:0)                      DCLK Pin Function
+025 PINFUNCANTSEL         RW R  00---110 PU ANTSEL                                                 PFDATA(2:0)
+                                                         PI DATA -       -          -              PFIRQ(2:0)                       DATA Pin Function
+                                                                                                   PFANTSEL(2:0)
+                                                         PI IRQ -        -          -                                               IRQ Pin Function
+
+                                                         PI ANTSEL -     -          -                                               ANTSEL Pin Function
+
+026 PINFUNCPWRAMP         RW R  00--0110 PU PWRAMP       PI              -          PFPWRAMP(3:0)                                         PWRAMP Pin Function
+027 PWRAMP                RW R  -------0 -               PWRAMP -                                                           PWRAMP PWRAMP Control
+FIFO
+                                                         -      -        -          -              -              -
+
+                                                                FIFO FREE FIFO CNT                                          FIFO
+                                                                                                                            EMPTY
+028 FIFOSTAT              R R 0------- FIFO AUTO COMMIT  -      THR      THR        FIFO OVER      FIFO UNDER FIFO FULL             FIFO Control
+
+Version 1.6a                                                                                                                                      Datasheet AX5043
+
+                                                                                                                      Register Bank Description            45
+
+                  W R                                FIFOCMD(5:0)
+                  RW
+029 FIFODATA            -------- FIFODATA(7:0)                                                                        FIFO Data
+
+                                                                                                              FIFO
+
+                                                                                                              COUNT(
+
+02A FIFOCOUNT1    R R -------0 -                  -  -  -          -                    -        -            8)      Number of Words currently in FIFO
+
+02B FIFOCOUNT0    R R 00000000 FIFOCOUNT(7:0)                                                                         Number of Words currently in FIFO
+
+                                                                                                              FIFO Number of Words that can be written
+
+02C FIFOFREE1     R R -------1 -                  -  -  -          -                    -        -            FREE(8) to FIFO
+
+02D FIFOFREE0     R R 00000000 FIFOFREE(7:0)                                                                          Number of Words that can be written
+                                                                                                                      to FIFO
+
+                                                                                                              FIFO
+
+                                                                                                              THRESH
+
+02E FIFOTHRESH1   RW R  -------0 -                -  -  -          -                    -        -            (8)     FIFO Threshold
+02F FIFOTHRESH0   RW R  00000000 FIFOTHRESH(7:0)
+Synthesizer                                                                                                           FIFO Threshold
+030 PLLLOOP
+031 PLLCPI        RW R  0---1001 FREQB            -  -  -          DIRECT               FILT EN  FLT(1:0)             PLL Loop Filter Settings
+032 PLLVCODIV     RW R  00001000 PLLCPI                                                          REFDIV(1:0)          PLL Charge Pump Current (Boosted)
+033 PLLRANGINGA   RW R  -000-000 -                VCOI MAN VCO2INT VCOSEL -             RFDIV                         PLL Divider Settings
+034 FREQA3        RW R  00001000 STICKY LOCK      PLL LOCK RNGERR RNG START VCORA(3:0)           FLT(1:0)             PLL Autoranging
+035 FREQA2        RW R  00111001 FREQA(31:24)                                                                         Synthesizer Frequency
+036 FREQA1        RW R  00110100 FREQA(23:16)     -  -  -          DIRECT               FILT EN                       Synthesizer Frequency
+037 FREQA0        RW R  11001100 FREQA(15:8)                                                                          Synthesizer Frequency
+038 PLLLOOPBOOST  RW R  11001101 FREQA(7:0)       PLL LOCK RNGERR RNG START VCORB(3:0)                                Synthesizer Frequency
+039 PLLCPIBOOST   RW R  0---1011 FREQB                                                                                PLL Loop Filter Settings (Boosted)
+03B PLLRANGINGB   RW R  11001000 PLLCPI                                                                               PLL Charge Pump Current
+03C FREQB3        RW R  00001000 STICKY LOCK                                                                          PLL Autoranging
+03D FREQB2        RW R  00111001 FREQB(31:24)                                                                         Synthesizer Frequency
+03E FREQB1        RW R  00110100 FREQB(23:16)                                                                         Synthesizer Frequency
+03F FREQB0        RW R  11001100 FREQB(15:8)                                                                          Synthesizer Frequency
+Signal Strength   RW R  11001101 FREQB(7:0)                                                                           Synthesizer Frequency
+
+Version 1.6a                                                                                                                     Datasheet AX5043
+
+46 Register Bank Description
+
+040 RSSI           R R   -------- RSSI(7:0)                                                                          Received Signal Strength Indicator
+041 BGNDRSSI       RW R                                                                                              Background RSSI
+042 DIVERSITY      RW R  00000000 BGNDRSSI(7:0)                                                        DIV ENA Antenna Diversity Configuration
+043 AGCCOUNTER     RW R                                                                                              AGC Current Value
+Receiver Tracking        ------00 -                   -  -  -               -  -              ANT SEL
+045 TRKDATARATE2   R R                                                                                               Datarate Tracking
+046 TRKDATARATE1   R R   -------- AGCCOUNTER(7:0)                                                                    Datarate Tracking
+047 TRKDATARATE0   R R                                                                                               Datarate Tracking
+048 TRKAMPL1       R R   -------- TRKDATARATE(23:16)                                                                 Amplitude Tracking
+049 TRKAMPL0       R R                                                                                               Amplitude Tracking
+04A TRKPHASE1      R R   -------- TRKDATARATE(15:8)                                                                  Phase Tracking
+04B TRKPHASE0      R R                                                                                               Phase Tracking
+04D TRKRFFREQ2     RW R  -------- TRKDATARATE(7:0)                                                                   RF Frequency Tracking
+04E TRKRFFREQ1     RW R                                                                                              RF Frequency Tracking
+04F TRKRFFREQ0     RW R  -------- TRKAMPL(15:8)                                                                      RF Frequency Tracking
+050 TRKFREQ1       RW R                                                                                              Frequency Tracking
+051 TRKFREQ0       RW R  -------- TRKAMPL(7:0)                                                                       Frequency Tracking
+052 TRKFSKDEMOD1   R R                                                                                               FSK Demodulator Tracking
+053 TRKFSKDEMOD0   R R   -------- -                   -  -  -               TRKPHASE(11:8)                           FSK Demodulator Tracking
+054 TRKAFSKDEMOD1  R R                                                      TRRFKFREQ(19:16)                         AFSK Demodulator Tracking
+055 TRKAFSKDEMOD0  R R   -------- TRKPHASE(7:0)                                                                      AFSK Demodulator Tracking
+Timer
+059 TIMER2         R -   -------- -                   -  -  -                                                        1MHz Timer
+05A TIMER1         R -                                                                                               1MHz Timer
+05B TIMER0         R -   -------- TRRFKFREQ(15:8)                                                                    1MHz Timer
+Wakeup Timer
+068 WAKEUPTIMER1   R R   -------- TRRFKFREQ(7:0)                                                                     Wakeup Timer
+069 WAKEUPTIMER0   R R                                                                                               Wakeup Timer
+06A WAKEUP1        RW R  -------- TRKFREQ(15:8)                                                                      Wakeup Time
+
+                         -------- TRKFREQ(7:0)
+
+                         -------- -                   -  TRKFSKDEMOD(13:8)
+
+                         -------- TRKFSKDEMOD(7:0)
+
+                         -------- TRKAFSKDEMOD(15:8)
+
+                         -------- TRKAFSKDEMOD(7:0)
+
+                         -------- TIMER(23:16)
+                         -------- TIMER(15:8)
+                         -------- TIMER(7:0)
+
+                         -------- WAKEUPTIMER(15:8)
+                         -------- WAKEUPTIMER(7:0)
+                         00000000 WAKEUP(15:8)
+
+Version 1.6a                                                                                           Datasheet AX5043
+
+                                                                                                Register Bank Description         47
+
+06B WAKEUP0          RW R  00000000 WAKEUP(7:0)                                                  Wakeup Time
+                           00000000 WAKEUPFREQ(15:8)                                             Wakeup Frequency
+06C WAKEUPFREQ1      RW R  00000000 WAKEUPFREQ(7:0)                                              Wakeup Frequency
+                           00000000 WAKEUPXOEARLY                                                Wakeup Crystal Oscillator Early
+06D WAKEUPFREQ0      RW R
+
+06E WAKEUPXOEARLY RW R
+
+Physical Layer Parameters
+
+Receiver Parameters
+
+100 IFFREQ1          RW R  00010001 IFFREQ(15:8)                                                2nd LO / IF Frequency
+                                                                                                2nd LO / IF Frequency
+101 IFFREQ0          RW R  00100111 IFFREQ(7:0)                                                 Decimation Factor
+                                                                                                Receiver Datarate
+102 DECIMATION       RW R  -0001101 -                   DECIMATION(6:0)                         Receiver Datarate
+                                                                                                Receiver Datarate
+103 RXDATARATE2      RW R  00000000 RXDATARATE(23:16)                                           Maximum Receiver Datarate Offset
+                                                                                                Maximum Receiver Datarate Offset
+104 RXDATARATE1      RW R  00111101 RXDATARATE(15:8)                                            Maximum Receiver Datarate Offset
+                                                                                                Maximum Receiver RF Offset
+105 RXDATARATE0      RW R  10001010 RXDATARATE(7:0)                                             Maximum Receiver RF Offset
+                                                                                                Maximum Receiver RF Offset
+106 MAXDROFFSET2 RW R      00000000 MAXDROFFSET(23:16)                                          Four FSK Rx Deviation
+                                                                                                Four FSK Rx Deviation
+107 MAXDROFFSET1 RW R      00000000 MAXDROFFSET(15:8)                                           Four FSK Rx Deviation
+                                                                                                Four FSK Rx Deviation
+108 MAXDROFFSET0 RW R      10011110 MAXDROFFSET(7:0)                                            AFSK Space (0) Frequency
+                                                                                                AFSK Space (0) Frequency
+109 MAXRFOFFSET2     RW R  0---0000 FREQ OFFS CORR      -  -             -  MAXRFOFFSET(19:16)  AFSK Mark (1) Frequency
+                                                                                                AFSK Mark (1) Frequency
+10A MAXRFOFFSET1     RW R  00010110 MAXRFOFFSET(15:8)                                           AFSK Control
+                                                                                                Amplitude Filter
+10B MAXRFOFFSET0     RW R  10000111 MAXRFOFFSET(7:0)                                            Baseband Frequency Recovery Loop
+
+10C FSKDMAX1         RW R  00000000 FSKDEVMAX(15:8)                                                             Datasheet AX5043
+
+10D FSKDMAX0         RW R  10000000 FSKDEVMAX(7:0)
+
+10E FSKDMIN1         RW R  11111111 FSKDEVMIN(15:8)
+
+10F FSKDMIN0         RW R  10000000 FSKDEVMIN(7:0)
+
+110 AFSKSPACE1       RW R  ----0000 -                   -  -             -  AFSKSPACE(11:8)
+
+111 AFSKSPACE0       RW R  01000000 AFSKSPACE(7:0)
+
+112 AFSKMARK1        RW R  ----0000 -                   -  -             -  AFSKMARK(11:8)
+
+113 AFSKMARK0        RW R  01110101 AFSKMARK(7:0)
+
+114 AFSKCTRL         RW R  ---00100 -                   -  -             AFSKSHIFT0(4:0)
+
+115 AMPLFILTER       RW R  ----0000 -                   -  -             -  AMPLFILTER(3:0)
+
+116 FREQUENCYLEAK RW R     ----0000 -                   -  -             -  FREQUENCYLEAK[3:0]
+
+Version 1.6a
+
+48 Register Bank Description
+
+117 RXPARAMSETS           RW R  00000000 RXPS3(1:0)             RXPS2(1:0)         RXPS1(1:0)       RXPS0(1:0)     Leakiness
+                                -------- -                                                          RXSI(1:0)      Receiver Parameter Set Indirection
+118 RXPARAMCURSET R R                                     -     -         RXSI(2) RXSN(1:0)                        Receiver Parameter Current Set
+                                10110100 AGCDECAY0(3:0)
+Receiver Parameter Set 0        01110110 AGCTARGET0(7:0)                                                           AGC Speed
+                                -----000 -                                                                         AGC Target
+120 AGCGAIN0              RW R  -000-000 -                                         AGCATTACK0(3:0)                 AGC Digital Threshold Range
+                                11111000 TIMEGAIN0M                                                                AGC Digital Min/Max Set Points
+121 AGCTARGET0            RW R  11110010 DRGAIN0M                                                                  Timing Gain
+                                11--0011 FILTERIDX0(1:0)                                                           Data Rate Gain
+122 AGCAHYST0             RW R                                                                     AGCAHYST0(2:0)  Filter Index, Phase Gain
+
+123 AGCMINMAX0            RW R                            AGCMAXDA0(2:0)           -               AGCMINDA0(2:0)  Frequency Gain A
+
+124 TIMEGAIN0             RW R                                                     TIMEGAIN0E                      Frequency Gain B
+                                                                                                                   Frequency Gain C
+125 DRGAIN0               RW R                                                     DRGAIN0E                        Frequency Gain D
+                                                                                                                   Amplitude Gain
+126 PHASEGAIN0            RW R                                  -         -        PHASEGAIN0(3:0)                 Receiver Frequency Deviation
+                                                                                                                   Receiver Frequency Deviation
+                                                                FREQ
+                                                                                                                   Four FSK Control
+                                                          FREQ  HALFMOD FREQ AMPL                                  Baseband Offset Compensation
+                                                                                                                   Resistors
+127 FREQGAINA0            RW R 00001111 FREQ LIM0         MODULO0 0       GATE0    FREQGAINA0(3:0)
+                                                                                                                   AGC Speed
+                                                          FREQ                                                     AGC Target
+                                                                                                                   AGC Digital Threshold Range
+128 FREQGAINB0            RW R  00-11111 FREQ FREEZE0     AVG0  -         FREQGAINB0(4:0)                          AGC Digital Min/Max Set Points
+129 FREQGAINC0            RW R  ---01010 -                                                                         Timing Gain
+12A FREQGAIND0            RW R  0--01010 RFFREQ FREEZE0   -     -         FREQGAINC0(4:0)
+12B AMPLGAIN0             RW R  01--0110 AMPL AVG                                                                                 Datasheet AX5043
+12C FREQDEV10             RW R  ----0000 -                -     -         FREQGAIND0(4:0)
+12D FREQDEV00             RW R  00100000 FREQDEV0(7:0)
+                                                          AMPL AGC -      -        AMPLGAIN0(3:0)
+
+                                                          -     -         -        FREQDEV0(11:8)
+
+                                                                          DEV
+
+12E FOURFSK0              RW R ---10110 -                 -     -         UPDATE0 DEVDECAY0(3:0)
+
+12F BBOFFSRES0            RW R  10001000 RESINTB0(3:0)                             RESINTA0(3:0)
+
+Receiver Parameter Set 1        10110100 AGCDECAY1(3:0)
+                                01110110 AGCTARGET1(7:0)
+130 AGCGAIN1              RW R  -----000 -                                         AGCATTACK1(3:0)
+                                -000-000 -
+131 AGCTARGET1            RW R  11110110 TIMEGAIN1M
+
+132 AGCAHYST1             RW R                                                                     AGCAHYST1(2:0)
+                                                                                                   AGCMINDA1(2:0)
+133 AGCMINMAX1            RW R                            AGCMAXDA1(2:0)           -
+                                                                                   TIMEGAIN1E
+134 TIMEGAIN1             RW R
+
+Version 1.6a
+
+                                                                                                                Register Bank Description       49
+
+135 DRGAIN1               RW R  11110001 DRGAIN1M                                   DRGAIN1E                     Data Rate Gain
+136 PHASEGAIN1            RW R  11--0011 FILTERIDX1(1:0)                                                         Filter Index, Phase Gain
+                                                                 -        -         PHASEGAIN1(3:0)
+137 FREQGAINA1
+                                                                 FREQ
+138 FREQGAINB1
+139 FREQGAINC1                                            FREQ   HALFMOD FREQ AMPL
+13A FREQGAIND1
+                          RW R 00001111 FREQ LIM1         MODULO1 1       GATE1     FREQGAINA1(3:0)             Frequency Gain A
+13B AMPLGAIN1
+13C FREQDEV11                                             FREQ                                                  Frequency Gain B
+13D FREQDEV01                                                                                                   Frequency Gain C
+                          RW R  00-11111 FREQ FREEZE1     AVG1   -        FREQGAINB1(4:0)                       Frequency Gain D
+13E FOURFSK1              RW R  ---01011 -
+                          RW R  0--01011 RFFREQ FREEZE1   -      -        FREQGAINC1(4:0)                       Amplitude Gain
+                                                                                                                Receiver Frequency Deviation
+                                                          -      -        FREQGAIND1(4:0)                       Receiver Frequency Deviation
+
+                                                          AMPL1                                                 Four FSK Control
+                                                                                                                Baseband Offset Compensation
+                          RW R  01--0110 AMPL AVG1        AGC1   -        -         AMPLGAIN1(3:0)              Resistors
+                          RW R  ----0000 -
+                          RW R  00100000 FREQDEV1(7:0)    -      -        -         FREQDEV1(11:8)              AGC Speed
+                                                                                                                AGC Target
+                                                                          DEV                                   AGC Digital Threshold Range
+                                                                                                                AGC Digital Min/Max Set Points
+                          RW R ---11000 -                 -      -        UPDATE1 DEVDECAY1(3:0)                Timing Gain
+                                                                                                                Data Rate Gain
+13F BBOFFSRES1            RW R  10001000 RESINTB1(3:0)                              RESINTA1(3:0)               Filter Index, Phase Gain
+
+Receiver Parameter Set 2        11111111 AGCDECAY2(3:0)
+                                01110110 AGCTARGET2(7:0)
+140 AGCGAIN2              RW R  -----000 -                                          AGCATTACK2(3:0)
+                                -000-000 -
+141 AGCTARGET2            RW R  11110101 TIMEGAIN2M
+                                11110000 DRGAIN2M
+142 AGCAHYST2             RW R  11--0011 FILTERIDX2(1:0)                                        AGCAHYST2(2:0)
+
+143 AGCMINMAX2            RW R                            AGCMAXDA2(2:0)            -           AGCMINDA2(2:0)
+
+144 TIMEGAIN2             RW R                                                      TIMEGAIN2E
+
+145 DRGAIN2               RW R                                                      DRGAIN2E
+
+146 PHASEGAIN2            RW R                                   -        -         PHASEGAIN2(3:0)
+
+                                                                 FREQ
+
+                                                          FREQ   HALFMOD FREQ AMPL
+
+147 FREQGAINA2            RW R 00001111 FREQ LIM2         MODULO2 2       GATE2     FREQGAINA2(3:0)             Frequency Gain A
+
+148 FREQGAINB2                                            FREQ                                                  Frequency Gain B
+149 FREQGAINC2                                                                                                  Frequency Gain C
+14A FREQGAIND2            RW R  00-11111 FREQ FREEZE2     AVG2   -        FREQGAINB2(4:0)                       Frequency Gain D
+                          RW R  ---01101 -
+                          RW R  0--01101 RFFREQ FREEZE2   -      -        FREQGAINC2(4:0)
+
+                                                          -      -        FREQGAIND2(4:0)
+
+Version 1.6a                                                                                                    Datasheet AX5043
+
+50 Register Bank Description
+
+                                                          AMPL
+
+14B AMPLGAIN2             RW R  01--0110 AMPL AVG2        AGC2  -         -        AMPLGAIN2(3:0)              Amplitude Gain
+14C FREQDEV12             RW R  ----0000 -                                         FREQDEV2(11:8)              Receiver Frequency Deviation
+14D FREQDEV02             RW R  00100000 FREQDEV2(7:0)    -     -         -                                    Receiver Frequency Deviation
+
+                                                                          DEV                                  Four FSK Control
+                                                                                                               Baseband Offset Compensation
+14E FOURFSK2              RW R ---11010 -                 -     -         UPDATE2 DEVDECAY2(3:0)               Resistors
+
+14F BBOFFSRES2            RW R  10001000 RESINTB2(3:0)                             RESINTA2(3:0)               AGC Speed
+                                                                                                               AGC Target
+Receiver Parameter Set 3        11111111 AGCDECAY3(3:0)                                                        AGC Digital Threshold Range
+                                01110110 AGCTARGET3(7:0)                                                       AGC Digital Min/Max Set Points
+150 AGCGAIN3              RW R  -----000 -                                         AGCATTACK3(3:0)             Timing Gain
+                                -000-000 -                                                                     Data Rate Gain
+151 AGCTARGET3            RW R  11110101 TIMEGAIN3M                                                            Filter Index, Phase Gain
+                                11110000 DRGAIN3M
+152 AGCAHYST3             RW R  11--0011 FILTERIDX3(1:0)                                       AGCAHYST3(2:0)  Frequency Gain A
+
+153 AGCMINMAX3            RW R                            AGCMAXDA3(2:0)           -           AGCMINDA3(2:0)  Frequency Gain B
+                                                                                                               Frequency Gain C
+154 TIMEGAIN3             RW R                                                     TIMEGAIN3E                  Frequency Gain D
+
+155 DRGAIN3               RW R                                                     DRGAIN3E                    Amplitude Gain
+                                                                                                               Receiver Frequency Deviation
+156 PHASEGAIN3            RW R                                  -         -        PHASEGAIN3(3:0)             Receiver Frequency Deviation
+
+                                                                FREQ                                           Four FSK Control
+                                                                                                               Baseband Offset Compensation
+                                                          FREQ  HALFMOD FREQ AMPL                              Resistors
+
+157 FREQGAINA3            RW R 00001111 FREQ LIM3         MODULO3 3       GATE3    FREQGAINA3(3:0)                            Datasheet AX5043
+
+                                                          FREQ
+
+158 FREQGAINB3            RW R  00-11111 FREQ FREEZE3     AVG3  -         FREQGAINB3(4:0)
+159 FREQGAINC3            RW R  ---01101 -
+15A FREQGAIND3            RW R  0--01101 RFFREQ FREEZE3   -     -         FREQGAINC3(4:0)
+
+                                                          -     -         FREQGAIND3(4:0)
+
+                                                          AMPL
+
+15B AMPLGAIN3             RW R  01--0110 AMPL AVG3        AGC3  -         -        AMPLGAIN3(3:0)
+15C FREQDEV13             RW R  ----0000 -
+15D FREQDEV03             RW R  00100000 FREQDEV3(7:0)    -     -         -        FREQDEV3(11:8)
+
+                                                                          DEV
+
+15E FOURFSK3              RW R ---11010 -                 -     -         UPDATE3 DEVDECAY3(3:0)
+
+15F BBOFFSRES3            RW R  10001000 RESINTB3(3:0)                             RESINTA3(3:0)
+
+Transmitter Parameters
+
+Version 1.6a
+
+                                                                                                                    Register Bank Description                              51
+
+160 MODCFGF         RW R ------00 -                  -       -          -        -            -         FREQ SHAPE                Modulator Configuration F
+161 FSKDEV2                                                                                                                       FSK Frequency Deviation
+162 FSKDEV1         RW R 00000000 FSKDEV(23:16)                                                                                   FSK Frequency Deviation
+163 FSKDEV0                                                                                                                       FSK Frequency Deviation
+                    RW R 00001010 FSKDEV(15:8)
+164 MODCFGA                                                                                                         TX DIFF Modulator Configuration A
+165 TXRATE2         RW R 00111101 FSKDEV(7:0)                                                                                     Transmitter Bitrate
+166 TXRATE1                                                                                                                       Transmitter Bitrate
+167 TXRATE0                                          PTTLCK                                                                       Transmitter Bitrate
+168 TXPWRCOEFFA1                                                                                                                  Transmitter Predistortion Coefficient A
+169 TXPWRCOEFFA0    RW R 0000-101 BROWN GATE         GATE    SLOW RAMP           -            AMPL SHAPE TX SE                    Transmitter Predistortion Coefficient A
+16A TXPWRCOEFFB1                                                                                                                  Transmitter Predistortion Coefficient B
+16B TXPWRCOEFFB0    RW R 00000000 TXRATE(23:16)                                                                                   Transmitter Predistortion Coefficient B
+16C TXPWRCOEFFC1                                                                                                                  Transmitter Predistortion Coefficient C
+16D TXPWRCOEFFC0    RW R 00101000 TXRATE(15:8)                                                                                    Transmitter Predistortion Coefficient C
+16E TXPWRCOEFFD1                                                                                                                  Transmitter Predistortion Coefficient D
+16F TXPWRCOEFFD0    RW R 11110110 TXRATE(7:0)                                                                                     Transmitter Predistortion Coefficient D
+170 TXPWRCOEFFE1                                                                                                                  Transmitter Predistortion Coefficient E
+171 TXPWRCOEFFE0    RW R 00000000 TXPWRCOEFFA(15:8)                                                                               Transmitter Predistortion Coefficient E
+PLL Parameters
+180 PLLVCOI         RW R 00000000 TXPWRCOEFFA(7:0)                                                                                VCO Current
+181 PLLVCOIR                                                                                                                      VCO Current Readback
+                    RW R 00001111 TXPWRCOEFFB(15:8)
+182 PLLLOCKDET                                                                                                                    PLL Lock Detect Delay
+183 PLLRNGCLK       RW R 11111111 TXPWRCOEFFB(7:0)                                                                                PLL Ranging Clock
+Crystal Oscillator
+184 XTALCAP         RW R 00000000 TXPWRCOEFFC(15:8)                                                                               Crystal Oscillator Load Capacitance
+Baseband
+                    RW R 00000000 TXPWRCOEFFC(7:0)                                                                                Baseband Tuning
+188 BBTUNE
+                    RW R 00000000 TXPWRCOEFFD(15:8)
+
+                    RW R 00000000 TXPWRCOEFFD(7:0)
+
+                    RW R 00000000 TXPWRCOEFFE(15:8)
+
+                    RW R 00000000 TXPWRCOEFFE(7:0)
+
+                    RW R  0-010010 VCOIE             -       VCOI(5:0)
+                    RW R  -------- -
+                                                     -       VCOIR(5:0)
+
+                    RW R -----011 LOCKDETDLYR                -          -        -            LOCK DET  LOCKDETDLY
+                                                                                              DLYM
+
+                    RW R -----011 -                  -       -          -        -            PLLRNGCLK(2:0)
+
+                    RW R 00000000 XTALCAP(7:0)
+
+                                                                        BB TUNE
+
+                    RW R ---01001 -                  -       -          RUN      BBTUNE(3:0)
+
+Version 1.6a                                                                                                        Datasheet AX5043
+
+52 Register Bank Description
+
+189 BBOFFSCAP         RW R -111-111 -                  CAP INT B(2:0)                -              CAP INT A(2:0)  Baseband Offset Compensation
+MAC Layer Parameters                                                                                                Capacitors
+Packet Format
+                                                                                                                    Packet Address Config
+                                                       CRC SKIP FEC SYNC                                            Packet Length Config
+                                                                                                                    Packet Length Offset
+200 PKTADDRCFG        RW R  001-0000 MSB FIRST         FIRST  DIS         -          ADDR POS(3:0)                  Packet Maximum Length
+201 PKTLENCFG         RW R  00000000 LEN BITS(3:0                                    LEN POS(3:0)                   Packet Address 3
+202 PKTLENOFFSET      RW R  00000000 LEN OFFSET(7:0)                                                                Packet Address 2
+203 PKTMAXLEN         RW R  00000000 MAX LEN(7:0)                                                                   Packet Address 1
+204 PKTADDR3          RW R  00000000 ADDR(31:24)                                                                    Packet Address 0
+205 PKTADDR2          RW R  00000000 ADDR(23:16)                                                                    Packet Address Mask 1
+206 PKTADDR1          RW R  00000000 ADDR(15:8)                                                                     Packet Address Mask 0
+207 PKTADDR0          RW R  00000000 ADDR(7:0)                                                                      Packet Address Mask 1
+208 PKTADDRMASK3      RW R  00000000 ADDRMASK(31:24)                                                                Packet Address Mask 0
+209 PKTADDRMASK2      RW R  00000000 ADDRMASK(23:16)
+20A PKTADDRMASK1      RW R  00000000 ADDRMASK(15:8)                                                                 Pattern Match Unit 0, Pattern
+20B PKTADDRMASK0      RW R  00000000 ADDRMASK(7:0)                                                                  Pattern Match Unit 0, Pattern
+Pattern Match                                                                                                       Pattern Match Unit 0, Pattern
+210 MATCH0PAT3        RW R  00000000 MATCH0PAT(31:24)  -      -           MATCH0LEN                                 Pattern Match Unit 0, Pattern
+211 MATCH0PAT2        RW R  00000000 MATCH0PAT(23:16)                                                               Pattern Match Unit 0, Pattern Length
+212 MATCH0PAT1        RW R  00000000 MATCH0PAT(15:8)   -      -           MATCH0MIN                                 Pattern Match Unit 0, Minimum Match
+213 MATCH0PAT0        RW R  00000000 MATCH0PAT(7:0)                                                                 Pattern Match Unit 0, Maximum Match
+214 MATCH0LEN         RW R  0--00000 MATCH0 RAW        -      -           MATCH0MAX                                 Pattern Match Unit 1, Pattern
+215 MATCH0MIN         RW R  ---00000 -                                                                              Pattern Match Unit 1, Pattern
+216 MATCH0MAX         RW R  ---11111 -                 -      -           -          MATCH1LEN                      Pattern Match Unit 1, Pattern Length
+218 MATCH1PAT1        RW R  00000000 MATCH1PAT(15:8)                                 MATCH1MIN                      Pattern Match Unit 1, Minimum Match
+219 MATCH1PAT0        RW R  00000000 MATCH1PAT(7:0)    -      -           -          MATCH1MAX                      Pattern Match Unit 1, Maximum Match
+21C MATCH1LEN         RW R  0---0000 MATCH1 RAW
+21D MATCH1MIN         RW R  ----0000 -                 -      -           -                                                        Datasheet AX5043
+21E MATCH1MAX         RW R  ----1111 -
+
+Version 1.6a
+
+                                                                                                                           Register Bank Description               53
+
+Packet Controller    RW R 00110010 TMGTXBOOSTE                      TMGTXBOOSTM                                            Transmit PLL Boost Time
+220 TMGTXBOOST
+                                                                    TMGTXSETTLEM
+221 TMGTXSETTLE      RW R  00001010 TMGTXSETTLEE                    TMGRXBOOSTM                                            Transmit PLL (post Boost) Settling
+223 TMGRXBOOST       RW R  00110010 TMGRXBOOSTE                     TMGRXSETTLEM                                           Time
+224 TMGRXSETTLE      RW R  00010100 TMGRXSETTLEE
+                                                                    TMGRXOFFSACQM                                          Receive PLL Boost Time
+                                                                    TMGRXCOARSEAGCM
+                                                                    TMGRXAGCM                                              Receive PLL (post Boost) Settling Time
+                                                                    TMGRXRSSIM
+225 TMGRXOFFSACQ RW R      01110011 TMGRXOFFSACQE                   TMGRXPREAMBLE1M                                        Receive Baseband DC Offset
+                           00111001 TMGRXCOARSEAGCE                 TMGRXPREAMBLE2M                                        Acquisition Time
+                           00000000 TMGRXAGCE                       TMGRXPREAMBLE3M
+226 TMGRXCOARSEAGC RW R    00000000 TMGRXRSSIE                                                                             Receive Coarse AGC Time
+                           00000000 TMGRXPREAMBLE1E
+227 TMGRXAGC         RW R  00000000 TMGRXPREAMBLE2E                                                                        Receiver AGC Settling Time
+                           00000000 TMGRXPREAMBLE3E
+228 TMGRXRSSI        RW R  00000000 RSSIREFERENCE                                                                          Receiver RSSI Settling Time
+                           00000000 RSSIABSTHR
+229 TMGRXPREAMBLE1 RW R                                                                                                    Receiver Preamble 1 Timeout
+
+22A TMGRXPREAMBLE2 RW R                                                                                                    Receiver Preamble 2 Timeout
+
+22B TMGRXPREAMBLE3 RW R                                                                                                    Receiver Preamble 3 Timeout
+
+22C RSSIREFERENCE RW R                                                                                                     RSSI Offset
+
+22D RSSIABSTHR       RW R                                                                                                  RSSI Absolute Threshold
+
+22E BGNDRSSIGAIN RW R ----0000 -                     -       -      -          BGNDRSSIGAIN                                Background RSSI Averaging Time
+                                                                                                                           Constant
+
+22F BGNDRSSITHR      RW R --000000 -                 -       BGNDRSSITHR                                                   Background RSSI Relative Threshold
+
+230 PKTCHUNKSIZE     RW R ----0000 -                 -       -      -          PKTCHUNKSIZE(3:0)                           Packet Chunk Size
+
+                                                                    WOR MULTI                                      RXRSSI
+
+231 PKTMISCFLAGS     RW R ---00000 -                 -       -      PKT        AGC SETTL DET BGND RSSI  RXAGC CLK  CLK     Packet Controller Miscellaneous Flags
+
+232 PKTSTOREFLAGS RW R -0000000 -                    ST ANT  ST CRCB ST RSSI ST DR           ST RFOFFS ST FOFFS    ST      Packet Controller Store Flags
+                                                     RSSI                                                          TIMER
+
+233 PKTACCEPTFLAGS RW R --000000 -                   -       ACCPT  ACCPT SZF ACCPT ADDRF ACCPT CRCF ACCPT ABRT    ACCPT   Packet Controller Accept Flags
+                                                             LRGP                                                  RESIDU
+                                                                                                                   E
+
+Special Functions
+
+General Purpose ADC
+
+300 GPADCCTRL        RW R --000000 BUSY              -       0      0          0             GPADC13    CONT       CH ISOL General Purpose ADC Control
+                                                                                             -
+301 GPADCPERIOD      RW R 00111111 GPADCPERIOD(7:0)                                                                        GPADC Sampling Period
+
+308 GPADC13VALUE1 R        -------- -                -       -      -          -                        GPADC13VALUE(9:8)  GPADC13 Value
+
+Version 1.6a                                                                                                                            Datasheet AX5043
+
+54 Register Bank Description
+
+309 GPADC13VALUE0 R               -------- GPADC13VALUE(7:0)                                                                      GPADC13 Value
+
+Low Power Oscillator Calibration
+
+310 LPOSCCONFIG  RW 00000000 LPOSC OSC INVERT                 LPOSC   LPOSC      LPOSC   LPOSC IRQR LPOSC IRQF LPOSC FAST  LPOSC  Low Power Oscillator Configuration
+                                                              OSC     CALIBR     CALIBF                                    ENA
+                                                              DOUBLE                                                       LPOSC  Low Power Oscillator Status
+                                                                                                                           EDGE   Low Power Oscillator Calibration Filter
+31 LPOSCSTATUS   R                -------- -                  -       -          -       -  -            LPOSC IRQ                Constant
+                                                                                                                           -      Low Power Oscillator Calibration Filter
+312 LPOSCKFILT1  RW 00100000 LPOSCKFILT(15:8)                                                                                     Constant
+                                                                                                                                  Low Power Oscillator Calibration
+313 LPOSCKFILT0  RW 11000100 LPOSCKFILT(7:0)                                                                                      Reference
+                                                                                                                                  Low Power Oscillator Calibration
+314 LPOSCREF1    RW 01100001 LPOSCREF(15:8)                                                                                       Reference
+                                                                                                                                  Low Power Oscillator Calibration
+315 LPOSCREF0    RW 10101000 LPOSCREF(7:0)                                                                                        Frequency
+                                                                                                                                  Low Power Oscillator Calibration
+316 LPOSCFREQ1   RW 00000000 LPOSCFREQ(9:2)                                                                                       Frequency
+
+317 LPOSCFREQ0   RW 0000---- LPOSCFREQ(1:-2)                                             -  -            -                        Low Power Oscillator Calibration Period
+
+318 LPOSCPER1    RW -------- LPOSCPER(15:8)                                                                                       Low Power Oscillator Calibration Period
+
+319 LPOSCPER0    RW -------- LPOSCPER(7:0)
+
+DAC
+
+330 DACVALUE1    RW R ----0000 -              -                  -            -          DACVALUE(11:8)                           DAC Value
+                                                                                         DACINPUT(3:0)                            DAC Value
+331 DACVALUE2    RW R 00000000 DACVALUE(7:0)                                                                                      DAC Configuration
+
+332 DACCONFIG    RW R 00--0000 DAC PWM DAC CLK X2 -                           -
+
+Version 1.6a                                                                                                                      Datasheet AX5043
+
+                                                                      Application Information 55
+
+7. Application Information
+7.1. Typical Application Diagrams
+
+Match to 50 Ohm for differential antenna pins (868/433 MHz RX/TX
+operation)
+
+                   LC1  CC1                                           CF
+
+IC antenna              CT1 LT1          CM1 LB1                      LF               50 single-ended
+pins                    CT2 LT2                                                        equipment or
+                                                    CB2                                antenna
+                   LC2   CC2 CM2             LB2
+                                                                CA            CA
+
+                                                                Optional filter stage
+                                                                  to suppress TX
+                                                                      harmonics
+
+Figure 10 Structure of the differential antenna interface for TX/RX operation to 50  single-ended
+                                                                equipment or antenna
+
+Frequency     LC1,2 CC1,2 CT1,2   LT1,2  CM1   CM2       LB1,2  CB2       CF               LF        CA
+    Band      [nH] [pF] [pF]      [nH]   [pF]  [pF]      [nH]   [pF]     [pF]            [nH]       [pF]
+                                                                      optional         optional  optional
+
+868 / 915 18 nc 2.7 18 6.2 3.6 12 2.7 nc 0 OHM nc
+    MHz
+
+433 MHz       68        4.3  4.3  47     12    8.2       27     5.1       nc           0 OHM     nc
+
+Version 1.6a                                                                           Datasheet AX5043
+
+56 Application Information
+
+         Match to 50 Ohm for differential antenna pins (169 MHz RX/TX
+         operation)
+
+                   LC1  CC1                                          CF
+
+IC antenna              CT1 LT1         CM1 LB1                                       50
+pins                    CT2 LT2
+                                                   CB2                                single-ended
+                   LC2   CC2 CM2            LB2
+                                                                                      equipment or
+
+                                                                     LF               antenna
+
+                                                               CA             CA
+
+                                                               Optional filter stage
+                                                                 to suppress TX
+                                                                     harmonics
+
+Figure 11 Structure of the differential antenna interface for RX/TX operation to 50  single-ended
+                                                                equipment or antenna
+
+Frequency     LC1,2 CC1,2 CT1,2  LT1,2  CM1   CM2       LB1,2  CB2       CF               LF        CA
+    Band      [nH] [pF] [pF]     [nH]   [pF]  [pF]      [nH]   [pF]     [pF]            [nH]       [pF]
+                                                                     optional         optional  optional
+
+169 MHz       150       4.3  10  120    12    nc        68     12        6.8          30        27
+
+Version 1.6a                                                                   Datasheet AX5043
+
+                                                                 Application Information 57
+
+Match to 50 Ohm for single-ended antenna pin (169 MHz TX operation)
+
+IC Antenna                                    CF1           CF2
+Pin
+                             CT LT            LF1                      50
+                   LC        CC           CA1
+                                                                       single-ended
+
+                                                            LF2        equipment or
+
+                                                                       antenna
+
+                                                       CA2       CA3
+
+Figure 12 Structure of the single-ended antenna interface for TX operation to 50  single-ended
+                                                               equipment or antenna
+
+Frequency      LC       CC    CT      LT  CF1      LF1   CF2     LF2   CA1   CA2     CA3
+    Band      [nH]     [pF]  [pF]   [nH]  [pF]     [nH]  [pF]    [nH]  [pF]  [pF]    [pF]
+
+169 MHz       150       2.2   22     120  4.7      39    1.8       47   33    47      15
+
+Version 1.6a                                                           Datasheet AX5043
+
+58 Application Information
+
+         Using a Dipole Antenna and the internal TX/RX Switch
+
+                                                                                                                                                                                                             100pF
+                                                                                                                                                                                                             1uF
+
+                       CLK16P
+                              CLK16N
+                                     GPADC2
+                                            GPADC1
+
+                                                   NC
+                                                          VDD_IO
+
+                                                                 NC
+
+              VDD_ANA  AX5043                                          ANTSEL
+              GND                                                     PWRAMP
+              ANTP                                                                                                                                                                                                  Microcontroller
+              ANTN                                                            IRQ
+              ANTP1                                                            NC
+              GND                                                          MOSI
+              VDD_ANA                                                      MISO
+                                                                             CLK
+
+                       FILT
+                              L2
+                                     L1
+                                            DATA
+                                                   DCLK
+                                                          SYSCLK
+                                                                 SEL
+
+Figure 13 Typical application diagram with dipole antenna and internal TX/RX switch
+
+Version 1.6a                                                                       Datasheet AX5043
+
+                                                                      Application Information 59
+
+Using a single-ended Antenna and the internal TX/RX Switch
+
+                                                                                                                                                                                                                        100pF
+                                                                                                                                                                                                                        1uF
+
+                       CLK16P
+                              CLK16N
+                                     GPADC2
+                                            GPADC1
+
+                                                   NC
+                                                          VDD_IO
+
+                                                                 NC
+
+50 Ohm        VDD_ANA  AX5043                                          ANTSEL
+              GND                                                     PWRAMP
+              ANTP                                                                         Microcontroller
+              ANTN                                                            IRQ
+              ANTP1                                                            NC
+              GND                                                          MOSI
+              VDD_ANA                                                      MISO
+                                                                             CLK
+
+                       FILT
+                              L2
+                                     L1
+                                            DATA
+                                                   DCLK
+                                                          SYSCLK
+                                                                 SEL
+
+Figure 14 Typical application diagram with single-ended antenna and internal TX/RX switch
+
+Version 1.6a                                                          Datasheet AX5043
+
+60 Application Information
+
+         Using an external high-power PA and an external TX/RX Switch
+
+                                                                                                                                                                                                                                          100pF
+                                                                                                                                                                                                                                          1uF
+
+                                                          CLK16P
+                                                                 CLK16N
+                                                                        GPADC2
+                                                                               GPADC1
+
+                                                                                      NC
+                                                                                             VDD_IO
+
+                                                                                                    NC
+
+                                                 VDD_ANA  AX5043                                          ANTSEL
+                                                 GND                                                     PWRAMP
+50 Ohm                                           ANTP                                                                                                                                                                                            Microcontroller
+           TX/RX switch                          ANTN                                                            IRQ
+                                             PA  ANTP1                                                            NC
+                                                 GND                                                          MOSI
+                                                 VDD_ANA                                                      MISO
+                                                                                                                CLK
+
+                                                          FILT
+                                                                 L2
+                                                                        L1
+                                                                               DATA
+                                                                                      DCLK
+                                                                                             SYSCLK
+                                                                                                    SEL
+
+Figure 15 Typical application diagram with single-ended antenna , external PA and external antenna
+                                                                                switch
+
+Version 1.6a                                                                                             Datasheet AX5043
+
+Using the single-ended PA                   Application Information 61
+
+                                                                                     C5
+
+                                    CLK16P
+                                           CLK16N
+                                                  GPADC2
+                                                         GPADC1
+
+                                                                NC
+                                                                       VDD_IO
+
+                                                                              NC
+
+         C6                VDD_ANA  AX5043                                          ANTSEL
+50 Ohm                     GND                                                     PWRAMP
+                           ANTP
+                           ANTN                                                            IRQ  Microcontroller
+                           ANTP1                                                            NC
+                           GND                                                          MOSI
+                           VDD_ANA                                                      MISO
+                                                                                          CLK
+
+                                    FILT
+                                           L2
+                                                  L1
+                                                         DATA
+                                                                DCLK
+                                                                       SYSCLK
+                                                                              SEL
+
+Figure 16 Typical application diagram with single-ended antenna, single ended internal PA, without
+                                                                         RX/TX switch
+
+Version 1.6a                                                                       Datasheet AX5043
+
+62 Application Information
+
+         Using two Antenna
+
+                                    Antenna switch
+
+                                                             CLK16P
+                                                                    CLK16N
+                                                                           GPADC2
+                                                                                  GPADC1
+
+                                                                                         NC
+                                                                                                VDD_IO
+
+                                                                                                       NC
+
+                                                    VDD_ANA  AX5043                                          ANTSEL
+                                                    GND                                                     PWRAMP
+                                                    ANTP                                                                 Microcontroller
+                                                    ANTN                                                            IRQ
+                                                    ANTP1                                                            NC
+                                                    GND                                                          MOSI
+                                                    VDD_ANA                                                      MISO
+                                                                                                                   CLK
+
+                                                             FILT
+                                                                    L2
+                                                                           L1
+                                                                                  DATA
+                                                                                         DCLK
+                                                                                                SYSCLK
+                                                                                                       SEL
+
+Figure 17 Typical application diagram with two single-ended antenna and external antenna switch
+
+Version 1.6a                                                                                                Datasheet AX5043
+
+                                                                               Application Information 63
+
+Using an external VCO inductor
+
+                                CLK16P
+                                       CLK16N
+                                              GPADC2
+                                                     GPADC1
+
+                                                            NC
+                                                                   VDD_IO
+
+                                                                          NC
+
+              VDD_ANA           AX5043                                          ANTSEL
+              GND                                                              PWRAMP
+              ANTP                                                                               Microcontroller
+              ANTN                                                                     IRQ
+              ANTP1                                                                     NC
+              GND                                                                   MOSI
+              VDD_ANA                                                               MISO
+                                                                                      CLK
+
+                                FILT
+                                       L2
+                                              L1
+                                                     DATA
+                                                            DCLK
+                                                                   SYSCLK
+                                                                          SEL
+
+                                                                                           LVCO
+
+              Figure 18 Typical application diagram with external VCO inductor
+
+Version 1.6a                                                                                Datasheet AX5043
+
+64 Application Information
+
+         Using an external VCO
+
+                                         CLK16P
+                                                CLK16N
+                                                       GPADC2
+                                                              GPADC1
+
+                                                                     NC
+                                                                            VDD_IO
+
+                                                                                   NC
+
+                                VDD_ANA  AX5043                                          ANTSEL
+                                GND                                                     PWRAMP
+                                ANTP     FILT                                                        Microcontroller
+                                ANTN            L2                                              IRQ
+                                ANTP1                  L1                                        NC
+                                GND                           GPIO (DATA)                    MOSI
+                                VDD_ANA                              DCLK                    MISO
+                                                                            SYSCLK             CLK
+                                                                                   SEL
+
+                                         VCTRL
+                                                OUTP
+                                                       OUTN
+
+                                                              EN
+
+                                             VCO
+
+              Figure 19 Typical application diagram with external VCO
+
+Version 1.6a                                                                                         Datasheet AX5043
+
+Using a TCXO                                                                   Application Information 65
+
+              EN_TCXO                                                                                 100pF
+                                                                                                      1uF
+              TCXO  C1_TCXO
+
+                    C2_TCXO
+                    optional
+
+                                CLK16P
+                                       CLK16N
+                                              GPADC2
+                                                     GPADC1
+
+                                                            NC
+                                                                   VDD_IO
+
+                                                                          NC
+
+                       VDD_ANA  AX5043                                          ANTSEL
+                       GND                                                     PWRAMP
+                       ANTP     FILT                                                        Microcontroller
+                       ANTN            L2                                              IRQ
+                       ANTP1                  L1                                        NC
+                       GND                           GPIO (DATA)                    MOSI
+                       VDD_ANA                              DCLK                    MISO
+                                                                   SYSCLK             CLK
+                                                                          SEL
+
+              Figure 20 Typical application diagram with a TCXO
+
+Version 1.6a                                                                                Datasheet AX5043
+
+66 QFN28 Package Information
+
+         8. QFN28 Package Information
+         8.1. Package Outline QFN28
+
+                               AXSEM
+                               AX5043
+                            YYWWXXXX
+
+              DIMENSION MIN TYP MAX UNIT
+
+              A  0.800 0.850 0.900 mm
+
+Notes
+
+1. JEDEC ref MO-220
+2. All dimensions are in millimetres
+3. Pin 1 is identified by chamfer on corner of exposed
+
+      die pad.
+4. Package warp shall be 0.050 maximum
+5. Coplanarity applies to the exposed pad as well as
+
+      the terminal
+6. YYWWXX or YYWWXXXX is the packaging lot code
+7. RoHS
+
+Version 1.6a                                            Datasheet AX5043
+
+                                                                         QFN28 Package Information 67
+
+8.2. QFN28 Soldering Profile                                       Reflow                                        Cooling
+                               Preheat                                        tp
+
+        TpTemperatu                                                tL
+
+        T
+        TsMA
+
+        TsMI
+                                         ts
+
+25°C
+
+                   t25° to Peak
+
+                                                 Time
+
+           Profile Feature                                  Pb-Free Process
+                                                            3 °C/sec max.
+           Average Ramp-Up Rate
+           Preheat Preheat                   TsMIN          150°C
+           Temperature Min                   TsMAX          200°C
+           Temperature Max                   ts             60 - 180 sec
+           Time (TsMIN to TsMAX)             T25 ° to Peak  8 min max.
+           Time 25°C to Peak Temperature
+           Reflow Phase                      TL             217°C
+           Liquidus Temperature
+           Time over Liquidus Temperature    tL             60 - 150 sec
+           Peak Temperature
+           Time within 5°C of actual Peak    tp             260°C
+           Temperature
+           Cooling Phase                     Tp             20 - 40 sec
+           Ramp-down rate
+                                                            6°C/sec max.
+
+           Notes:
+
+                   All temperatures refer to the top side of the package, measured on the package body surface.
+
+Version 1.6a                                                                                                     Datasheet AX5043
+
+68 QFN28 Package Information
+
+8.3. QFN28 Recommended Pad Layout
+1. PCB land and solder masking recommendations are shown in Figure 21.
+
+                                                                     A = Clearance from PCB thermal pad to solder mask opening,
+                                                                             0.0635 mm minimum
+
+                                                                     B = Clearance from edge of PCB thermal pad to PCB land, 0.2
+                                                                             mm minimum
+
+                                                                     C = Clearance from PCB land edge to solder mask opening to be
+                                                                             as tight as possible to ensure that some solder mask remains
+                                                                             between PCB pads
+
+                                                                     D = PCB land length = QFN solder pad length + 0.1mm
+                                                                     E = PCB land width = QFN solder pad width + 0.1 mm
+
+Figure 21: PCB land and solder mask recommendations
+
+2. Thermal vias should be used on the PCB thermal pad (middle ground pad) to
+      improve thermal conductivity from the device to a copper ground plane area on the
+      reverse side of the printed circuit board. The number of vias depends on the package
+      thermal requirements, as determined by thermal simulation or actual testing.
+
+3. Increasing the number of vias through the printed circuit board will improve the
+      thermal conductivity to the reverse side ground plane and external heat sink. In
+      general, adding more metal through the PC board under the IC will improve
+      operational heat transfer, but will require careful attention to uniform heating of the
+      board during assembly.
+
+8.4. Assembly Process
+
+Stencil Design & Solder Paste Application
+
+1. Stainless steel stencils are recommended for solder paste application.
+
+2. A stencil thickness of 0.125 - 0.150 mm (5 - 6 mils) is recommended for screening.
+
+3. For the PCB thermal pad, solder paste should be printed on the PCB by designing a
+      stencil with an array of smaller openings that sum to 50% of the QFN exposed pad
+      area. Solder paste should be applied through an array of squares (or circles) as
+      shown in Figure 22.
+
+4. The aperture opening for the signal pads should be between 50-80% of the QFN pad
+      area as shown in Figure 23.
+
+5. Optionally, for better solder paste release, the aperture walls should be trapezoidal
+      and the corners rounded.
+
+Version 1.6a                  Datasheet AX5043
+
+                                                                 QFN28 Package Information 69
+
+6. The fine pitch of the IC leads requires accurate alignment of the stencil and the
+      printed circuit board. The stencil and printed circuit assembly should be aligned to
+      within + 1 mil prior to application of the solder paste.
+
+7. No-clean flux is recommended since flux from underneath the thermal pad will be
+      difficult to clean if water-soluble flux is used.
+
+              Figure 22: Solder paste application on exposed pad
+
+                  Minimum   62% coverage      Maximum
+              50% coverage                80% coverage
+
+              Figure 23: Solder paste application on pins
+
+Version 1.6a                                                      Datasheet AX5043
+
+70 Life Support Applications
+
+         9. Life Support Applications
+
+          This product is not designed for use in life support appliances, devices, or in systems where
+          malfunction of this product can reasonably be expected to result in personal injury. AXSEM
+          customers using or selling this product for use in such applications do so at their own risk and
+          agree to fully indemnify AXSEM for any damages resulting from such improper use or sale.
+
+Version 1.6a  Datasheet AX5043
+
+                         Contact Information 71
+
+10. Contact Information
+
+AXSEM AG                 Phone +41 44 882 17 07
+Oskar-Bider-Strasse 1    Fax +41 44 882 17 09
+CH-8600 Dübendorf        Email sales@axsem.com
+SWITZERLAND              www.axsem.com
+
+For further product related or sales information please visit our website or contact your
+local representative.
+
+The specifications in this document are subject to change at AXSEM's discretion. AXSEM assumes no responsibility for any claims or damages arising out of the use of this
+document, or from the use of products based on this document, including but not limited to claims or damages based on infringement of patents, copyrights or other intellectual
+property rights. AXSEM makes no warranties, either expressed or implied with respect to the information and specifications contained in this document. AXSEM does not support
+any applications in connection with life support and commercial aircraft. Performance characteristics listed in this document are estimates only and do not constitute a warranty or
+guarantee of product performance. The copying, distribution and utilization of this document as well as the communication of its contents to others without expressed authorization
+is prohibited. Offenders will be held liable for the payment of damages. All rights reserved. Copyright © 2010, 2011, 2012 AXSEM AG
+
+Version 1.6a                                     Datasheet AX5043
+

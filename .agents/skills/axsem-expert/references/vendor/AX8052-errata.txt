@@ -1,0 +1,218 @@
+AX8052 ERRATA
+
+Errata
+Silicon Errata for AX8052
+
+Introduction                                                                                        www.onsemi.com
+  This document lists silicon erratas, as well as features of
+                                                                   GPIOENABLE to 1. Therefore, GPIO Pins will not be
+the AX8052 that may be unexpected to the user. Note that           enabled and continue to drive the value before reset.
+this errata is applicable to all products containing the
+AX8052: AX8052F100, AX8052F143, AX8052F151 and                       Workaround: Set GPIOENABLE in software.
+AX8052F131.
+                                                                   Affected Revisions: V1
+  This document refers to the silicon revisions listed in the      Fixed in Revision: V1C, V2
+table below.
+                                                                   Wakeup from Sleep Mode Resets System Controller
+Table 1.               SILICONREV Register                         Registers
+          Revision                 0x8E
+              V1                   0x8F                              System Controller and GPIO register values correctly
+             V1C                   0x90                            retained during sleep mode. When waking up from sleep
+              V2                                                   mode, these registers are accidentally reset to their
+                                                                   power-up default values, just before the CPU starts
+System Controller                                                  executing code from the reset vector address.
+Wakeup from Deep Sleep on Falling Edge of PB3
+                                                                     I/O pin signal levels are retained however, until the CPU
+  When in Deep Sleep mode, the Microcontroller is woken            writes one to GPIOENABLE after wakeup.
+up from Deep Sleep by a falling edge on PB3. Care must be
+taken to avoid loosing wakeup events; that means hardware            The main implications are that after Wakeup:
+driving the PB3 pin must be designed to ensure generating               1. Wakeup timer is reset
+a falling edge on PB3 while the microcontroller is in deep              2. PINCHGA, PINCHGB, PINCHGC may not be
+sleep.                                                                      used to determine the wakeup cause
+                                                                        3. External crystal oscillators are stopped
+Affected Revisions: V1
+Fixed in Revision: V1C, V2                                           Workaround:
+                                                                        1. Wakeup timer needs to be restarted after wakeup
+Setting RESET_N Low Does Not Wake Up the Chip from                          from sleep mode
+Deep Sleep                                                              2. External means must be used if it is desired to
+                                                                            know which GPIO pin caused the wakeup
+  Workaround: For debugging, it is recommended to                       3. External crystal oscillators must be restarted after
+connect pin 7 of the Debug Adapter to PB3. The debug                        wakeup from sleep mode
+adapter will generate a falling edge when resetting the chip.
+                                                                   Affected Revisions: V1
+  Chip-internal Power On Reset is not affected. Most               Fixed in Revision: V1C, V2
+applications therefore do not need to generate reset events on
+the RESET_N pin and can leave the pin open; they are               Clock Monitor Incorrectly Triggers Switch Back to
+unaffected by this issue. Applications needing to reset the        FRCOSC
+chip using the RESET_N chip and requiring the use of the
+Deep Sleep mode are recommended to generate a falling                The clock monitor incorrectly triggers switching back to
+edge on PB3 whenever RESET_N is pulled low.                        FRCOSC. The clock monitor can therefore not be used
+                                                                   reliably.
+Affected Revisions: V1
+Fixed in Revision: V1C, V2                                           Workaround: Do not switch to a non-working clock. If
+                                                                   there is any doubt a clock may be working before switching,
+RESET_N Does Not Set GPIOENABLE to 1 after the Chip                software should check whether it works. This can be done
+Once Entered Deep Sleep                                            using a general purpose timer. Two general purpose timers
+                                                                   and an input capture unit may be used to easily measure the
+  Once the chip entered (and exited) Deep Sleep,                   frequency ratio between any two clocks.
+subsequent low pulses on RESET_N will not set
+                                                                   Affected Revisions: V1
+                                                                   Fixed in Revision: V1C, V2
+
+© Semiconductor Components Industries, LLC, 2015                1  Publication Order Number:
+                                                                                AX8052-ERR/D
+August, 2017 - Rev. 3
+
+AX8052 ERRATA
+
+LPOSC Calibration Should Not Be Used                            · Wakeup Timer (WTCFGA, WTCFGB)
+  The built-in automatic LPOSC calibration logic can
+                                                                   For setting WTCFGx to value y, use the following code
+cause LPOSC output glitches when enabled, and should               sequence:
+therefore not be used.
+                                                                     1. WTCFGx |= 0x04;
+  Setting LPOSCKFILT to a value significantly lower than             2. WTCFGx = 0x0F;
+the maximum kFILT value given in the programming manual              3. WTCFGx &= y | 0xFC;
+(such as 100th of the maximum kFILT value) will limit the            4. WTCFGx = y;
+frequency and the effect on the tuning word of the glitches.
+However, occasional glitches will still occur and propagate     · ADC (ADCCLKSRC)
+to the LPOSC consumers. The application must be able to
+tolerate the occasional LPOSC glitch (eg. if a timer is driven     Only switch ADC clock sources while all
+by LPOSC, it may occasionally increment twice per LPOSC            ADCCHxCONFIG registers are set to 0xFF
+period).
+                                                                · SPI Master (SPSCKSRC)
+  Workaround: Enable LPOSC calibration, but set
+LPOSCKFILT to zero. When an LPOSC Calibration                      Only switch SPI Master clock sources while SPMODE
+interrupt is signaled (see register OSCCALIB), read the            is not set to SPI Master, i.e. SPMODE  01
+period register (LPOSCPER) and manually compute the
+new LPOSC tuning word. Delay writing the computed               · Timer (TxCLKSRC)
+tuning word to LPOSCFREQ until approximately 1/4th of
+the LPOSC period after the LPOSC Calibration interrupt             Only switch Timer clock sources while TxMODE is set
+was signaled.                                                      to Off, i.e. TxMODE = 000
+
+Affected Revisions: V1                                            Starting with revision V1C, the microcontroller features
+Fixed in Revision: V1C and V2                                   the MISCCTRL register, where both the Crystal Oscillator
+                                                                and the Low Power Crystal Oscillator may be disabled
+FRCOSC Calibration from Radio Clock                             permanently.
+  If the Radio Clock is selected as calibration source for
+                                                                Affected Revisions: V1
+automatic FRCOSC calibration, calibration is only               Fixed in Revision: V1C, V2
+performed if the Radio Clock is also selected as system clock
+source (Register CLKCON), or the Radio Clock is selected        Current Consumption after Entering Standby Mode
+as the source clock for one (or both) of the wake-up timer        Several Milliseconds to several hundred Milliseconds
+counters.
+                                                                after entering sleep mode, device current consumption may
+Affected Revisions: V1                                          briefly rise to approximately 2 mA and fall to normal levels
+Fixed in Revision: V1C, V2                                      again.
+
+Changing Clock Sources May Accidentally Enable XOSC or            It is recommended to add seven NOP instructions
+LPXOSC                                                          immediately after the write instruction that sets PCON bits
+                                                                1:0 to 01, or alternatively to use the libmf function
+  Changing the clock source of any peripheral may               enter_sleep() to prevent this current spike.
+accidentally enable the Crystal Oscillator or the Low Power
+Crystal Oscillator.                                             Affected Revisions: V1
+                                                                Fixed in Revision: V1C, V2
+  If crystals are connected to PA0/PA1 and PA3/PA4 and
+these pins are configured as analog inputs, the oscillators     CPU Clock Rates Less than 10 kHz Not Recommended
+will switch off again after two falling clock cycles, and         ON Semiconductor does not recommend to run the
+therefore this is not a problem.
+                                                                Microcontroller Core at less than 10 kHz (less than 10000
+  Otherwise, these oscillators may be switched off again        Instructions/s). Instead, the Microcontroller should be run
+manually by calling libmf routines turn_off_xosc() and          from a faster clock source, and be put in standby or sleep
+turn_off_lpxosc(). These routines require to toggle             mode when the system is idle.
+PA0/PA1 and PA3/PA4, respectively.
+                                                                Affected Revisions: V1
+  The accidental enabling of the Crystal Oscillators may be     Fixed in Revision: V1C, V2
+avoided by carefully switching clock sources as follows:
+
+· System Clock (CLKCON)
+
+    Only switch to and from any clock source via
+      FRCOSC
+
+    When switching from FRCOSC to LPXOSC, first
+      switch to LPOSC, then to LPXOSC.
+      When switching from LPXOSC to FRCOSC, first
+      switch to LPOSC, then FRCOSC.
+
+www.onsemi.com
+             2
+
+                                                            AX8052 ERRATA
+
+Temperature Sensor Should Be Converted with the CPU in         Power-On Reset
+Standby Mode                                                     A power-up voltage ramp start voltage of 0.3 V or less is
+
+  When converting the temperature sensor value, the CPU        required for V1 silicon to reliably signal power-on Reset.
+should be set to Standby mode. Otherwise, the converted        For V1C, a start voltage of 0.6 V or less is required.
+temperature values will be noisier and the average will be
+affected as well. Wake-up from Standby mode can be               Starting with revision V2 the POR generation circuitry is
+effected either by an ADC interrupt handler, or using the      fully level sensitive, triggering POR at a VDD_IO level of
+code sequence below:                                           typically 1 V and insensitive to the ramp start voltage or
+                                                               speed.
+  start conversion (see ADCCONV register)                      Affected Revisions: V1, V1C
+     for (;;) {                                                Fixed in Revision: V2
+               EA = 0;
+               if (ADCCONV & 0x80)                             RESET_N during VDDIO Ramp-Up
+                                           break;                If the external RESET_N input is asserted (held low)
+               EIE_6 = 1;
+               enter_standby();                                during VDDIO Voltage Ramp-Up, an elevated current draw
+               EIE_6 = 0;                                      may be observed on VDDIO. As soon as RESET_N is
+               EA = 1;                                         deasserted, the current returns to normal levels. Subsequent
+     }                                                         assertions of RESET_N while VDDIO remains supplied
+     EA = 1;                                                   will not cause any elevated current draw. This additional
+     read ADCCH0VAL0                                           current will not damage the chip, it is however
+     read ADCCH0VAL1                                           recommended to keep RESET_N pulses short.
+
+  The ADC clock source (register ADCCLKSRC) should             Affected Revisions: V1, V1C
+be set to the same clock as the system clock (register         Fixed in Revision: V2
+CLKCON). The divider should be set so that the conversion
+rate falls into the range given by the datasheet. The ADC      Timer TXIRQRO, TXIRQRU, TXIRQEO , TXIRQEU Clear on
+clock source should not be set to system clock (register       Read takes Precedence over Set
+ADCCLKSRC(2:0) should not be set to 110), because the
+system clock is turned off during standby. Most commonly,        The timer status bits TxIRQRO , TxIRQRU, TxIRQEO ,
+the microcontroller runs from the internal fast RC oscillator  TxIRQEU are designed to clear on read. Clearing on read
+(CLKCON = 0x00), in this case the recommended ADC              takes precedence in the affected chips. So software polling
+clock setting for temperature conversion is                    the status bits in a tight loop miss overflow or underflow
+ADCCLKSRC = 0x30.                                              events whenever the event coincides with reading the status
+                                                               register in the same clock cycle. It is recommended to use an
+Affected Revisions: V1, V1C                                    interrupt handler on the affected chips to mitigate this issue.
+Fixed in Revision: V2
+                                                               Affected Revisions: V1, V1C
+                                                               Fixed in Revision: V2
+
+                                                               GPADC Missing Codes
+                                                                 The GPADC converter exhibits missing codes at
+
+                                                               mid-level (or zero in differential mode) input.
+
+                                                               Affected Revisions: V1, V1C, V2
+
+ON Semiconductor and are trademarks of Semiconductor Components Industries, LLC dba ON Semiconductor or its subsidiaries in the United States and/or other countries.
+ON Semiconductor owns the rights to a number of patents, trademarks, copyrights, trade secrets, and other intellectual property. A listing of ON Semiconductor's product/patent
+coverage may be accessed at www.onsemi.com/site/pdf/Patent-Marking.pdf. ON Semiconductor reserves the right to make changes without further notice to any products herein.
+ON Semiconductor makes no warranty, representation or guarantee regarding the suitability of its products for any particular purpose, nor does ON Semiconductor assume any liability
+arising out of the application or use of any product or circuit, and specifically disclaims any and all liability, including without limitation special, consequential or incidental damages.
+Buyer is responsible for its products and applications using ON Semiconductor products, including compliance with all laws, regulations and safety requirements or standards,
+regardless of any support or applications information provided by ON Semiconductor. "Typical" parameters which may be provided in ON Semiconductor data sheets and/or
+specifications can and do vary in different applications and actual performance may vary over time. All operating parameters, including "Typicals" must be validated for each customer
+application by customer's technical experts. ON Semiconductor does not convey any license under its patent rights nor the rights of others. ON Semiconductor products are not
+designed, intended, or authorized for use as a critical component in life support systems or any FDA Class 3 medical devices or medical devices with a same or similar classification
+in a foreign jurisdiction or any devices intended for implantation in the human body. Should Buyer purchase or use ON Semiconductor products for any such unintended or unauthorized
+application, Buyer shall indemnify and hold ON Semiconductor and its officers, employees, subsidiaries, affiliates, and distributors harmless against all claims, costs, damages, and
+expenses, and reasonable attorney fees arising out of, directly or indirectly, any claim of personal injury or death associated with such unintended or unauthorized use, even if such
+claim alleges that ON Semiconductor was negligent regarding the design or manufacture of the part. ON Semiconductor is an Equal Opportunity/Affirmative Action Employer. This
+literature is subject to all applicable copyright laws and is not for resale in any manner.
+
+PUBLICATION ORDERING INFORMATION                            N. American Technical Support: 800-282-9855 Toll Free  ON Semiconductor Website: www.onsemi.com
+                                                             USA/Canada                                            Order Literature: http://www.onsemi.com/orderlit
+ LITERATURE FULFILLMENT:                                                                                           For additional information, please contact your local
+  Literature Distribution Center for ON Semiconductor       Europe, Middle East and Africa Technical Support:      Sales Representative
+  19521 E. 32nd Pkwy, Aurora, Colorado 80011 USA             Phone: 421 33 790 2910
+  Phone: 303-675-2175 or 800-344-3860 Toll Free USA/Canada                                                                               AX8052-ERR/D
+  Fax: 303-675-2176 or 800-344-3867 Toll Free USA/Canada    Japan Customer Focus Center
+  Email: orderlit@onsemi.com                                 Phone: 81-3-5817-1050
+
+                                                                  www.onsemi.com
+                                                                                 3
+

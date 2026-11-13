@@ -1,0 +1,423 @@
+FM11NT0X1D
+
+NFC Forum Type2 Tag compliant IC with
+Dual Interface
+
+Datasheet
+
+Dec.2014
+
+FM11NT0X1D NFC Forum Type2 Tag compliant IC  Ver 1.0  Datasheet
+                                                                 1
+
+INFORMATION IN THIS DOCUMENT IS INTENDED AS A REFERENCE TO ASSIST OUR CUSTOMERS IN THE SELECTION OF
+SHANGHAI FUDAN MICROELECTRONICS GROUP CO., LTD PRODUCT BEST SUITED TO THE CUSTOMER'S APPLICATION;
+THEY DO NOT CONVEY ANY LICENSE UNDER ANY INTELLECTUAL PROPERTY RIGHTS, OR ANY OTHER RIGHTS,
+BELONGING TO SHANGHAI FUDAN MICROELECTRONICS GROUP CO., LTD OR A THIRD PARTY.
+WHEN USING THE INFORMATION CONTAINED IN THIS DOCUMENTS, PLEASE BE SURE TO EVALUATE ALL INFORMATION
+AS A TOTAL SYSTEM BEFORE MAKING A FINAL DECISION ON THE APPLICABILITY OF THE INFORMATION AND
+PRODUCTS.
+PURCHASERS ARE SOLELY RESPONSIBLE FOR THE CHOICE, SELECTION AND USE OF THE SHANGHAI FUDAN
+MICROELECTRONICS GROUP CO., LTD PRODUCTS AND SERVICES DESCRIBED HEREIN, AND SHANGHAI FUDAN
+MICROELECTRONICS GROUP CO., LTD ASSUMES NO LIABILITY WHATSOEVER RELATING TO THE CHOICE, SELECTION
+OR USE OF THE SHANGHAI FUDAN MICROELECTRONICS GROUP CO., LTD PRODUCTS AND SERVICES DESCRIBED
+HEREIN. UNLESS EXPRESSLY APPROVED IN WRITING BY AN AUTHORIZED SHANGHAI FUDAN MICROELECTRONICS
+GROUP CO., LTD REPRESENTATIVE, SHANGHAI FUDAN MICROELECTRONICS GROUP CO., LTD PRODUCTS ARE NOT
+RECOMMENDED, AUTHORIZED OR WARRANTED FOR USE IN MILITARY, AIR CRAFT, SPACE, LIFE SAVING, OR LIFE
+SUSTAINING APPLICATIONS, NOR IN PRODUCTS OR SYSTEMS WHERE FAILURE OR MALFUNCTION MAY RESULT IN
+PERSONAL INJURY, DEATH, OR SEVERE PROPERTY OR ENVIRONMENTAL DAMAGE.
+FUTURE ROUTINE REVISIONS WILL OCCUR WHEN APPROPRIATE, WITHOUT NOTICE. CONTACT SHANGHAI FUDAN
+MICROELECTRONICS GROUP CO., LTD SALES OFFICE TO OBTAIN THE LATEST SPECIFICATIONS AND BEFORE PLACING
+YOUR PRODUCT ORDER. PLEASE ALSO PAY ATTENTION TO INFORMATION PUBLISHED BY SHANGHAI FUDAN
+MICROELECTRONICS GROUP CO., LTD BY VARIOUS MEANS, INCLUDING SHANGHAI FUDAN MICROELECTRONICS
+GROUP CO., LTD HOME PAGE (HTTP://WWW.FMSH.COM/).
+PLEASE CONTACT SHANGHAI FUDAN MICROELECTRONICS GROUP CO., LTD LOCAL SALES OFFICE FOR THE
+SPECIFICATION REGARDING THE INFORMATION IN THIS DOCUMENT OR SHANGHAI FUDAN MICROELECTRONICS
+GROUP CO., LTD PRODUCTS.
+
+Trademarks
+
+Shanghai Fudan Microelectronics Group Co., Ltd name and logo, the ",·'" logo are trademarks or registered trademarks of
+Shanghai Fudan Microelectronics Group Co., Ltd or its subsidiaries in China.
+
+Shanghai Fudan Microelectronics Group Co., Ltd, Printed in the China, All Rights Reserved.
+
+FM11NT0X1D NFC Forum Type2 Tag compliant IC  Ver 1.0  Datasheet
+                                                                 2
+
+Contents
+
+CONTENTS .................................................................................................................................................................................. 3
+
+1  PRODUCT OVERVIEW............................................................................................................................................4
+
+   1.1 INTRODUCTION........................................................................................................................................................4
+   1.2 FEATURES ...............................................................................................................................................................4
+
+        1.2.1 Key features ..................................................................................................................................................4
+        1.2.2 RF Interface ..................................................................................................................................................4
+        1.2.3 Contact Interface ..........................................................................................................................................5
+        1.2.4 EEPROM ......................................................................................................................................................5
+        1.2.5 NFC Forum Tag 2 Type compliance.............................................................................................................5
+        1.2.6 Security .........................................................................................................................................................5
+        1.2.7 Cascaded UID...............................................................................................................................................6
+        1.2.8 Anticollision ..................................................................................................................................................6
+   1.3 BLOCK DIAGRAM.....................................................................................................................................................6
+   1.4 PINNING INFORMATION ...........................................................................................................................................7
+        1.4.1 DFN10 Pinning Assignment£¤Top View£' for FM11NT0X1DS .................................................................7
+        1.4.2 Pin description for FM11NT0X1DS..............................................................................................................7
+        1.4.3 DFN10 Pinning Assignment£¤Top View£' for FM11NT0X1DI..................................................................8
+        1.4.4 Pin description for FM11NT0X1DI ..............................................................................................................8
+
+2  ORDERING INFORMATION...................................................................................................................................9
+
+3  PACKAGE OUTLINE..............................................................................................................................................10
+
+   3.1 DFN10 ..................................................................................................................................................................10
+
+REVISION HISTORY...............................................................................................................................................................11
+
+SALES AND SERVICE.............................................................................................................................................................12
+
+FM11NT0X1D NFC Forum Type2 Tag compliant IC  Ver 1.0  Datasheet
+                                                                 3
+
+1 Product Overview
+
+1.1    Introduction
+
+       FM11NT0X1D is a NFC Forum Type 2 Tag chip offering both contactless and contact interfaces.
+       In addition to the passive NFC Forum compliant contactless interface, the IC features an
+       I2C(FM11NT0X1DI) or SPI(FM11NT0X1DS) contact interface, which can communicate with a
+       microcontroller.
+
+       FM11NT0X1D features a configurable Field Detection Pin, which provides a trigger to an
+       external device depending on the activities at the RF interface.
+
+       FM11NT0X1D can also supply power to external (low power) devices (e.g., a microcontroller)
+       via the embedded energy harvesting circuitry.
+
+       FM11NT0X1D can be used in applications such as electronic shelf lables, Home automation,
+       Consumer electronics, Healthcare, etc.
+
+       Please consult Fudan Micro Electronics Company for more documents.
+
+1.2    Features
+
+1.2.1  Key features
+1.2.2
+       Ø RF interface NFC forum Type 2 Tag compliant.
+       Ø I2C or SPI interface, zero power consumption on standby mode.
+       Ø Configurable field detection pin based on open drain implementation that can be triggered
+
+            upon the following events:
+            l A RF field presence
+            l The first Start-of-Frame
+            l The selection of the tag only
+       Ø Energy harvesting from the field to power external devices by the VOUT pin. The voltage of
+            VOUT can be configured to 1.5V, 1.8V, 2.5V or 3.3V. Current limitation ability during energy
+            harvesting can be configured.
+
+       RF Interface
+
+       Ø ISO/IEC 14443A
+       Ø Contactless transmission of data and supply energy (no battery needed)
+       Ø Operating distance: up to 100 mm (depending on various parameters as e.g. field strength
+
+            and antenna geometry)
+       Ø Operating frequency: 13.56 MHz
+       Ø Fast data transfer: 106 Kbit/s
+       Ø High data integrity: 16-bit CRC, parity, bit coding, bit counting
+
+FM11NT0X1D NFC Forum Type2 Tag compliant IC  Ver 1.0  Datasheet
+                                                                 4
+
+1.2.3   Ø True anticollision
+1.2.4   Ø 7 byte serial number (cascade level 2 according to ISO/IEC 14443-3)
+        Ø UID ASCII mirror for automatic serialization of NDEF messages
+1.2.5   Ø Automatic NFC counter triggered at read command
+1.2.6   Ø NFC counter ASCII mirror for automatic adding the NFC counter value to the NDEF
+
+              message
+        Ø ECC based originality signature
+        Ø Fast read command
+        Ø 50 pF input capacitance
+
+       Contact Interface
+
+       Ø Zero standby power consumption for contact interface
+       Ø Operating voltage for contact interface: 1.8~5.5V
+       Ø Contact interface: SPI or I2C
+       Ø Max data rate for I2C: 1Mbps
+       Ø Max data rate for SPI: 5Mbps
+
+       EEPROM
+
+        Ø 180, 540 or 924 bytes organized in 45, 135 or 231 pages with 4 bytes per page
+        Ø 144, 504 or 888 bytes freely available user Read/Write area (36, 126 or 222 pages)
+        Ø 4 bytes initialized capability container with one time programmable access bits
+        Ø Field programmable read-only locking function per page for the first 16 pages
+        Ø Field programmable read-only locking function above the first 16 pages per double page for
+
+             FM11NT021D or per 16 pages for FM11NT041D and FM11NT081D
+        Ø Configurable password protection with optional limit of unsuccessful attempts
+        Ø Anti-tearing support for capability container (CC) and lock bits
+        Ø ECC supported originality check
+        Ø Data retention of 50 years
+        Ø Write endurance 200000 cycles
+
+       NFC Forum Tag 2 Type compliance
+
+        FM11NT0X1D IC provides full compliance to the NFC Forum Tag 2 Type technical specification
+        and enables NDEF data structure configurations.
+
+       Security
+
+        Ø Manufacturer programmed 7-byte UID for each device
+        Ø Pre-programmed Capability container with one time programmable bits
+        Ø Field programmable read-only locking function
+        Ø ECC based originality signature
+        Ø 32-bit password protection to prevent unauthorized memory operations. The protected
+
+             memory's size can be configured.
+
+FM11NT0X1D NFC Forum Type2 Tag compliant IC  Ver 1.0  Datasheet
+                                                                 5
+
+1.2.7  Cascaded UID
+1.2.8
+       The anticollision function is based on an IC individual serial number called Unique IDentifier. The
+       UID of the FM11NT0X1D is 7 bytes long and supports cascade level 2 according to ISO/IEC
+       14443-3.
+
+       Anticollision
+
+       An intelligent anticollision function according to ISO/IEC 14443 allows operating more than one
+       card in the field simultaneously. The anticollision algorithm selects each card individually and
+       ensures that the execution of a transaction with a selected card is performed correctly without
+       data corruption resulting from other cards in the field.
+
+1.3    Block diagram
+
+              FM11NT0X1D                                            Clock     Anticollision                                     CT                     I2C  SDA/MOSI
+                                                                  Controller     Engine                                                                     SCL/SCLK
+       IN1                                                                                                             Arbiter  Controller             SPI
+       IN2                                                          Miller                                                                                  CSN/SSN
+                                                                   Decoder                    Protocol
+                                                    AFE                                      Processing                                                     NC/MISO
+                                                                                                                                                              WIP
+                                                                                               Engine
+                                                                                                                                                            £¤FD£'
+
+                                                                  Manchester/BPSK                                                           Mode Diag
+                                                                         Coder
+
+        GND                                                                                              EE Interface
+        VCC
+       VOUT             Power
+                    Managerment
+
+             Reset                                        LDO15                                          EEPROM
+                                                         RingOSC
+
+                                                                  Figure 1-1 FM11NT0X1D Block diagram
+
+FM11NT0X1D NFC Forum Type2 Tag compliant IC                                                                            Ver 1.0                              Datasheet
+                                                                                                                                                                       6
+
+1.4    Pinning information
+
+1.4.1  DFN10 Pinning Assignment£¤Top View£' for FM11NT0X1DS
+
+                       VCC 1                 10 WIP_FD
+                      VOUT 2                 9 MISO
+                                             8 MOSI
+                       IN1 3                 7 SCLK
+                       IN2 4                 6 SSN
+                       GND 5
+
+1.4.2                            Figure 1-2 FM11NT0X1DS DFN10 Pinning assignment
+
+       Pin description for FM11NT0X1DS
+
+       Pin No.  Pin Name Type                     Description
+           1
+           2    VCC     PWR contact interface power supply
+           3
+           4    VOUT    ANA regulated voltage output for energy harvesting
+           5
+           6    IN1     ANA RF antenna pin
+           7
+           8    IN2     ANA RF antenna pin
+           9
+                GND     GND chip ground
+          10
+                SSN     DI SPI chip-selection, low-effective
+
+                SCLK    DI SPI clock input
+
+                MOSI    DIO SPI slave data input
+
+                MISO    DO SPI slave data ouput
+
+                WIP_FD          The flag of EEPROM's write/erase by the contactless
+                        OD
+
+                                interface, or the flag of field detection. Low-effective.
+
+                     Table 1-1 FM11NT0X1DS DFN10 PIN description
+
+FM11NT0X1D NFC Forum Type2 Tag compliant IC  Ver 1.0                              Datasheet
+                                                                                             7
+
+1.4.3  DFN10 Pinning Assignment£¤Top View£' for FM11NT0X1DI
+
+                       VCC 1                  10 WIP_FD
+                      VOUT 2                  9 NC
+                                              8 SDA
+                       IN1 3                  7 SCL
+                       IN2 4                  6 CSN
+                       GND 5
+
+                Figure 1-3 FM11NT0X1DI DFN10 Pinning assignment
+
+1.4.4  Pin description for FM11NT0X1DI
+
+       Pin No.  Pin Name  Type                        Description
+           1
+           2    VCC       PWR contact interface power supply
+           3
+           4    VOUT      ANA regulated voltage output for energy harvesting
+           5
+           6    IN1       ANA RF antenna pin
+           7
+           8    IN2       ANA RF antenna pin
+           9
+                GND       GND chip ground
+          10
+                CSN       DI I2C chip-selection, low-effective
+
+                SCL       DI I2C clock input
+
+                SDA       DI/OD I2C data, pull up resistor is needed
+
+                NC        DO high-Z after power up
+
+                WIP_FD             The flag of EEPROM's write/erase by the contactless
+                          OD
+
+                                   interface, or the flag of field detection. Low-effective.
+
+                     Table 1-2 FM11NT0X1DI DFN10 PIN description
+
+FM11NT0X1D NFC Forum Type2 Tag compliant IC  Ver 1.0                  Datasheet
+                                                                                 8
+
+2 Ordering information
+
+      Type Number                            Package Name      Packing
+FM11NT0X1DS-DN-T-G                                DFN10    Tape and Reel
+
+                                             FM 11NT 0X 1 D -XXX -C -H
+
+Company Name
+FM=Shanghai Fudan Microelectronics Group Company Limited
+
+Product Family Name
+11NT=NFC TAG Product
+Memory
+
+02: about 2k bit EEPROM
+04: about 4k bit EEPROM
+08: about 8k bit EEPROM
+
+Generation number
+
+1: The second generation
+
+Product type
+D: Dual interface
+
+Package
+DN: DFN10
+
+Packing
+
+T: Tape and Reel
+U: Tube
+
+HSF code
+
+G: ROHS Compliant, Halogen-free, Antimony-free
+
+FM11NT0X1D NFC Forum Type2 Tag compliant IC     Ver 1.0    Datasheet
+                                                                      9
+
+3 Package outline
+
+3.1  DFN10
+
+            Figure 3-1 DFN10 package size
+
+FM11NT0X1D NFC Forum Type2 Tag compliant IC  Ver 1.0  Datasheet
+                                                                 10
+
+Revision history
+
+Version  Publication  Pages  Paragraph or                Revise Description
+   1.0        date      12    Illustration   Initial release
+
+          Dec.2014
+
+FM11NT0X1D NFC Forum Type2 Tag compliant IC  Ver 1.0  Datasheet
+                                                                 11
+
+Sales and Service
+
+Shanghai Fudan Microelectronics Group Co., Ltd.
+Address: Bldg No. 4, 127 Guotai Rd,
+Shanghai City China.
+Postcode: 200433
+Tel: (86-021) 6565 5050
+Fax: (86-021) 6565 9115
+
+Shanghai Fudan Microelectronics (HK) Co., Ltd.
+Address: Unit 506, 5/F., East Ocean Centre, 98 Granville Road, Tsimshatsui East, Kowloon, Hong Kong
+Tel: (852) 2116 3288 2116 3338
+Fax: (852) 2116 0882
+
+Beijing Office
+Address: Room 423, Bldg B, Gehua Building,
+1 QingLong Hutong, Dongzhimen Alley north Street,
+Dongcheng District, Beijing City, China.
+Postcode: 100007
+Tel: (86-010) 8418 6608
+Fax: (86-010) 8418 6211
+
+Shenzhen Office
+Address: Room.1301, Century Bldg, No. 4002, Shengtingyuan Hotel, Huaqiang Rd (North),
+Shenzhen City, China.
+Postcode: 518028
+Tel: (86-0755) 8335 0911 8335 1011 8335 2011 8335 0611
+Fax: (86-0755) 8335 9011
+
+Shanghai Fudan Microelectronics (HK) Ltd Taiwan Representative Office
+Address: Unit 1225, 12F., No 252, Sec.1 Neihu Rd., Neihu Dist., Taipei City 114, Taiwan
+Tel : (886-2) 7721 1889
+Fax: (886-2) 7722 3888
+
+Shanghai Fudan Microelectronics (HK) Ltd Singapore Representative Office
+Address : 237, Alexandra Road, #07-01 The Alexcier, Singapore 159929
+Tel : (65) 6472 3688
+Fax: (65) 6472 3669
+
+Shanghai Fudan Microelectronics Group Co., Ltd NA Office
+Address :2490 W. Ray Road Suite#2
+Chandler, AZ 85224 USA
+Tel : (480) 857-6500 ext 18
+
+Web Site: http://www.fmsh.com/
+
+FM11NT0X1D NFC Forum Type2 Tag compliant IC  Ver 1.0  Datasheet
+                                                                 12
+

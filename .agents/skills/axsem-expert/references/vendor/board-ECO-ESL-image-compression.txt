@@ -1,0 +1,723 @@
+Received December 3, 2020, accepted December 20, 2020, date of publication January 8, 2021, date of current version January 14, 2021.
+Digital Object Identifier 10.1109/ACCESS.2021.3049868
+
+Image Compression Using Chain Coding for
+Electronic Shelf Labels (ESL) Systems
+
+YOUNGJUN KIM 1, KI-HYUNG KIM2, (Senior Member, IEEE), AND WE-DUKE CHO3
+
+1Department of Computer Engineering, Graduate School, Ajou University, Suwon 16499, South Korea
+2Department of Cyber Security, Ajou University, Suwon 16499, South Korea
+3Department of Electrical and Computer Engineering, Ajou University, Suwon 16499, South Korea
+
+Corresponding author: Ki-Hyung Kim (kkim86@ajou.ac.kr)
+
+This work was supported in part by the Basic Science Research Program through the National Research Foundation of Korea (NRF)
+funded by the Ministry of Education, Science and Technology under Grant 2018R1D1A1B07048697, in part by the Korea Institute
+for Advancement of Technology (KIAT) grant funded by the Korea Government Ministry of Trade, Industry and Energy (MOTIE)
+(The Competency Development Program for Industry Specialist) under Grant P0008703, and in part by the Ministry of Science and ICT
+(MSIT), South Korea, through the Information Technology Research Center (ITRC) Support Program, supervised by the Institute for
+Information & Communications Technology Planning & Evaluation (IITP), under Grant IITP-2020-2018-0-01396.
+
+ABSTRACT One of the most important and recurring tasks in managing a store is to provide accurate,
+up-to-date price information to customers on the shelves. Manual updating of price tags has been a time-
+consuming, error-prone task with high labor costs. An Electronic shelf labels (ESL) system is becoming
+an attractive alternative for this task because of the dynamic-price-updating and customer's product-
+evaluation-display features. A common ESL system configuration in a retail store includes thousands of
+battery-powered ESL tags that are mostly connected wirelessly in a dense indoor environment. Raising the
+success ratio of wireless communication is essential for the system's viability due to its limited battery life.
+Most of the ESL traffic is the image data of goods that appear on the tags, and reducing the amount of the
+data is one of the most effective ways to enhance communication performance and reduce retransmission.
+This paper proposes an ESL image compression mechanism based on chain coding that utilizes ESL images'
+characteristics. The performance results show that the proposed mechanism could compress the ESL images
+smaller and decompress faster.
+
+INDEX TERMS Electronic shelf label, chain code, image compression.
+
+I. INTRODUCTION                                                         could allow retailers to adopt price strategies, such as chang-
+The e-commerce market has grown rapidly due to improved                 ing prices based on the algorithms that consider competitor
+Internet technology. Many online shopping sites have                    prices, supply and demand, and other external factors in the
+emerged, and product evaluation services such as reviews and            market. Because of these features, interests in ESL have been
+star ratings are found on most of them. From the evaluation             gradually increased around the world [3], [11].
+services, customers get much clearer information about the
+product they are considering buying, and it might lead to                  A typical ESL system configuration in a retail store
+lower return rates. Also, the manufacturer could get feedback           includes thousands of battery-powered ESL tags that are
+on the product and get an opportunity to improve it [2].                mostly connected wirelessly in a dense indoor environment.
+Providing evaluation data of products to customers at offline           Raising the success ratio of wireless communication is essen-
+stores has been possible with Electronic Shelf Labels (ESL)             tial for the system's viability due to its limited battery life [1].
+systems.                                                                Most of the ESL traffic is the image data of goods that appear
+                                                                        on the tags, and reducing the amount of the data is one of the
+   ESL system could enhance the marketing competitive-                  most effective ways to enhance communication performance
+ness of the stores. It reduces price marking errors and the             and reduce retransmission. However, there are few studies on
+management-labor costs, especially for changing the price of            how to compress images used in ESL systems. The images are
+goods on the way. The ability to change prices in real-time             often compressed with typical compression algorithms such
+                                                                        as Run-Length Encoding and deflate in the fields.
+   The associate editor coordinating the review of this manuscript and
+                                                                           In this paper, we propose a new compression mecha-
+approving it for publication was Stefano Scanzio .                      nism for compressing ESL images using chain coding. The
+
+VOLUME 9, 2021 This work is licensed under a Creative Commons Attribution 4.0 License. For more information, see https://creativecommons.org/licenses/by/4.0/  8497
+
+                                                               Y. Kim et al.: Image Compression Using Chain Coding for ESL Systems
+
+mechanism is called ECO; ESL Image Compression. It             FIGURE 1. The structure of the ESL system network.
+is specialized in compressing images consisting of simple
+figures and texts. The performance results show that our       organization that has developed protocols for transmitting
+proposed compression algorithm could enhance the compres-      monochrome images to telephone lines and data networks.
+sion ratio and the decompression time than other algorithms.   The encoding and decoding of G3 algorithms are fast and
+Increasing the compression ratio contributes to the reduction  maintains a good compression ratio for various document
+of traffic in wireless networks. A shorter decompression time  data. Besides, encoded data includes data that G3 decoder can
+means fewer computational loads on ESL devices, thereby        detect and correct errors. The G4 compresses monochrome
+prolonging ESL battery life.                                   images more efficiently. Data compressed into G4 is about
+                                                               half the size of data compressed into one-dimensional G3.
+   The remainder of this paper consists as follows: We first   The G4 is quite challenging to implement efficiently, but it
+describe the background knowledge required for the pro-        encodes at least as fast as the G3, sometimes decoding faster
+posed mechanism in Section III. Next, describe the ECO         than the G3. The G4 does not contain the synchronization
+image compression and decompression process in detail in       code used to detect errors. These algorithms are non-adaptive
+Section IV. In Section V, we measure the performance of        and do not adjust the encoding algorithm to encode each
+ECO and other compression algorithms for ESL images.           bitmap with optimum efficiency.
+Then, we present the evaluation results. Finally, we conclude
+the paper in Section VI.                                          Lempel-Ziv-Welch (LZW) is a widely known lossless data
+                                                               compression algorithm created by Abraham Lempel, Jacob
+II. RELATED WORKS                                              Ziv, and Terry Welch [21]. The algorithm was published
+Lossless image compression algorithms can be classified as     in 1984 as an improved version of the LZ78 algorithm
+follows [5], [7]:                                              published by Lempel and Ziv in 1978, and it is simple
+                                                               to implement and can achieve very high throughput when
+   Run-Length Encoding (RLE) is an elementary form of          implemented with hardware. The main operating principle
+lossless data compression that runs on sequences having the    is to register a recurring bit sequence in the dictionary
+same value occurring many consecutive times, and it encodes    and replace the repeated pattern with the dictionary's index
+the sequence to store only a single data value and its count.  code. The generated dictionary does not need to be sent
+RLE can effectively compress data containing consecutive       to the decoder, and it is reconstructed during the decoding
+symbols, but results can be larger than the original data. An  process.
+example of generalized RLE schemes is PackBits.
+                                                               III. BACKGROUND
+   Arithmetic coding is a form of entropy encoding used        In the background section, we firstly describe the overall
+in lossless data compression, in which the frequently seen     ESL system architecture on which the proposed algorithm tar-
+symbols are encoded with fewer bits than lesser-seen sym-      gets. Then, we describe the three image processing schemes
+bols. JBIG2 is a monochrome image compression algorithm        employed in the proposed algorithm in the next section.
+developed by JBIG(Joint Bi-level Image Experts Group) [24],
+and it is based on a form of arithmetic coding called the      A. ESL SYSTEM
+MQ coder, which is an adaptive binary arithmetic coder         The ESL system consists of servers, gateways and tags as
+characterized by a multiplication-free approximation and       shown in Figure 1 [10]- [12]. The server manages all ESL
+a renormalization-driven update of the probability estima-     system information, such as the product information dis-
+tor [7]. JBIG2 supports both lossy and lossless compression    played on each tag and a list of tags that communicate with
+modes, and the lossless mode can generally compress 3 - 5      each gateway. The gateway forms the wireless network and
+times more than G4 [26].                                       manages the tags that have joined the network. It also acts
+                                                               as an intermediary between the server and tags, supporting
+   Huffman coding [6] is a lossless data compression algo-
+rithm. In this algorithm, a variable-length code is assigned                                                                                                      VOLUME 9, 2021
+to input different characters. The code length is related
+to how frequently characters are used. The most frequent
+character matches the shortest code. The less frequent the
+character, the longer the code. Deflate is a lossless data
+compression algorithm that uses the LZSS [23] algorithm
+and Huffman coding. It is designed by Phil Katz and spec-
+ified in RFC1951 [22]. The data format compressed by this
+algorithm consists of a series of blocks, which correspond to
+a series of blocks of input data. Each block is compressed
+using the LZSS algorithm and Huffman coding. CCITT
+Group 3 (G3) [25] 2-Dimensional (2D) and Group 4 (G4) [26]
+are also based on the Huffman coding. These are compres-
+sion algorithms developed by CCITT (Consultative Commit-
+tee on International Telegraphy and Telephony), a standard
+
+8498
+
+Y. Kim et al.: Image Compression Using Chain Coding for ESL Systems
+
+FIGURE 2. Example of ESL tags.                                       FIGURE 4. Diagram showing how to convert 16,729 from decimal to
+                                                                     base-128 representation.
+FIGURE 3. A example of MTFT.
+                                                                     C. CHAIN CODING
+communication between them. The tag receives the image               Chain coding encodes the direction of connection between
+from the gateway and displays it on the screen. It works             pixels that form the boundary of an image object. Encoded
+in synchronization with the gateway. When the tag has no             chain code is typically compressed using algorithms such
+more work to do, it goes into sleep mode to minimize power           as RLE or Huffman Coding. Freeman's 8-directive chain
+consumption.                                                         code (FCCE), which first appeared, represents the eight adja-
+                                                                     cent directions of the pixels in each symbol [16]. Since the
+   The image displayed on the tag is designed to communicate         higher the number of symbols, the greater the number of
+the product information to customers effectively. In general,        bits required to encode each symbol, then the chain code
+the image consists of a small number of colors. Usually,             algorithms with fewer symbols appear. As one of them,
+two colors (black, white) or three colors (black, white, red,        Vertex Chain Code (VCC) [19], which uses three symbols,
+or yellow) are used as shown in Figure 2, and most areas             encodes the number of adjacent boundary pixels at the vertex.
+of the image are text. Product information such as product           In another algorithm, Three OrThogonal symbol chain code
+name, price, and reviews of customers is displayed clearly.          (3OT) [20] determines the symbol according to the direction
+Different text colors or background colors might emphasize           of the previous encoding direction. The ECO uses three sym-
+the information. The greater the number of colors that an            bols, and details are covered in Section IV-B2.
+e-paper module can express, the higher its price and power
+consumption.                                                         D. VARIABLE-LENGTH INTEGER ENCODING
+                                                                     Variable-length integers encoding (VarInt) is an algorithm
+B. MOVE-TO-FRONT TRANSFORM                                           to compress fixed-length integers into variable-length inte-
+Move-to-front Transform (MTFT) is a method to reduce the             gers to save space. Base-128 is a kind of these algorithms.
+entropy of data and compress it efficiently [14], [15]. This         Figure 4 shows how to convert 16,729 from decimal to base-
+algorithm replaces the input data with the index, and the            128 representation.
+recently used symbol is moved to the beginning of the stack.
+For example, if ``ABBBCBBBBB'' is entered in the MTFT,               IV. PROPOSED MECHANISM
+it is processed as shown in Figure 3, resulting in conversion        The main target of the mechanism is the images used in ESL
+to ``01011021000''. Meanwhile, MTFT is used in conjunc-              system. The images consist of text, barcodes, and simple fig-
+tion with Burrows-Wheller Transform (BWT) to reduce the              ures. Text usually accounts for a large portion of the images.
+entropy more efficiently [17], [18].                                 Also, there are two or three colors used in the images.
+
+VOLUME 9, 2021                                                          In this section, the data structure, the compression, and
+                                                                     decompression of ECO are described in detail, and Figure 5
+                                                                     is used to help explain these processes.
+
+                                                                     A. DATA STRUCTURE
+                                                                     The compressed file format of ECO is shown in Figure 6.  is
+                                                                     the length of data bits in the variable-length integer encoding
+                                                                     described in Section III-D. It consists of 2 bits and represents
+                                                                     a value in the range of 1 to 4, as shown in Table 1. The width
+                                                                     and height of the image are expressed in VarInt format. There
+                                                                     are three types of chain code table items, and depending on
+
+                                                                                                                                                                      8499
+
+                                                                             Y. Kim et al.: Image Compression Using Chain Coding for ESL Systems
+                                                                   TABLE 3. Color palettes for image type.
+
+FIGURE 5. A image for testing the proposed mechanism (26 × 24px).  TABLE 4. Examples of VarInt encoding.
+
+FIGURE 6. Structure of image file compressed with ECO.             palette. For example, the color palette size in Figure 5 is 2.
+                                                                   The color palettes of the images used in this paper are shown
+FIGURE 7. Variable-length Integer structure.                       in Table 3. The color palette size of an image is expressed in
+TABLE 1. Bit representation of .                                   VarInt format.
+
+TABLE 2. Bit representation of type code.                             Table Sizes is a VarInt array that stores the number of chain
+                                                                   code table items by color. Because the number of table items
+which type is the most, Type Code is represented in 1 or 2 bits,   can be 0, the value plus one is stored.
+as shown in Table 2. The description of the types is covered
+in Section IV-B3.                                                     Many fields in Figure 6 are encoded in the VarInt format.
+                                                                   The form of VarInt used in this paper consists of a series
+   Color palette is the color range of an image. White is the      of chunks comprising a sign bit and data bits, as shown
+default color, and it is not counted in the size of the color      in Figure 7. If not the last chunk, its sign bit is 0; other-
+                                                                   wise, it is 1. The -length data bit can represent an inte-
+8500                                                               ger of 2, and the range of integers a single chunk can
+                                                                   express is Equation 1. The integer used in ECO is always
+                                                                   greater than 0, the minimum value of Ii is 1. An inte-
+                                                                   ger encoded in VarInt can be decoded using Equation 2.
+                                                                   Table 4 is an example of a VarInt representation of decimal
+                                                                   values.
+
+                                                                   1  Ii  2 (0  i < n)                    (1)
+
+                                                                   n-1
+
+                                                                        Ii · 2i                           (2)
+
+                                                                   i=0
+
+                                                                   B. COMPRESSION
+                                                                   The compression process is carried out in four stages,
+                                                                   as shown in Figure 8. The number of outputs for each stage
+                                                                   is N , the size of an image's color palette.
+
+                                                                   1) COLOR SEPARATION AND BINARY MOVE-TO-FRONT
+                                                                   TRANSFORM
+                                                                   In this stage, an image is separated into several mono-color
+                                                                   images - one image for each color portion of the image.
+                                                                   Subsequently, these mono-color images are converted into
+                                                                   binary sequences: each pixel in the image changes to 0 if
+
+                                                                                                                                                                      VOLUME 9, 2021
+
+Y. Kim et al.: Image Compression Using Chain Coding for ESL Systems  Algorithm 1 Color Separation and Binary MTFT
+FIGURE 8. 4 stages of compression process.
+                                                                         Input : A pixel array P of an image
+
+                                                                         Output: A array C[0..N ] of bitstreams
+
+                                                                         /* N is color palette size                     */
+
+                                                                     1 prev  -1
+                                                                     2 C[0..N ]  0
+
+                                                                     3 for i  0 to P.length do
+
+                                                                     4 idx  Index of P[i] in color palette
+
+                                                                     5 for j  0 to N do
+
+                                                                     6   if j is not idx then
+
+                                                                     7   if prev = j then
+
+                                                                     8              C[j][i]  1
+
+                                                                     9   else if prev is not j then
+
+                                                                     10  C[j][i]  1
+
+                                                                     11 end
+                                                                     12 prev  idx
+                                                                     13 end
+
+                                                                     FIGURE 11. Downward directions (Symbol: 0, 1, 2).
+
+FIGURE 9. Color separation and binary MTFT.                          2) DOWNWARD DIRECTION CHAIN CODE (DCC)
+                                                                     The bitstreams of the previous stage are encoded using a
+FIGURE 10. Two MTF-transformed bitstreams (Bbk , Brd ).              chain code in this stage. The chain code encodes only three
+                                                                     directions, as shown in Figure 11. Because the direction of
+it is white or 1 if it is not. Then, Binary MTFT is applied          progress of the encoding is from top-left to bottom-right of an
+to the sequences: the MTFT used in this paper is named               image, only the downward directions are needed for the chain
+binary MTFT because it deals only with the sequences con-            code. After running binary MTFT, the probability of encoding
+sisting of two symbols. Figure 9 illustrates the process of          to the pixel's left and right directions is very low. A pseudo
+change in Figure 5 at this stage. A pseudo algorithm of the          algorithm of the encoding process is shown in algorithm 2.
+process is shown in algorithm 1. The algorithm performs              Table 5 is the chain code table that results from applying the
+color separation and binary MTFT in one cycle. The two               algorithm to the previous stage results.
+bitstreams in Figure 10 result from performing the algorithm
+in Figure 5.                                                         3) TRANSFORMATION OF CHAIN CODE TABLES
+                                                                     This section covers the preparatory stage for converting the
+VOLUME 9, 2021                                                       chain code tables of the previous stage into bitstreams.
+
+                                                                        Initially, each item on the tables is classified according to
+                                                                     Table 6. For example, The codes of the 2nd, 4th, 5th, 6th, 13th
+                                                                     and 15th items in CTbk are empty. Thus, the type of these
+                                                                     items is A. Similarly, the type of the 2nd and 3rd in CTrd is
+                                                                     also A. The code of the 12th item of CTbk is the same as that
+                                                                     of the 11th. So, the type of it is B. The type of the others is C.
+
+                                                                        Secondly, the i of each item in the chain code tables is
+                                                                     calculated using Equation 3. This equation ensures that i is
+                                                                     always an integer greater than zero.
+
+                                                                                        in = in + 1, if n = 1 (3)
+                                                                                                in - in-1, otherwise
+
+                                                                                                                                                                      8501
+
+                                                                 Y. Kim et al.: Image Compression Using Chain Coding for ESL Systems
+
+   Algorithm 2 Downward Direction Chain Code                     TABLE 5. Chain code tables of two bitstreams (CTbk , CTrd ).
+
+    Input : A bitstream B of a monocolor image                   TABLE 6. Item types.
+                                                                 TABLE 7. Transformed chain code tables (TTbk , TTrd ).
+    Output: Chain code table T
+
+    /* W is the width of the image              */
+
+1 c0
+2 L  B.length
+
+3 for i  0 to L do
+
+4 if B[i] is 1 then
+
+5       B[i]  0
+
+6       T [c].i  i
+
+7       T [c].code  empty
+
+8       ji
+
+9       while j < L do
+
+10      K j+W
+
+11      if K < L and B[K ] = 1 then
+
+12             B[K ]  0
+
+13             T [c].code = T [c].code + 0
+
+14             jK
+
+15      else if K - 1 < L and B[K - 1] = 1 then
+
+16             B[K - 1]  0
+
+17             T [c].code = T [c].code + 1
+
+18             jK -1
+
+19      else if K + 1 < L and B[K + 1] = 1 then
+
+20             B[K + 1]  0
+
+21             T [c].code = T [c].code + 2
+
+22             jK +1
+
+23      else
+
+24             break
+
+25      end
+
+26      cc+1
+
+27 end
+
+   Thirdly, the n of the B type items are calculated, and        a: ENCODING TRANSFORMED CHAIN CODE TABLES AS
+the Length of the code of C type items are measured. The         BITSTREAMS
+                                                                 Each item in the transformed chain code tables is encoded
+  n is the number difference between an item and the pre-        as bitstreams, in order of Type, i, n, or Length. Before
+vious item with the same code. Through the steps so far,
+TTbk and TTrd are obtained from CTbk and CTrd , as shown                                                                                                            VOLUME 9, 2021
+in Table 7.
+
+   Lastly, The codes of the C type items are combined into
+one. For example, the concatenated chain codes (CCbk , CCrd )
+obtained from CTbk and CTrd are as follows:
+
+   CCbk = 1010020000010120210100202220110002201
+              00102002000
+
+   CCrd = 2002000001022000000011
+
+4) BITSTREAM ENCODING AND FILE FORMATTING
+This section covers the final stage of the compression process.
+The transformed chain code tables and the concatenated chain
+codes are encoded as bitstreams, and the results are formatted
+as shown as Figure 6. In the example of this stage, the 
+is 1.
+
+8502
+
+Y. Kim et al.: Image Compression Using Chain Coding for ESL Systems
+TABLE 8. Chain code bit transformation table.
+
+encoding Type, it is necessary to identify which type of item             FIGURE 12. 4 stages of decompression process.
+has the most frequent. The most frequent type is encoded as 0.
+The following type in alphabetical order is encoded as 10, and                +TypeCode + VarInt(ColorPaletteSize)
+the other is encoded as 11. Subsequently, i, n and Length                     +VarInt(ThesizeofTTbk + 1)
+are encoded as VarInt. For example, The most frequent type                    +VarInt(ThesizeofTTrd + 1)
+of item on Table 7 is C, so this type is encoded as 0, A type is           = 00 + 01000111 + 01000011
+encoded as 10, and B type is encoded as 11. As a consequence,                 +11 + 11
+the table is encoded as follows:                                              +00000011
+                                                                              +0110
+E(TTbk ) = 001010101111010011100101011011100001                            = 0001000111010000111111000000110110
+               00101001010110100000011001101011100001                      Comp(Figure 5)
+                                                                           = Header + E(TTbk ) + E(TTrd ) + E(CCbk ) + E(CCrd )
+               011100011100000011100011000011000110                        = 000100011101000011111100000011011000101010111
+                                                                              10100111001010110111000010010100101011010000
+               00001000100101011111010000101010001                            00110011010111000010111000111000000111000110
+                                                                              000110001100000100010010101111101000010101000
+               1000101011011100100000111                                      110001010110111001000001110000000010001110100
+                                                                              111000101001010110001010111000111110010001110
+E(TTrd ) = 00000000100011101001110001010                                      100010111011110010001101111111101011000011111
+               01010110001010111000111                                        010001001100110001110011101000111111000100110
+
+b: ENCODING CONCATENATED CHAIN CODES TO                                   C. DECOMPRESSION
+BITSTREAMS                                                                The decompression process is carried out in four stages,
+                                                                          as shown as Figure 12.
+The concatenated chain codes are encoded as bitstreams
+using Table 8. The encoding result of the current symbol                  1) HEADER PARSING
+depends on the previous symbol. The series of symbol 0 is                 At this stage, the header part of the compressed image file
+abbreviated to symbol R if its length is longer than Rmin. Rmin           is parsed. The headers of the Comp(Figure 5) are parsed
+can be obtained as Equation 4.                                            in the following order: (1) Obtain the value of  from the
+                                                                          first two bits. These two bits are ``00'', so  is 1. (2) Parse
+                Rmin =  + 3                                          (4)  Width and Height. These are encoded as VarInt. So, split the
+                                                                          data into a chunk unit and read them until the first bit of a
+   The  used in the example is 1, so Rmin is 4. Therefore,                chunk is 1. As a result, Width is ``01000111'', and Height is
+the series of symbol 0 in the length of more than four is abbre-          ``01000011''. Decoding these two values using Equation 2
+viated. Meanwhile, behind the symbol R comes the VarInt                   results in 26 and 24. (3) Read two bits to find out the most
+encoded difference between the length of the symbol 0 series              frequent type of chain code table items. These two bits are
+and the Rmin. There is only one series in CCbk that is over four
+in length, and its length is five. That is consequently encoded                                                                                                            8503
+in 1010. CCbk and CCrd are finally encoded as bitstreams as
+follows:
+
+E(CCbk ) = 1100100011101000101110111100100011011
+               1111110101100001111101000100110011000
+
+E(CCrd ) = 1110011101000111111000100110
+
+c: FILE FORMATTING
+This step creates a header and associates it with the bitstreams
+in the previous stage to make a compressed file as Figure 6.
+For example, the header of Figure 5 and the compressed result
+is as follows. It is 358 bits in size, about 45 bytes.
+
+ Header
+
+ =  + VarInt(Width) + VarInt(Height)
+
+VOLUME 9, 2021
+
+                                                                    Y. Kim et al.: Image Compression Using Chain Coding for ESL Systems
+
+    Algorithm 3 Decoding Concatenated Chain Codes With           Algorithm 4 Reverse Binary Move-to-Front Transform
+                                                                  Input : A bit array B
+    a Transformed Chain Code Table                                Output: A bit array B
+
+    Input : A transformed chain code table TT
+
+    Output: A bitstream B                                        1 p0
+
+    /* W is the width of the header            */
+
+    /* H is the height of the header */                          2 for i  0 to B.length do
+                                                                 3 b  B[i]
+1 B[0..W  H ]  0
+2 idx  -1                                                        4 if b is 1 then
+
+3 for i  0 to TT .length do                                      5       if p is 1 then
+
+                                                                 6       p0
+
+4 item  TT [i]                                                   7       else
+
+5 idx  idx + item. i                                             8       p1
+
+6 B[idx]  1                                                      9 B[i]  p
+
+7 if item.type is A then                                         10 end
+
+8       continue
+
+9 else if item.type is B then
+
+10      code  TT [i + item. n].code                               Algorithm 5 Reverse Binary Move-to-Front Transform
+                                                                  Using Transition Table
+11      length  TT [i + item. n].length
+                                                                   Input : A byte array B
+12 else if item.type is C then                                     Output: A byte array B
+
+13      item.code  getChainCodes(item.length)                    1 T = Transition table of two dimensional array format (2
+                                                                   × 256)
+14      code  item.code
+                                                                 2 p0
+15      length  item.length
+                                                                 3 for i  0 to B.length do
+16 c  idx                                                        4 B[i], p  T (B[i], p)
+                                                                 5 end
+17 for j  0 to length do
+
+18      if code[j] is 0 then
+
+19      cc+W
+
+20      B[c]  1
+
+21      else if code[j] is 1 then
+
+22      cc+W -1
+
+23      B[c]  1
+
+24      else if code[j] is 2 then
+
+25      cc+W +1
+
+26      B[c]  1
+
+27 end
+
+28 end
+
+                                                                 FIGURE 14. Images of decompression results (Obk , Ord ).
+
+FIGURE 13. Decompression results (Obk , Ord ).                   is 2, so two table-sizes are read. The two read values are
+                                                                 ``00000011'' and ``0110'', and these are decoded into 16 and
+``11'', so the most frequent type is C. This value is used       5. The values reduced by 1 to these are the size of the chain
+when decoding chain code tables. (4) Parse the color palette     code tables. As a result, the size of the first chain code table
+size encoded as VarInt. The encoded value is ``11'', so the      is 15, and the size of the second chain code table is 4.
+color palette size is 2. (5) Read the table-size as many times
+as the color palette size. In this case, the color palette size  2) DECODING TRANSFORMED CHAIN CODE TABLES
+                                                                 At this stage, the transformed chain code tables are decoded.
+8504                                                             To get a transformed chain code table, read the transformed
+                                                                 chain code table item repeatedly as its table size in the header.
+                                                                 For example, since we knew the size of the first and second
+                                                                 tables in the previous stage, parse items as much as the table
+                                                                 size from the remaining data Rstage1 as shown below.
+
+                                                                 Rstage1 = 0010101011110100111001010110111000010010
+
+                                                                                                                                                                    VOLUME 9, 2021
+
+Y. Kim et al.: Image Compression Using Chain Coding for ESL Systems
+
+FIGURE 15. The ESL images for the performance evaluation.            size as the image, initialized to zero, and analyze the items
+                                                                     in the transformed chain code table one by one to change part
+            100101011010000001100110101110000101110                  of the bitstream to one. Depending on the decoded item's
+            001110000001110001100001100011000001000                  type, the concatenated chain codes are also decoded using
+            10010101111101000010101000110001010110                   Table 8. A pseudo algorithm of the decoding process is shown
+            1110010000011100000000100011101001110001                 in algorithm 3. For example, the i of the first item in TTbk is
+            01001010110001010111000111110010001110                   62, so Bbk [61] is set to 1. Since the type of this item is C and
+            100010111011110010001101111111101011000                  Length is 1, one code is decoded from Rstage2 using Table 8.
+            01111101000100110011000111001110100011                   And the result is 1, so Bbk [87] is set to 1. As a result of this
+            1111000100110                                            stage, Bbk and Brd are obtained as shown in Section IV-B1.
+
+   The first item of the first transformed chain code table is       4) REVERSE BINARY MTFT
+decoded as follows. (1) The bit part of Type is ``0''. So the        This stage is the final of the decompression process. Reverse
+most frequent type is C. (2) Parse the i encoded as VarInt.          Binary MTFT is performed on the bitstream generated from
+It is ``0101010111''. Therefore, the i is 62. (3) Because the        the previous stage. A pseudo algorithm of the transform
+type of this item is C, Length should also be parsed. The bit        process is shown in algorithm 4. It could be improved to work
+part of Length is ``10'', so the Length is 1. The decoding of        faster like algorithm 5, which uses more memory. Bbk and
+the first item is complete. After parsing all the items in the       Brd are converted to Obk and Ord in this stage as shown in
+same way, Table 7 is created and the remaining data Rstage2 is       Figure 13.
+as follows.
+                                                                        These represent images, as shown in Figure 14. These
+Rstage2 = 110010001110100010111011110010001101111                    bitstreams may be passed on to the e-paper module and used
+             11110101100001111101000100110011000                     but may require additional conversion processes. This process
+             1110011101000111111000100110                            depends on the manufacturer of the module and is not covered
+                                                                     in this paper.
+3) DECODING CONCATENATED CHAIN CODES
+After the previous stage, the remaining encoded parts are            V. PERFORMANCE EVALUATION
+the concatenated chain codes. In the decoding process of the         In this section, we evaluated the performance of the pro-
+encoded parts, we first create a bitstream that is the same          posed algorithm with six well-known compression algo-
+                                                                     rithms, such as PackBits, LZW, Deflate, G3, G4, and JBIG2.
+VOLUME 9, 2021
+                                                                                                                                                                      8505
+
+                                                                      Y. Kim et al.: Image Compression Using Chain Coding for ESL Systems
+
+TABLE 9. The size and color composition information of the images.
+
+Three performance items were measured: compressed file                repeated 1000 times, and the average value was used for the
+size, compression time, and decompression time.                       comparison.
+
+   Figure 15 shows thirty-six images used for the evaluation.            Table 10 shows the comparison of compressed image sizes
+The images are classified into three categories by the number         with each algorithm. For the monochrome images, ECO
+of colors: monochrome, 3-colors, and 8-colors. Note that              and JBIG2 showed the lowest BPP (bits-per-pixel), indicat-
+due to ESL tags' limited resource constraints, only limited           ing the highest compression ratio. However, for the 3-color
+colored tags have been deployed in the markets. The size              and 8-color images, ECO showed the highest compression
+and color composition information of the images is shown              ratio. It can be seen that the larger the color palette's size,
+in Table 9.                                                           the better the ECO's compression efficiency than the other
+                                                                      algorithms.
+   In the performance evaluation, we converted multi-colored
+images into multiple monochrome images because G3, G4,                   Table 11 shows the comparison of the compression time
+and JBIG2 can compress only monochrome images. For                    for each algorithm. Figure 17 shows the average compression
+PackBits, LZW, and Deflate, we compared two different                 time for each group of the images. For the monochrome
+versions of images: one multi-colored image (A) and multi-            images, ECO and JBIG2 showed longer compression time
+ple converted monochrome images (B). For instance, Pack-              than the other algorithms. However, for the 3-color and
+Bits (A) refers to the performance result for the original            8-color images, ECO showed shorter compression time than
+multi-colored image, while PackBits (B) refers to the result          JBIG2.
+for the converted monochrome images.
+                                                                         Table 12 shows the comparison of the decompression time
+   For the evaluation, we used the source codes of all the            for each algorithm. Figure 18 shows the average decompres-
+compression algorithms except ECO from JBIG2 [27], [28]               sion time for each group of the images. For the monochrome
+and LibTiff [29]. The performance of all algorithms was               and 3-color images, ECO showed the shortest decompression
+measured in the same environment.1 All measurements were              time. For the 8-color images, PackBits(A), LZW(A), and
+                                                                      Deflate(A) showed shorter decompression times than ECO;
+   1Hardware: Intel(R) Core(TM) i7-5650U CPU @ 2.20GHz; 2 Cores,      Note that they showed relatively lower compression ratio than
+4 logical Processors; 8 GB RAM Software: Xcode version 11.2.1, macOS  ECO as shown in Table 10.
+10.15 (Catalina)
+
+8506                                                                  VOLUME 9, 2021
+
+Y. Kim et al.: Image Compression Using Chain Coding for ESL Systems
+TABLE 10. Compressed size of the images (in bytes).
+
+FIGURE 16. Average bits-per-pixel comparison for each group.         8507
+VOLUME 9, 2021
+
+                                                                                     Y. Kim et al.: Image Compression Using Chain Coding for ESL Systems
+
+TABLE 11. Compression time comparison (in milli-seconds).
+
+  FIGURE 17. Average compression time comparison for each group (in milli-seconds).  VOLUME 9, 2021
+8508
+
+Y. Kim et al.: Image Compression Using Chain Coding for ESL Systems
+TABLE 12. Decompression time comparison (in milli-seconds).
+
+  FIGURE 18. Average decompression time comparison for each group (in milli-seconds).  8509
+VOLUME 9, 2021
+
+                                                                   Y. Kim et al.: Image Compression Using Chain Coding for ESL Systems
+
+   FIGURE 19. Performance results of the algorithms for the images with Label12, 24, and 36.
+TABLE 13. Compression ratio comparison of the algorithms.
+
+   In Figure 19, we compared the algorithms on the images          ECO showed relatively lower performance variations for the
+with the same contents but different color-palettes. For           color-palette change.
+instance, Label12, Label24, and Label36 have the same char-
+acteristics, such as size, structure, and contents, but different     Table 13 shows the comparison of the compression ratio
+colors. Overall, as the number of colors increases, all of         CR of each algorithm which is defined by Equation 5. It also
+the algorithms showed the lower compression ratio and took         shows CR/CRECO, a relative compression ratio to ECO. For
+more time in compression and decompression. Notice that            instance, if it is greater than 1, it indicates that the algorithm
+                                                                   generates smaller compressed image than ECO. Notice that
+
+8510                                                                                          VOLUME 9, 2021
+
+Y. Kim et al.: Image Compression Using Chain Coding for ESL Systems
+
+the relative compression ratios are less than 1 in most cases                          [16] H. Freeman, ``On the encoding of arbitrary geometric configurations,'' IRE
+                                                                                              Trans. Electron. Comput., vol. 2, pp. 260-268, Jun. 1961.
+in Table 13.          uncompressed size
+                                                                                       [17] B. Zalik and N. Lukac, ``Chain code lossless compression using move-to-
+                CR =  compressed size                                (5)                      front transform and adaptive run-length encoding,'' Signal Process., Image
+                                                                                              Commun., vol. 29, no. 1, pp. 96-106, Jan. 2014.
+VI. CONCLUSION
+An Electronic shelf labels (ESL) system is becoming an                                 [18] B. Zalik, D. Mongus, K. R. Zalik, and N. Lukac, ``Chain code compression
+attractive alternative for managing up-to-date price tag infor-                               using string transformation techniques,'' Digit. Signal Process., vol. 53,
+mation because of the dynamic-price-updating and cus-                                         pp. 1-10, Jun. 2016.
+tomer's product-evaluation-display features. A common ESL
+system configuration in a retail store includes thousands of                           [19] E. Bribiesca, ``A new chain code,'' Pattern Recognit., vol. 32, no. 2,
+battery-powered ESL tags that are mostly connected wire-                                      pp. 235-251, 1999.
+lessly in a dense indoor environment. Raising the success
+ratio of wireless communication is essential for the system's                          [20] H. Sanchez-Cruz and R. M. Rodrguez-Dagnino, ``Compressing bi-level
+viability due to its limited battery life. In this paper, we pre-                             images by means of a 3-bit chain code,'' Opt. Eng., vol. 44, no. 9, pp. 1-8,
+sented ECO, a new chain coding based image compression                                        2005.
+algorithm suitable for the ESL system. We evaluated the per-
+formance of ECO against six other well-known algorithms.                               [21] T. A. Welch, ``A technique for high-performance data compression,'' Com-
+ECO showed the best results in the compression ratio and the                                  puter, vol. 17, no. 6, pp. 8-19, Jun. 1984.
+decompression time in most cases. Achieving high compres-
+sion ratio and short decompression time together is one of the                         [22] P. Deutsch, DEFLATE Compressed Data Format Specification Version 1.3,
+most important factors for prolonging the battery lifetime of                                 document RFC 1951, 1996.
+ESL tags.
+                                                                                       [23] J. A. Storer and T. G. Szymanski, ``Data compression via textual substitu-
+REFERENCES                                                                                    tion,'' J. ACM, vol. 29, no. 4, pp. 928-951, 1982.
+
+ [1] H. A. Al-Kashoash, F. Hassen, H. Kharrufa, and A. H. Kemp, ``Analytical           [24] JBIG2 Bi-Level Image Compression Standard, Standard ISO/IEC 14492,
+       modeling of congestion for 6LoWPAN networks,'' ICT Exp., vol. 4, no. 4,                ITU-T Rec. T.88, 2000.
+       pp. 209-215, 2018.
+                                                                                       [25] Standardization of Group 3 Facsimile Terminals for Document Transmis-
+ [2] N. Sahoo, C. Dellarocas, and S. Srinivasan, ``The impact of online product               sion, document ITU-T Rec. T.4, 2003.
+       reviews on product returns,'' Inf. Syst. Res., vol. 29, no. 3, pp. 723-738,
+       Sep. 2018.                                                                      [26] Facsimile Coding Schemes and Coding Control Functions for Group 4
+                                                                                              Facsimile Apparatus, document ITU-T Rec. T.6, 1988.
+ [3] J. Xu and W. Li, ``Design of electronic shelf label based on electronic
+       paper display,'' in Proc. 3rd Int. Conf. Consum. Electron., Commun. Netw.,      [27] A. Langley. (2019). JBIG2 encoder. GitHub. [Online]. Available:
+       Nov. 2013, pp. 250-253.                                                                https://github.com/agl/jbig2enc
+
+ [4] D. Rohm, M. Goyal, H. Hosseini, A. Divjak, and Y. Bashir, ``A simulation          [28] R. Giles. (2019). JBIG2 decoder. GitHub. [Online]. Available:
+       based analysis of the impact of IEEE 802.15.4 MAC parameters on the                    https://github.com/rillian/jbig2dec
+       performance under different traffic loads,'' Mobile Inf. Syst., vol. 5, no. 1,
+       pp. 81-99, 2009.                                                                [29] (2019). LibTiff--TIFF Library and Utilities. [Online]. Available:
+                                                                                              https://http://www.libtiff.org
+ [5] M. A. Rahman and M. Hamada, ``Lossless image compression techniques:
+       A state-of-the-art survey,'' Symmetry, vol. 11, no. 10, p. 1274, Oct. 2019.                                    YOUNGJUN KIM received the B.S. degree in
+                                                                                                                      information and computer engineering from Ajou
+ [6] D. Huffman, ``A method for the construction of minimum-redundancy                                                University, in 2010, where he is currently pursuing
+       codes,'' Proc. IRE, vol. 40, no. 9, pp. 1098-1101, Sep. 1952.                                                  the Ph.D. degree with the Department of Com-
+                                                                                                                      puter Engineering. His research interests include
+ [7] K. Khursheed, M. Imran, N. Ahmad, and M. O'Nils, ``Selection of bi-                                              designing protocols and techniques for the massive
+       level image compression method for reduction of communication energy                                           Internet of Things (IoT).
+       in wireless visual sensor networks,'' Proc. SPIE, vol. 8437, May 2012,
+       Art. no. 84370M.                                                                                               KI-HYUNG KIM (Senior Member, IEEE)
+                                                                                                                      received the M.S. and Ph.D. degrees in electri-
+ [8] J. Sung, ``End of paper labels: Emerging smart labels toward Internet                                            cal and electronic engineering from the Korea
+       of Things,'' in Proc. IEEE 2nd World Forum Internet Things (WF-IoT),                                           Advanced Institute of Science and Technology
+       Dec. 2015, pp. 216-221.                                                                                        (KAIST), in 1990 and 1996, respectively. He is
+                                                                                                                      currently a Professor with the Department of
+ [9] IEEE Standard for Local and Metropolitan Area Networks--Part 16: Air                                             Cyber Security, College of Information Technol-
+       Interface for Fixed Broadband Wireless Access Systems, IEEE Standard                                           ogy. His research interests include blockchain,
+       802.16-2004, IEEE 802.16 Working Group, 2004.                                                                  cybersecurity, the IoT, and embedded systems.
+
+[10] C. H. Zhou, P. Mei, L. W. Huang, K. Z. Liu, and Y. Q. Wen, ``An elec-                                            WE-DUKE CHO received the M.S. and Ph.D.
+       tronic shelf label system based on WSN,'' Adv. Mater. Res., vol. 765,                                          degrees in electrical and electronic engineering
+       pp. 1718-1721, Sep. 2013.                                                                                      from the Korea Advanced Institute of Science
+                                                                                                                      and Technology (KAIST), in 1983 and 1987,
+[11] J.-S. Park and B.-J. Jang, ``Electronic shelf label system employing a                                           respectively. He is currently a Professor with the
+       visible light identification link,'' in Proc. IEEE Radio Wireless Symp.                                        Department of Electronics Engineering, College of
+       (RWS), Jan. 2016, pp. 219-222.                                                                                 Information Technology. He is also the Director
+                                                                                                                      of the Ubiquitous Convergence Research Institute
+[12] J. Ock, H. Kim, H.-S. Kim, J. Paek, and S. Bahk, ``Low-power wireless                                            (UCRI). He is also with the Life-Care Science
+       with denseness: The case of an electronic shelf labeling system--Design                                        Laboratory, Ajou University, South Korea. He is
+       and experience,'' IEEE Access, vol. 7, pp. 163887-163897, 2019.                 also the Director of the Korea Association of Smart Home (KASH). He is
+                                                                                       also an Adjunct Professor with Stony Brook University (SUNY), Stony
+[13] C. E. Sannon, ``A mathematical theory of communication,'' Bell Syst. Tech.        Brook, NY, USA. He presented a talk entitled ``A design for lifestyle analyzer
+       J., vol. 27, no. 3, pp. 379-423, 1948.                                          based on IoT Big data with Human Behavior Recognition''. His research
+                                                                                       interests include signal processing, the IoT data pattern modeling, and care
+[14] B. Y. Ryabko, ``Data compression by means of a `book stack,''' Problemy           system design.
+       Peredachi Informatsii, vol. 16, no. 4, pp. 16-21, 1980.
+                                                                                                                                                                                        8511
+[15] B. Y. Ryabko, ``Comments to: `A locally adaptive data compression
+       scheme' by JL Bentley, DD Sleator, RE Tarjan, and VK Wei,'' Commun.
+       ACM, vol. 30, no. 9, pp. 792-796, 1987.
+
+VOLUME 9, 2021
+

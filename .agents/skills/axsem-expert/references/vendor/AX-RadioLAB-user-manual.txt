@@ -1,0 +1,966 @@
+AND9356/D
+
+AX-RadioLAB                                                                                      www.onsemi.com
+
+for AX5043 User Manual                                                              APPLICATION NOTE
+
+Introduction:                                                     The first step in working with AX-RadioLAB is to create
+  The AX-RadioLAB is hands on configuration and                 a new AX-RadioLAB project. Firmware projects
+                                                                implementing the TX and RX mode selected in the
+firmware source code generation tool for the AX5043             AX-RadioLAB GUI are created inside your project
+transceiver IC.                                                 directory.
+
+  It creates C-code firmware projects based on the                The AX-RadioLAB GUI makes it easy to configure
+AXRadio2 API (described in DOCU/AXRadioV2API.pdf),              physical parameters of the wireless link as well as the
+which demonstrate the use of the AX5043 transceiver             framing format and various possible functions of the
+together with the AX8052F100 micro controller for packet        AX5043 general purpose pins.
+transmission and reception in several modes. Packets can be
+transmitted periodically or upon pressing a button. On the        Optionally you can view and modify the generated
+receiver side the available options are:                        firmware source code using the AXCode::Blocks IDE. The
+                                                                firmware also makes a nice starting point for your own
+· RX continuous (RX is always on)                               development. You can always use AX-RadioLAB
+· Wake on Radio                                                 to modify wireless parameters of your project, even after
+· RX Synchronized with TX (The RX is on for the time            modifying the firmware.
+
+   in which packets are expected only).
+
+  Optionally received packets can be answered with
+an acknowledge packet in all modes.
+
+  AX-RadioLAB allows direct downloading of the created
+firmware to AXSEM DVK-2 main boards and AXSEM
+F143-MINI-DVM, where it can be run and tested
+immediately. A dedicated firmware project implements
+basic tests like putting the transmitter into CW mode or
+measuring bit error rates.
+
+                                                  INSTALLATION
+
+Software Requirements:                                          installed, the installer automatically uninstalls previous
+   For AX-RadioLAB to work correctly you need to install        versions of AX-RadioLAB. Run setup.exe again to install.
+                                                                At the end of the each process you will be asked to reboot
+the AX8052-IDE first. Install all sub-components of the         your computer. This is not necessary.
+AX8052-IDE (AXSDB, SDCC, driver, AXCode::Blocks).
+
+  Execute the setup.exe to start the installation
+of AX-RadioLAB. If AX-RadioLAB was already
+
+© Semiconductor Components Industries, LLC, 2016             1  Publication Order Number:
+                                                                                   AND9356/D
+July, 2016 - Rev. 4
+
+                                                   AND9356/D
+
+                                                    RADIOLAB MAIN PANEL
+
+                                                                                                                                                                           2.
+1.
+
+3.                                                                        3.
+
+       4.  5.  6.  7.                                        8.  9.  10.
+
+                   Figure 1. Radiolab Main Panel
+
+  Start a new project using the Project menu. You have              on. This mode is used for AC-powered
+to specify a project directory where AX-RadioLAB will               systems and allows asynchronous packet
+create firmware projects called MASTER, SLAVE and                   reception with low latency.
+TESTS. to open an existing project use the directory
+chooser dialog to descend into the project directory (where      · Wake on Radio:
+the axradiolabstate.xml file resides) and hit done.
+                                                                    Packet reception with the receiver waking up
+NOTE:  Do not open the template_firmware_5043                       periodically and going immediately back
+       project inside the AX-RadioLAB installation                  to sleep if no signal is detected. The wake-up
+       directory, as this is the template from which the            is driven by the AX5043's low power RC
+       firmware is copied upon creating a new project.              oscillator and does not require any MCU
+                                                                    activity. The MCU is only woken up once
+  Follow through the main panel step-by-step to configure           a valid packet has been received. This mode
+your project:                                                       is well suited e.g. for infrequently operated
+                                                                    remote control applications and achieves very
+     1. Select the TX Operation Mode:                               low (idle) current consumption. Mind that
+                                                                    preambles longer than the time between RX
+         · TX Periodic (LPOSC):                                     wake-ups are necessary. The latter also
+                                                                    determines the RX latency.
+              Periodic packet transmission driven by the
+              MCU's low power RC oscillator.                     · RX Synchronized with TX:
+
+         · TX Periodic (LPXOSC):                                    Periodic packet reception enabling the
+                                                                    receiver only for the time slots in which
+              Periodic packet transmission driven by the            packets are expected. This is appropriate
+              MCU's low power 32kHz tuning fork crystal             whenever periodic data transmission
+              oscillator                                            is required. Timing is driven by the MCU's
+                                                                    low power 32 kHz tuning fork crystal
+         · TX on Demand:                                            oscillator and thus requires MCU activity. It
+
+              Packet transmission upon pressing a button.
+
+         · Select the RX Operation Mode:
+
+              RX Continuous (RX always on): Packet
+              reception keeping the receiver continuously
+
+                   www.onsemi.com
+                                2
+
+AND9356/D
+
+        is mandatory to use TX periodic (LPXOSC) on       4. Calculate Registers calculates register values
+        the transmitter side.                                to configure the AX5043 according to your Pin
+                                                             Configuration, PHY and Framing selections.
+    · TX and RX modes are summarized in Table 1.
+                                                          5. After calculating register values you can
+        Wake on Radio and RX Synchronized with               optionally tweak values using Expert Settings.
+        TX modes are described in more detail in their       Click values in the rightmost column of the Expert
+        respective sections                                  Settings panel to edit. Tweaked values are sticky.
+                                                             They keep overriding the defaults even if the
+    · The MASTER and SLAVE firmware projects                 defaults have changed (e.g. upon making changes
+                                                             in the PHY panel and hitting Calculate Registers).
+        are created in your project directory (if not        Tweaked values are highlighted in yellow (or
+        present yet) upon hitting the Save & Write           green if they accidentally correspond to the default
+        Output button. Manual changes in the                 values). The changes active indicator in the main
+        firmware projects are never overwritten by the       panel reminds you that tweaked values are being
+        GUI except for the configuration files               used. Double click a tweaked register (column 1, 2
+        in your_projectdir/AX_Radio_Lab_output/.             or 3) in order to return to the default value. Hitting
+                                                             Reset Changes at the bottom of the Expert Settings
+    · The Send acknowledge checkbox causes                   panel or clicking the changes active indicator
+                                                             in the main panel drops all tweaks.
+        the slave module ("RX") to answer successful
+        packet reception with an acknowledge packet.      6. Save & Write Output
+        The master module ("TX") tries to receive
+        the acknowledge packet. The smiley on                 · Saves configuration and register values into
+        the LCD indicates whether the acknowledge
+        packet has been received. Failure is also                 your projectdir/axradiolabstate.xml, allowing
+        signaled via LED2. Optionally the MASTER                  you to reopen your project with
+        can retransmit a packet if acknowledge fails.             AX-RadioLAB.
+        This feature is enabled by setting Max number
+         of retransmissions to a nonzero value.               · Outputs files config.c, configmaster.[ch] and
+        The acknowledge mode is the reason why
+        the terminology MASTER and SLAVE                          configslave.[ch] to your_projectdir/
+        (rather than TX and RX) has been chosen.                  AX_Radio_Lab_output/. These files are
+        The acknowledge feature can be selected in all            included by / linked to the MASTER, SLAVE
+        TX and RX modes.                                          and TESTS firmware projects.
+2. Estimated current consumption is displayed here.
+   The peak current values are drawn when TX or               · The firmware projects MASTER and SLAVE
+   RX are running. For duty cycled modes the
+   estimated average currents are also displayed.                 are written into your project directory if they
+   in Wake on Radio mode the average RX current                   are not present yet.
+   is the idle current, assuming a silent channel. in RX  7. The Edit MASTER and Edit SLAVE buttons open
+   Synchronized with TX mode receiving a packet              the corresponding firmware project from your
+   in at each wake-up is assumed. If Send                    project directory using the AXCode::Blocks IDE.
+   acknowledge is selected the average RX current            This is handy for tweaking the firmware code, but
+   also includes transmission of the default                 touching the code is not necessary for first
+   acknowledge packet and the average TX current             experiments with packet transmission. Instead you
+   includes the corresponding receive current.               can download the demo firmware to the MCU
+   Currents drawn by TCXO and MCU are not                    directly from AX-RadioLAB (see next point).
+   included. TX currents assume a matching network           Button labels adapt to show which firmware
+   optimized for the selected power level. Mind that         projects are currently used.
+   the default matching network on the AXSEM RF           8. The Compile & Download MASTER and Compile
+   modules is not optimal for reduced power levels.          & Download SLAVE buttons compile and
+   This leads to reduced power amplifier efficiency          download the corresponding firmware onto the
+   and thus currents higher than estimated.                  main board connected to the AXDBG USB debug
+3. Buttons to open configuration panels for Kit              adapter. Note that Compile & Download does not
+   Configuration, Pin Configuration, PHY layer and           work if AXCode::Blocks is currently opened.
+   Framing. The PHY panel covers physical                    In this case just use Save & Write Output and then
+   parameters of the wireless link such as carrier           compile and download the code from within
+   frequency, data rate and the modulation scheme.           AXCode::Blocks.
+   The Framing panel deals with packet delimiting,        9. Opens the Basic & Regulatory Tests panel,
+   CRC etc.                                                  allowing you to transmit CW, simple patterns or
+                                                             random data and to measure bit error rates.
+
+www.onsemi.com
+             3
+
+                                         AND9356/D
+
+10. Opens the Basic & Regulatory Tests panel,
+    allowing you to transmit CW, simple patterns or
+    random data and to measure bit error rates.
+
+Table 1. SUMMARY of TX AND RX MODES AND CORRESPONDING FIRMWARE PROJECTS.
+
+Mode, Purpose                                        Used Timer                                 Radio/MCU Activity (Note 1)
+
+TX periodic (LPOSC),                     MCU libmfwtimer infrastructure with timer 0  MCU periodically wakes up, powers up
+Periodic packet transmission             clocked by MCU LPOSC (640 HZ RC              the TX and initiates packet transmission
+                                         oscillator)
+
+TX periodic (LPXOSC),                    MCU libmfwtimer infrastructure with timer 0  MCU periodically wakes up, powers up
+Periodic packet transmission (used with  clocked by MCU LPXOSC (32 kHz tuning         the TX and initiates packet transmission.
+RX Synchronized with TX)                 fork crystal oscillator)
+
+TX on demand,                            MCU libmfwtimer infrastructure with timer 0  MCU wakes up upon pressing a button,
+Packet transmission upon pressing        clocked by MCU LPOSC (640 HZ RC              powers up the TX and initiates packet
+a button or similar event.               oscillator)                                  transmission.
+                                         Only used for generating a timeout in ACK
+                                         mode
+
+RX Continuous,                           MCU libmfwtimer infrastructure with timer 0  RX is continuously on. Upon receiving
+AC-powered systems (allows               clocked by MCU LPOSC (640 HZ RC              a valid packet it generates an interrupt
+asynchronous packet reception)           oscillator)                                  waking up the MCU.
+                                         Only used for ACK timing and channel
+                                         state polling.
+
+Wake on Radio,                           AX5043 LPOSC (640 Hz RC oscillator)          RX periodically wakes up and checks
+Remote control (asynchronous packet      for autonomous wake-up of the AX5043         for signal. Upon receiving a valid packet it
+reception at low idle currents at the    MCU libmfwtimer infrastructure with timer 0  generates an interrupt waking up the MCU.
+expense of long preambles and increased  clocked by MCU LPOSC (640 HZ RC
+latency)                                 oscillator)
+                                         Only used for generating a timeout in ACK
+                                         mode
+
+RX Synchronized with TX,                 MCU libmfwtimer infrastructure with timer 0  MCU periodically wakes up, powers up
+Low power periodic data transmission     clocked by MCU LPXOSC (32 kHz tuning         the RX and waits for packet reception or
+                                         fork crystal oscillator)                     timeout.
+
+1. MCU activity apart from timekeeping wake-ups due to the running libmfwtimer infrastructure.
+
+                                         www.onsemi.com
+                                                      4
+
+    AND9356/D
+
+Wake on Radio Mode (WOR)                                      has been received and is waiting in the FIFO, the AX5043
+  In Wake on Radio mode the receiver periodically wakes up    wakes up the micro controller via an interrupt. A typical
+                                                              application of this mode would be an infrequently operated
+and searches the channel for a signal. in absence of signal   remote control. The "WOR Settings" button opens the Wake
+the receiver is switched off again immediately in order       on Radio panel:
+to save power. If a signal is detected the receiver stays on
+and looks for a valid packet delimiter. The AX5043
+performs this task autonomously. Only after a valid packet
+
+1.
+
+2.
+
+3.
+
+4.
+
+    Figure 2. Wake on Radio
+
+1. This field configures how often the receiver wakes             low data rates) since the RSSI measurement
+   up and checks for signal. Waking up less often                 is faster than the scan for preamble pattern. The
+   reduces the average RX (idle) current. However,                drawback is a reduction of sensitivity, since the
+   it increases the necessary preamble length and                 RSSI threshold has to be set several dB above the
+   average latency, since the preamble needs to be                sensitivity limit to prevent false positives.
+   at least as long as the gap between two successive             The RX proceeds to scanning for preamble if
+   wake ups.                                                      RSSI > absolute threshold AND RSSI 
+                                                                  (background RSSI + relative threshold).
+2. The "enable RSSI threshold" option determines                  Background RSSI is the RSSI average over past
+   how the RX searches for signal upon wake up:                   wake ups.
+ a. If this option is disabled the RX directly scans          3. This field allows customization of the RSSI
+    for preamble pattern. Sensitivity in this mode               settling time. Longer settling times give more
+    is comparable to continuous RX operation.                    stable RSSI measurements at the expense of higher
+ b. If this option is enabled the RX first acquires              current consumption. Changes are written to the
+    an RSSI value. The scan for preamble pattern                 expert panel.
+    is performed only if RF energy is detected. This
+    reduces current consumption (most notably at
+
+    www.onsemi.com
+                 5
+
+AND9356/D
+
+     4. The estimated (idle) RX current is displayed. The         indicates the RX is running. When a packet
+         fractions for powerdown current, reference               is received the RX is put to sleep and only
+         oscillator settling, synthesizer settling and RX on      wakes up again for the time slot in which the
+         (RSSI acquisition or scan for preamble) are              next packet is expected.
+         displayed separately.
+                                                               · With each further packet reception the RX
+Make Sure You Understand the Following Points:
+                                                                  measures the effective time elapsed since the
+         · An important part of the process                       last packet and (via low pass filtering)
+                                                                  corrects its own wake-up frequency
+              of powering-up the receiver and deciding            accordingly. This corrects for crystal
+              whether a preamble signal is present takes          variations as well as temperature differences
+              a time inversely proportional to the data rate.     and slow gradients, and minimizes required
+              to achieve minimum current consumption you          margins in the RX-on time slots. (An
+              should therefore use the maximum possible           increased margin is used for the packet
+              data rate (100 kbps). The time the receiver         reception right after synchronization, where
+              searches for a preamble signal can be               the effective period has not been measured
+              customized via the TMGRXPREAMBLE1                   yet.)
+              register in the expert panel.
+                                                               · If no packet is received during an RX-on time
+         · Frequency tracking (AFC) requires settling
+                                                                  slot, the RX margins are increased for the next
+              time, which adds to the receiver start-up time      time slot. If no packet is received during N
+              and therefore increases the average current         subsequent time slots, the RX module
+              consumption. Large data rates and precise           switches back to synchronization mode, i.e.
+              frequency references render frequency               the RX is switched on continuously until
+              tracking unnecessary.                               a packet is received or a timeout occurs. (This
+                                                                  synchronization mode is the same as for initial
+         · The average receiver (idle) current                    synchronization after power up. The only
+                                                                  difference lies in the timeout interval:
+              is proportional to the wake up frequency. On        a timeout (in seconds) can be configured for
+              the other hand in the remote control                initial synchronization after power-up (e.g.
+              mentioned above, the wake up frequency              time to put batteries into the TX module).
+              determines how quickly the receiver will            A second timeout (in packet periods) applies
+              react.                                              for re-synchronization after loosing multiple
+                                                                  packets in a row.
+         · Mind that the current estimate displayed in the
+                                                               · If re-synchronization fails, (no packet
+              main panel is the idle current in absence
+              of a signal. Thus while the RX wakes up             is received until the timeout), the RX module
+              periodically, actual packet reception is the        is put to sleep for a configurable, typically
+              exception in this mode, occurring only e.g. if      long, period before trying to synchronize
+              a remote control button was pressed. This is in     again. The rationale here is to limit RX power
+              contrast to the Synchronized with TX mode,          consumption in the case where the TX is off
+              in which a packet is expected each time the         or out of reach.
+              RX wakes up.
+                                                               · In RX Synchronized with TX the LCD displays
+RX Synchronized TX Mode
+  The purpose of RX Synchronized with TX mode                     the usual packet information. Pressing and
+                                                                  holding button SW03 (south button on
+is periodic reception of packets with minimal current             DVK-2 mainboards, connected to PINB2)
+consumption by enabling the RX only for the time slots            during packet reception switches to the packet
+in which packets are expected. Short preambles can be used        timing information display:
+on the TX side . The following points explain how the RX           "T:" is the current, low pass filtered packet
+Synchronized with TX mode works:
+                                                                     period deviation measured in LPXOSC
+         · RX Synchronized with TX mode is used                      periods. Thus it indicates by how much the
+                                                                     interval between packets is (on average)
+              together with TX periodic (LPXOSC) on the              longer than programmed value from the
+              TX side. Timing is driven by the MCU's low             perspective of the RX. It is understood, that
+              power 32 kHz tuning fork crystal oscillator            the position of the next time RX on time
+              which ensures an accurate packet frequency             slot is corrected by this deviation. Thus if
+              and thus allows for tight margins in the time          TX and RX clocks run at slightly different
+              slots in which the RX in enabled.                      but constant speeds, the corresponding
+
+         · After power-up LPXOSC is settled and the
+
+              RX is switched continuously on until a packet
+              is received or a timeout occurs. LED3
+
+www.onsemi.com
+             6
+
+                AND9356/D
+
+   timing deviation is displayed here, but the                              After acquisition of "T:" nonzero values
+   RX on time slots are perfectly aligned                                   of "t:" are due to timing fluctuations,
+   to the actual packets.                                                   which have fit into the configured RX
+ "t:" indicates by how many LPXOSC                                          margin.
+   cycles the last packet was late compared                 The Sync Timing button opens the Sync Timing panel,
+   to the expected time, i.e. by how much it              where various timing parameters can be configured.
+   was misaligned to the RX on time slot.
+
+                                                                        6.
+                                                                        7.
+
+                                                                        8.
+
+1.  2.  3.  4.                                        5.  9.  10.  11.
+
+            Figure 3. Synchronous Timing
+
+1. Packet Period (Send Packet Every):                     6. LPXOSC Frequency:
+   This is simply a duplicate of the TX periodic             Frequency of the low power tuning fork crystal
+   (every) field in the main panel for convenience.          oscillator.
+
+2. Synchronization Time-Out After Power-up:               7. LPXOSC Precision:
+   Time the RX tries to receive the first packet,            Precision of the low power tuning fork crystal
+   before temporarily giving up and switching                oscillator.
+   to re-sync pause mode. E.g. this is the time you
+   have to put batteries into the TX module after         8. LPXOSC Settling Time (After Power-Up):
+   powering up the RX.                                       TX as well as RX modules wait for this time
+                                                             before transmitting / trying to receive packets.
+3. Re-Synchronization After N Lost Packets:                  This is to prevent synchronization and period
+   Determines in how many subsequent                         measurement with an insufficiently settled clock
+   RX-on time slots packet reception can fail before         source.
+   the RX switches to back to synchronization mode.
+                                                          9. Minimum RX Margin:
+4. Re-Synchronization Time-Out:                              RX margin determines how long the RX
+   Time the RX tries to receive a packet for                 is running, before the expected packet start. The
+   re-synchronization before temporarily giving up           same margin is also used as a timeout: The RX
+   and switching to re-sync pause mode.                      is powered down if no frame delimiter is detected
+                                                             by the time it was expected plus RX margin. (RX
+5. Re-Synchronization Pause (Upon                            running means synthesizer running and analog
+   Re-Synchronization Time-Out):                             baseband settled, but no AGC, AFC and bit
+   Time for which the RX sleeps after failing                synchronization, since there is no signal yet.) The
+   to re-synchronize before trying again.
+
+                www.onsemi.com
+                             7
+
+AND9356/D
+
+    minimum value specified here has                             This is necessary, since re-synchronization only
+    to accommodate timing fluctuations in normal                 aligns the phases of periodic TX and RX. The RX
+    operation. A default value is computed from                  needs a further packet to measure and adjust the
+    packet period and LPXOSC precision. Double                   wake-up period. Therefore the margin of the first
+    click the field to change it manually. If packet             RX-on time slot has to be large enough for the
+    reception fails in a given RX-on time slot, the              full, uncorrected timing deviation.
+    firmware automatically increases the margin for          11. Radio XTAL Pre-Start Time:
+    the next time slot.                                          Determines how long the XTAL reference
+10. RX Margin After Re-Synchronization:                          oscillator of the radio chip is settled before the RX
+    An increased RX margin which is used for the                 synthesizer is started.
+    RX-on time slot right after re-synchronization.
+
+KIT CONFIGURATION PANEL
+
+Figure 4. Kit Configuration
+
+  In the Kit Configuration panel you can select the type     is send to UART0. This is the display mode for the
+of debug kit and the display options being used1             MINI-DVK.
+
+Available Options:                                           The Usage of LCD and COM0 are mutually exclusive.
+
+Kit Types:                                                   Output on Debug Link:
+DVK-2/AX8052F100 + AX5043 and F143-MINI-DVK                  In addition to one of the displays, the information is also
+/AX8052F143. in case of F143-MINI-DVK the LCD                send to the debug link.
+output and all synchronous transfer modes are not available
+due to missing LCD display and 32 kHz watch crystal.         Extra Debug Messages on Debug Link:
+                                                             This option produces extra information about the status
+Output on LCD Display:                                       change of the radio state on the debug link.
+Packet numbers, bit and packet error rates, RSSI and other
+information is display on the LCD display of the DVK-2b      MCU sleep instead of Stdby: option decides if the MCU uses
+                                                             sleep mode instead Stdby mode.
+Output on UART0:
+Instead of sending the information to the LCD display it
+
+1 Bypassing the encoder is achieved by setting the UNENC flag corresponding FIFO DATA chunk. This causes the chunk data to bypass
+manchester, scrambler and differential encoder, however inversion still applies. For convenience AX-RadioLab therefore inverts preamble
+and SYNC WORD bytes before writing them to the firmware code if "unencoded" and INV encoding are selected.
+
+                                                                     www.onsemi.com
+                                                                                           8
+
+          AND9356/D
+
+PIN CONFIGURATION PANEL
+
+Figure 5. Pin Configuration
+
+· Ref Osc Config:                                      Power Amplifier Control or TCXO enable
+                                                       signal. in the AX8052F143 SOC PWRAMP
+   select XTAL or TCXO                                 functionality is available on the PB2 GPIO
+                                                       pin.
+· PA Config:
+                                                    · IRQ Config:
+   select differential, single ended or both power
+   amplifier(s)                                        Output IRQ. No other setting is sensible if the
+                                                       AX5043 module is connected to the AXSEM
+· Loop Filter Config:                                  main board.
+
+   determines whether the internal or an external   · IRQ Config:
+   PLL loop filter is used.
+                                                       use Modem Data Clock Output when
+· VCO Config:                                          observing when observing modem data on the
+                                                       DATA pin.
+   Select VCO 1 (fully integrated VCO with
+   on-chip inductor), VCO 2 (using an external      · IRQ Config:
+   inductor), or an entirely external VCO
+                                                       I/O Modem Data ; I/O Async Modem Data;
+· ANTSEL Config:                                       Output Modem Data (In this mode, during RX
+                                                       the received data appears on DATA. During
+   Pin can output TCXO enable signal, signal           TX data is transmitted from the FIFO but
+   of the integrated DAC or Diversity Antenna          echoed on DATA.)
+   Select. in the AX8052F143 SOC ANTSEL
+   functionality is available on the PB3 GPIO
+   pin.
+
+· PWRAMP Config:
+
+   Pin can output signal of the integrated DAC,
+
+www.onsemi.com
+             9
+
+Overview        AND9356/D
+
+                 PHY PANEL
+
+          1.
+
+2.                                  5.
+
+3.                                  6.
+
+4.                                  7.
+
+8.                                  11.
+
+9.
+
+10.
+
+12.                                 13.
+
+          Figure 6. Physical Layer
+
+             www.onsemi.com
+                          10
+
+       AND9356/D
+
+1. Select Carrier Frequency. If more than one channel                   a. Longer preambles may be necessary
+   is configured (see below) the frequency selected                        to settle the AFC. in WOR and RX
+   here is that of channel number 0. RFDIV indicates                       Sync mode this enlarges the
+   that the VCO is running at 4 times the                                  necessary receive windows and thus
+   LO frequency, rather than 2 times (depending on                         the duty cycled receiver current
+   the frequency band). This is an indicator only                          consumption.
+   unless you are using an external inductor and the
+   selected frequency can be reached in both ways                       b. Larger RXBW may be necessary,
+   (using a different inductor value, of course).                          since for successful tracking
+                                                                           a sufficient amount of TX spectrum
+2. Symbol rate & Bitrate specify the data rate. The                        needs to fall into the RXBW.
+   values are identical except when using Manchester                       A warning is displayed if this is not
+   encoding (bitrate = 0.5*symbol rate) or 4-FSK                           guaranteed. See dedicated paragraph
+   (bitrate = 2*symbol rate).                                              and figure below for details.
+
+3. Modulation Scheme.                                   8. Modulation factor (often denoted as h).
+4. Width of your channel. Red values signal
+                                                        FSK deviation + 0.5 * modulation factor * Symbol rate
+   a conflict with the TX and / or RX bandwidth.
+   A number of channels can be specified. The           + (f_mark * f_carrier)2  (eq. 2)
+   firmware determines and stores the VCO range for
+   each channel at startup. The carrier frequency           sometimes called half deviation.
+   of the topmost channel is displayed for                  4-FSK: Symbols are:
+   convenience.                                             f_carrier + {-3, -1, +1, +3}*deviation
+5. Frequency of the reference oscillator                 9. Transmit power in dBm
+   (XTAL / TCXO).                                       10. Bandwidth of the RX channel filter, the upper field
+6. XTALCAP adjusts the on-chip XTAL load                    is used to input the desired value, the lower field
+   capacitance. Set to 0 when using a TCXO.                 shows the actual value.
+7. Max AFC range ±: This value determines how far       11. Listen Before Talk (LBT) Option:
+   the frequency tracker (AFC) can walk in either           The TX measures the channel RSSI before sending
+   direction. Setting it to zero disables frequency         a packet in order to assess whether the channel
+   tracking. The necessary TXCO (or XTAL)                   is free. If the RSSI value is found to above the
+   precision is displayed. The computation is               busy threshold the TX can retry a number of times.
+                                                            If the channel continues to be busy the TX can
+TOXO precision + (max AFC range)(2 * fcarrier) (eq. 1)      either give up or transmit anyway (force TX).
+                                                        12. Encoding: Manchester, scrambler, differential and
+ensuring that the tracking range is sufficient              inversion.
+to handle the case, where the TCXO of the TX and        13. Forward Error Correction (FEC). This encoding
+RX are maximally off in opposite directions.                transparently adds redundancy to the transmit data
+                                                            in order to make it more immune against noise.
+   For more details and recommendations on setting          FEC can only be used together with HDLC
+up the AFC range and FSK deviation see                      framing and it is mandatory use HDLC flags
+XTAL/TCXO Precision Frequency Tracking and                  (0x7E) as preamble characters. Other encoding
+Bandwidth                                                   modes such as SCRAM are not allowed and
+                                                            unnecessary in FEC mode, since FEC leads to data
+NOTE:  Increasing the range of the AFC allows               whitening by itself.
+       for the use of a less precise TCXO or
+       XTAL. However, the drawbacks are:
+
+       www.onsemi.com
+                   11
+
+AND9356/D
+
+Figure 7. Framing
+
+Framing Mode:                                                  · Occasionally it may be necessary to conclude the
+  Options are HDLC, Raw Pattern Match and PN9
+                                                                  preamble with a few special bits. This can be achieved
+Compatibility. in Raw Pattern Match mode an arbitrary             using the fields below "Append additional encoded
+SYNC WORD of up to 32 bit marks the beginning                     bits".
+of a frame. For legacy systems the PN9 Compatibility mode
+implements PN9 data whitening in software, based on the        SYNC WORD
+AX5043's Raw Pattern Match mode.
+                                                               · In Raw Preamble Mode you can choose an arbitrary
+Preamble:
+                                                                  sync word of up to 32 bit as a start of frame delimiter.
+· Recommended default settings are chosen according               However it is recommended to use a sync word with
+                                                                  well peaking auto correlation function.
+   to the selected modulation, encoding and precision
+   of the reference clock.                                     · The SYNC WORD is always sent MSB first,
+
+· Specify the length of the preamble in bits, as well as          irrespective of the "send MSB first" option in the
+                                                                  DATA chunk. See comment on that option below.
+   one byte character which will be repeated length/8
+   times.                                                      · The "unencoded" option causes the SYNC WORD
+
+· The preamble character is always sent MSB first,                to bypass the manchester, scrambler, differential and
+                                                                  inversion encoder.2
+   irrespective of the "send MSB first" option in the             Correspondingly the RX matching unit detecting the
+   DATA chunk. See comment on that option below.                  SYNC WORD will operate on the bit stream before
+                                                                  decoding.
+· If length is not an integer multiple of 8, the fractional
+                                                               · DC content, running DC content and the number
+   byte is sent last, e.g. for length = 33 bits the preamble
+   character is sent 4 times followed by once the MSB             of transitions are computed in order to indicate the
+   of the preamble character.                                     quality of the selected SYNC WORD. Large DC or
+                                                                  running DC components can impede correct frequency
+· The "unencoded" option causes the preamble character            tracking, whereas a low number of transitions slows
+                                                                  down time tracking.
+   to bypass the Manchester, scrambler, differential and
+   inversion encoder. (See footnote to SYNC WORD for           · Selecting the "enable SFD callback" option causes the
+   technical details about inversion.)
+                                                                  AX-RadioAPI to notify the application level firmware
+· In Wake on Radio mode an additional WOR preamble                each time a start of frame delimiter (a SYNC WORD or
+                                                                  a HDLC flag) has been received.
+   length (in ms) can be specified. This chunk
+   is transmitted in addition to the number of bits specified
+   above. The length of this chunk should not be shorter
+   than the WOR period.
+
+2 Bypassing the encoder is achieved by setting the UNENC flag corresponding FIFO DATA chunk. This causes the chunk data to bypass
+manchester, scrambler and differential encoder, however inversion still applies. For convenience AX-RadioLab therefore inverts preamble
+and SYNC WORD bytes before writing them to the firmware code if "unencoded" and INV encoding are selected.
+
+                                                                     www.onsemi.com
+                                                                                          12
+
+AND9356/D
+
+LEN & MAC                                                      DATA
+
+· "MAC header length" specifies the length of the packet       · The DATA field allows you to specify a static sample
+
+   header, which can contain a length byte, a sequence            payload which will be used by the demo firmware.
+   number for acknowledge and addresses.                          Enter each byte as a two digit hex number (without
+                                                                  leading 0x). Bytes may be separated by spaces.
+· In Raw Pattern Match mode a length byte can be used
+                                                               · Optionally the firmware can insert a 16 bit counter into
+   to communicate the length of the current packet to the
+   RX. Alternatively (uncheck "enable len byte") the RX           the data field at a specified position. This allows the RX
+   can be configured to expect packets of a fixed length.         to count the number of lost packets. The two bytes
+                                                                  reserved for this counter are displayed as "00 00" in the
+· "Position" determines the position of the length byte           data field.
+
+   inside the packet header. Zero means the length byte        · Checking the "send MSB first" button causes each byte
+   follows immediately after the SYNC word.
+                                                                  in the DATA field to be sent MSB first. Otherwise each
+· "Significant bits" tells the RX how many bits of the            byte is sent LSB first.
+                                                                  Note, however, that preamble character and SYNC
+   length byte are used to encode the packet length. This         WORD are always sent MSB first. (Technically, the RF
+   is useful if your protocol uses a shared byte to encode        chip will be configured to operate in MSB first or LSB
+   the packet length plus something else.                         first mode according to the "MSB first button", which
+                                                                  applies to every byte. However, in LSB first mode the
+· "len offset": The actual packet length (excluding SYNC          AX-RadioLAB GUI reverses the entered preamble and
+                                                                  SYNC WORD bytes in order to keep the representation
+   WORD & CRC) assumed by the RX is len + len offset.             in the GUI MSB first. The reason for this is, that the
+   E.g. set len offset to zero if in your protocol the length     byte and nibble order of a SYNC WORD written left
+   byte counts the number of bytes including the length           to right but read LSB first can be confusing.)
+   byte. Set len offset = 1 if your length byte counts the
+   number of bytes excluding the length byte itself.           · "CRC SKIP FIRST" causes the first byte of the packet
+   Negative values for "len offset" are allowed.
+                                                                  to be excluded from CRC calculation.
+· If you check "enable len byte" in HDLC mode, the TX
+                                                               CRC
+   will send a length byte but it will be ignored by the RX.
+                                                               · Select CRC algorithm and initial value.
+· Specifying a maximum packet length can limit the             · The CRC is automatically calculated by the RF chip
+
+   impact of bit errors in the length byte.                       and appended to the packet. in HDLC mode the RX
+                                                                  will store the received packet including CRC bytes.
+· If the acknowledge feature is used an ACK sequence              in Raw Packet Match mode, the RX strips the CRC
+                                                                  bytes unless you manually set bit 5 in the
+   number field can be configured. This is not mandatory          AX5043_PKTSTOREFLAGS register.
+   for acknowledge to work. However, without this field
+   the SLAVE cannot detect duplicate packets occurring if      · Packets with incorrect CRC are silently dropped unless
+   packet RX has worked but the ACK packet got lost,
+   causing the MASTER to retransmit the packet.                   you manually set bit 2 in the
+                                                                  AX5043_PKTACCEPTFLAGS register.
+· Specify a device addresses of up to 4 bytes and
+
+   a corresponding address mask in order to restrict
+   reception to packets containing a matching address.
+
+· "address position" specifies the starting position of the
+
+   address inside the packet. Zero corresponds to the byte
+   immediately after the SYNC WORD / HDLC flag.
+
+· Optionally the sender's address can be added to the
+
+   header. Note that address works on the destination
+   address field (containing the slave's address in normal
+   MASTER to SLAVE communication and the master's
+   address for packets sent from SLAVE to MASTER, e.g.
+   ACK packets in the demo firmware.)
+
+www.onsemi.com
+            13
+
+                  AND9356/D
+
+BASIC AND REGULATORY TESTS PANEL
+
+Figure 8. Basic and Regulatory Tests
+
+· "Set CW" puts the RF chip to TX CW mode.                         1010", except that the BER measurement is performed
+· "Set Pattern" transmits the specified 8 byte pattern             using a pseudo-random data stream. in PN9 mode, the
+                                                                   data stream is generated using the polynomial x9+x5+1,
+   forever. The byte specified by the two leftmost digits          in PN15 mode, the polynomial x15+x14+1 is used, and
+   is sent first. Each byte is sent LSB first unless the "send     in PN17 mode, the polynomial x17+x12+1 is used.
+   MSB first" button in the framing panel is checked.
+   Manchester, scrambler and differential encoder are           · "Output RX via DATA pin" allows observation of the
+   bypassed (inversion encoding applies if selected!).
+                                                                   received data via the DATA and DCLK pins. This
+· "Set Random" transmits pseudo-random data forever.               is intended for performing BER tests where the bit
+                                                                   errors are recorded by measurement equipment
+   (This is realized using the scrambler.)                         connected to the DATA and DCLK pins3. It
+                                                                   is recommended to use measurement equipment which
+· "RX 1010" performs measurement of bit error rate                 evaluates both, DATA and DCLK, since DATA can
+                                                                   exhibit considerable jitter.
+   (BER). Typically connect the RX to a signal generator           This mode can be used for any kind of input data, 1010
+   sending an infinite 1010 stream, i.e. in FSK mode the           data or pseudo random data streams. The raw received
+   generator should toggle between {+1, -1}*half                   data is output on the DATA pin. Note, however, that the
+   deviation. in 4-FSK mode, the pattern {-3, -1, +1,              BER displayed on the LCD is correct only for 1010
+   +3}*half deviation should be applied. The BER value             data.
+   can be measured with 3, 4 or 5 digit precision.
+                                                                · Edit TESTS opens the firmware implementing the
+· "TX 1010" transmits an infinite 1010 stream suitable
+                                                                   above test modes in the AXCode::Blocks IDE.
+   for "RX 1010" BER measurement.
+
+· "RX PN9", "TX PN9", "RX PN15", "TX PN15", "RX
+
+   PN17", "TX PN17" are similar to "RX 1010" and "TX
+
+3 The "RX1010", "RX PN9", "RX PN15" and "RX PN17" modes periodically settle the receiver with aggressive settings of the receiver tracking
+loops (RX parameters set 0) and then switch to the less aggressive settings (RX parameter set 3), where for instance the AGC loop is frozen
+completely. This is similar the situation of packet reception, where RX parameter set 3 is used after detection of a SYNC WORD. When
+measuring the bit error rate with external instrumentation this approach cannot be used. Receiving with RX parameter set 0 may lead
+to an increased bit error rate, while permanently receiving with RX parameter set 3 would not allow the AGC to settle. The "Output RX via DATA
+pin" therefore uses a variant of RX parameter set 3 where the AGC is running, typically with 1/4 of the bandwidth of the RX parameter set
+0 settings.
+
+www.onsemi.com
+            14
+
+                                                              AND9356/D
+
+                                           COMMENTS ON C-CODE FIRMWARE
+
+File Structure                                                          Define Statements for Tweaking Firmware
+  The MASTER and SLAVE and TESTS firmware projects                        #define ADJUST_FREQREG (SLAVE/main.c) if defined,
+
+implement the corresponding modes using the                             after successful packet reception the receiver frequency
+AXRADIO V2 API as a "driver" for the AX5043 RF chip.                    is adjusted according to the tracked frequency offset. The
+                                                                        frequency is not adjusted by the entire tracked frequency
+Table 2. THE AX RADIO V2 API CONSISTS of THE                            offset at once. Rather low pass filtering is applied. Low pass
+            FOLLOWING FILES                                             filtering is controlled by FREQOFFS_K, higher values give
+                                                                        slower adjustments.
+               File                        Description
+                                                                        SYNC Packet RX Timing
+COMMON/axradio.h              AXRadio API declaration                     In the AX-RadioLAB SYNC RX mode timing
+
+COMMON/easyax5043.h           AXRadio AX5043 private header             is controlled by the parameters axradio_sync_xoscstartup
+                                                                        axradio_sync_slave_rxadvance axradio_sync_slave_
+COMMON/easyax5043.h           AXRadio AX5043 main code                  rxwindow and axradio_sync_slave_rxtimeout and axradio
+                                                                        _sync_slave_rxtimeout. All times are measured in periods
+AX_Radio_Lab_Output/config.c  Parameters generated                      of libmf wtimer0, which is clocked by the low power crystal
+                              by AX-RadioLAB                            oscillator. As shown at the top of Figure 1 the radio XTAL
+                                                                        oscillator of the SLAVE is enabled axradio_sync_slave_
+It is documented in DOCU/AXRadioV2API.pdf                               rxadvance before the frame delimiter (SFD) of the next
+                                                                        packet is expected. After settling the XTAL for
+Table 3. THE APPLICATION LEVEL CODE                                     axradio_sync_xoscstartup the RX is enabled. The RX then
+            CONSISTS of THE FOLLOWING FILES:                            settles and looks for an SFD, time outing after
+                                                                        axradio_sync_slave_rxwindow if no SFD is received. If
+               File                        Description                  an SFD is received the RX stays on until successfully
+                                                                        receiving a packet or until a timeout occurs after
+MASTER/main.c                 MASTER application level main             axradio_sync_slave_
+                              code                                      rxtimeout. (Not shown in the figure.)
+
+SLAVE/main.c                  SLAVE application level main code
+
+TESTS.main.c                  TESTS application level main code
+
+COMMON/misc.[ch]              Application level helper files
+
+SLAVE/display.c               Application level helper file
+
+SLAVE/lposc.c                 Helper file
+
+AX_Radio_Lab_output/          Application level parameters
+configslave.[ch]              generated by AX-RadioLAB
+
+AX_Radio_Lab_output/          Application level parameters
+configmaster.[ch]             generated by AX-RadioLAB
+
+                                                                                      PKT       SFD                    SFD
+                                                                                   expected  expected                 timeout
+
+                              axradio_sync_slave_rxadvance
+
+axradio_sync_xoscstartup                                                      axradio_sync_slave_rxwindow
+
+                                           rx startup                   rx margin                          rx margin
+
+                                                                                   dt SFD
+
+                              RX EN                           RX ready                PKT       SFD                    SFD
+                                                                                   expected  expected                 timeout
+
+                              Figure 9. SYNC Firmware Packet Reception Timing
+
+  AX-RadioLAB computes axradio_sync_slave_                              can be done only if preamble signal is present.) The SFD
+rxadvance and axradio_sync_slave_rxwindow based on the                  timeout is set rx_margin after the expected SFD. Three
+rx_margin which can be configured in the SYNC Timing                    instances of axradio_sync_slave_rxadvance and axradio
+panel as shown at the bottom of Figure 9. The goal is to have           _sync_slave_rxwindow are computed. The first instance
+the RX ready rx_margin before the expected start of the                 contains the increased rx_margin to be used for the first
+packet. (Ready means that the synthesizer and the analog                packet after (re-)synchronization when the effective packet
+baseband are settled. AGC settling and bit synchronization              period measurement is available yet. The second instance
+
+                                                              www.onsemi.com
+                                                                          15
+
+       AND9356/D
+
+contains the rx_margin used in normal operation
+("Minimum RX margin" in the SYNC Timing panel). The
+third instance has rx_margin scaled by a factor of 4 and
+is used after a failed packet reception.
+
+NOTE:  A processing delay occurs in the RX, i.e. the
+       detection of the SFD is not signalled by the RX
+       the very moment it is on air. On the other RX
+       should be enabled rx_margin before the packet
+       is on air. Therefore dt_SFD is not simply the
+       length of preamble plus SFD but also contains
+       the processing delay of roughly 19 bit.
+
+       XTAL/TCXO PRECISION, FREQUENCY TRACKING AND BANDWIDTH
+
+  This section gives some recommendations and             Step 1
+background information on how to setup the PHY panel.       Set Carrier frequency and bitrate. Set Max AFC range so
+
+Case 1: How to Set up AFC Range, FSK Deviation and        that XTAL/TCXO precision matches the precision of the
+           RX Bandwidth                                   crystal of TCXO being used. Note that changes over
+                                                          temperature of the XTAL/TCXO should be included.
+  If XTAL/TCXO precision, bit rate and carrier frequency
+are given, how should the FSK deviation and the RX
+bandwidth be set to achieve maximum sensitivity?
+
+       Figure 10. 868.3 MHz, 10 kbps FSK, 10 ppm XTAL Precision Example for Step 1 of PHY Setup
+
+                                                            www.onsemi.com
+                                                                                16
+
+                                         AND9356/D
+
+Step 2
+  Set RX Bandwidth to 2 S Max AFC Range
+
+Figure 11. 868.3 MHz, 10 kbps FSK, 10 ppm XTAL Precision Example for Step 2 of PHY Setup
+
+                                                     www.onsemi.com
+                                                                         17
+
+                                              AND9356/D
+
+Step 3                                                          If a modulation factor value larger than 5 emerges, then it
+  Increase the TX modulation factor or the deviation until    is strongly recommended to increase the bitrate and to redo
+                                                              the setup procedure.
+the field XTAL precision is no longer red. This is typically
+at a value
+
+Modulation_Factor + 2 · Max_afc_range * 1     (eq. 3)
+                                     Bitrate
+
+Figure 12. 868.3 MHz, 10 kbps FSK, 10 ppm XTAL Precision Example for Step 3 of PHY setup
+
+                                                     www.onsemi.com
+                                                                         18
+
+AND9356/D
+
+Case 2: Bitrate and Carrier Frequency and FSK               Step 1
+           Deviation are Given                                Set carrier frequency, bitrate and FSK deviation or
+
+  If the bitrate, carrier frequency and FSK deviations are  modulation factor.
+given, how should the RX Bandwidth be set to achieve
+maximum sensitivity and what is the XTAL/TCXO
+precision that is required for this to work?
+
+Figure 13. 868.3 MHz, 10 kbps FSK, Modulation Factor 5 Example for Step 1 of PHY Setup
+
+                                                   www.onsemi.com
+                                                                      19
+
+                                          AND9356/D
+
+Step 2                                                         disappears. This will occur at a Max AFC range value of RX
+  Set the RX bandwidth to: (1 + Modulation_Factor) S bitrate.  BW/2.
+
+If necessary increase the XTAL/TCXO precision by                 If your XTAL/TCXO is not precise enough then increase
+decreasing the Max AFC range until the red warning (No         the RX BW, but note that this will come at the cost of lower
+initial overlap of RX BW and TX BW is guaranteed.)             sensitivity.
+
+       Figure 14. 868.3 MHz, 10 kbps FSK, Modulation Factor 5 Example for Step 2 of PHY Setup
+
+Background Information                                         f°_RX when packet transmission starts, that is 2 · Df away
+  Without frequency tracking the worst case frequency          from f_TX. For successful tracking a fraction of the TX
+                                                               spectrum should fall into the RX BW. Thus the yellow
+deviation between RX and TX is                                 shaded region should be non-empty:
+
+       Df + fcarrier · (ppmTX ) ppmRX)    (eq. 4)
+
+where ppmTX and ppmRX are the precisions of the crystals       (TX BW ) RX BW)2 w 2 · Df            (eq. 7)
+used in the transmitter and the receiver. The frequency
+tracker must be allowed to track this deviation, thus the      AX-RadioLAB issues a warning if this constraint is not
+"MAX AFC range" field in the AX-RadioLAB PHY panel             fulfilled. Inserting
+(15) should be set to this value,
+                                                                RX BW + TX BW + (1 ) h) · BR + BR ) 2 · deviation (eq. 8)
+     Max AFC Range + Df + fcarrier · (ppmTX ) ppmRX) (eq. 5)
+                                                               into the overlap condition leads to
+
+                                                               hmin +                   2 · Df  *1  (eq. 9)
+
+NOTE:  AX-RadioLAB performs the inverse                                                 BR
+       calculation. Given Max AFC Range, the
+       necessary crystal precision is displayed.               Irrespective of the overlap condition h w 0.5 is required.
+       AX-RadioLAB assumes identical crystals are
+       used in RX and TX, thus the displayed value is          For optimal sensitivity
+
+                                                               RX BWopt + (1 ) h) · BR              (eq.
+
+       XTAL precision + (ppmTX ) ppmRX)2  (eq. 6)                                                   10)
+
+The above setting allows the tracker to walk away f in the     should be chosen. If values h u 5 emerges, increasing the
+wrong direction while there is no signal (see Figure 15).      bitrate should be considered as the RX BW for large h values
+In the worst case the receiver frequency can therefore be      has to be increased beyond RX BWopt to achieve stable
+                                                               operating conditions.
+
+                                          www.onsemi.com
+                                                      20
+
+       TX BW/2                                                AND9356/D
+
+                                                            TX BW/2
+
+                                                                      RX BW/2         RX BW/2
+
+                                                            Df        Df
+
+                f_TX                                            f_RX           f°_RX
+
+       Figure 15. Frequency Precision, Tracking and Bandwidth
+
+NOTE:  By default, AX-RadioLAB generated firmware
+       adjusts the programmed receiver frequency upon
+       successful packet reception. This feature can be
+       disabled by commenting out the #define
+       ADJUST_FREQREG statement
+       in SLAVE/main.c.
+
+ON Semiconductor and are trademarks of Semiconductor Components Industries, LLC dba ON Semiconductor or its subsidiaries in the United States and/or other countries.
+ON Semiconductor owns the rights to a number of patents, trademarks, copyrights, trade secrets, and other intellectual property. A listing of ON Semiconductor's product/patent
+coverage may be accessed at www.onsemi.com/site/pdf/Patent-Marking.pdf. ON Semiconductor reserves the right to make changes without further notice to any products herein.
+ON Semiconductor makes no warranty, representation or guarantee regarding the suitability of its products for any particular purpose, nor does ON Semiconductor assume any liability
+arising out of the application or use of any product or circuit, and specifically disclaims any and all liability, including without limitation special, consequential or incidental damages.
+Buyer is responsible for its products and applications using ON Semiconductor products, including compliance with all laws, regulations and safety requirements or standards,
+regardless of any support or applications information provided by ON Semiconductor. "Typical" parameters which may be provided in ON Semiconductor data sheets and/or
+specifications can and do vary in different applications and actual performance may vary over time. All operating parameters, including "Typicals" must be validated for each customer
+application by customer's technical experts. ON Semiconductor does not convey any license under its patent rights nor the rights of others. ON Semiconductor products are not
+designed, intended, or authorized for use as a critical component in life support systems or any FDA Class 3 medical devices or medical devices with a same or similar classification
+in a foreign jurisdiction or any devices intended for implantation in the human body. Should Buyer purchase or use ON Semiconductor products for any such unintended or unauthorized
+application, Buyer shall indemnify and hold ON Semiconductor and its officers, employees, subsidiaries, affiliates, and distributors harmless against all claims, costs, damages, and
+expenses, and reasonable attorney fees arising out of, directly or indirectly, any claim of personal injury or death associated with such unintended or unauthorized use, even if such
+claim alleges that ON Semiconductor was negligent regarding the design or manufacture of the part. ON Semiconductor is an Equal Opportunity/Affirmative Action Employer. This
+literature is subject to all applicable copyright laws and is not for resale in any manner.
+
+PUBLICATION ORDERING INFORMATION                            N. American Technical Support: 800-282-9855 Toll Free  ON Semiconductor Website: www.onsemi.com
+                                                             USA/Canada                                            Order Literature: http://www.onsemi.com/orderlit
+ LITERATURE FULFILLMENT:                                                                                           For additional information, please contact your local
+  Literature Distribution Center for ON Semiconductor       Europe, Middle East and Africa Technical Support:      Sales Representative
+  19521 E. 32nd Pkwy, Aurora, Colorado 80011 USA             Phone: 421 33 790 2910
+  Phone: 303-675-2175 or 800-344-3860 Toll Free USA/Canada                                                                                     AND9356/D
+  Fax: 303-675-2176 or 800-344-3867 Toll Free USA/Canada    Japan Customer Focus Center
+  Email: orderlit@onsemi.com                                 Phone: 81-3-5817-1050
+
+                                                                  www.onsemi.com
+                                                                                21
+

@@ -1,0 +1,390 @@
+Cryptographic Functions Programming Manual  ON Semiconductor
+
+Cryptographic Functions
+Programming Manual
+
+AX8052 Cryptographic Functions
+
+www.onsemi.com
+          1
+
+Cryptographic Functions Programming Manual  ON Semiconductor
+
+TABLE OF CONTENTS
+
+TABLE OF CONTENTS.................................................................................................................... 2
+1. Introduction ................................................................................................................................. 3
+2. Acronyms and Abbreviations ...................................................................................................... 4
+3. Address space .............................................................................................................................. 5
+
+   3.1 X register address map .................................................................................................................................... 6
+   3.2 Register overview ............................................................................................................................................ 6
+
+4. Random Number Generator ........................................................................................................ 8
+
+   4.1 Register : RNGMODE ....................................................................................................................................... 9
+   4.2 Register : RNGBYTE........................................................................................................................................ 10
+   4.3 Register : RNGCLKSRC0 ........................................................................................................................................ 10
+   4.4 Register : RNGCLKSRC1 ........................................................................................................................................ 11
+
+5. AES ........................................................................................................................................... 12
+
+   5.1 Register : AESMODE .............................................................................................................................................. 12
+   5.2 Register : AESCONFIG............................................................................................................................................ 12
+   5.3 Register : AESKEYADDR0, AESKEYADDR1 .............................................................................................................. 13
+   5.4 Register : AESINADDR0, AESINADDR1................................................................................................................... 13
+   5.5 Register : AESOUTADDR0, AESOUTADDR1 ........................................................................................................... 13
+   5.6 Register : AECCURBLOCK....................................................................................................................................... 13
+
+6. HISTORY .................................................................................................................................. 14
+7. Contact Information .................................................................................................................. 15
+
+www.onsemi.com
+          2
+
+Cryptographic Functions Programming Manual  ON Semiconductor
+
+1. INTRODUCTION
+
+AX8052 features cryptographic hardware, namely a True Random Number Generator (RNG) and
+a high speed Advanced Encryption Standard (AES) encryption/decryption engine.
+
+The True Random Number Generator produces, after postprocessing, cryptographic quality
+random numbers that pass the NIST Statistical Test Suite for Random Number Generators.
+
+The AES engine supports AES-128, AES-192 and AES-256 international standards, as well
+as programmable round numbers and software key schedule generation to allow longer key
+lengths for higher security applications. It supports ECB, CFB and OFB chaining modes
+directly in hardware. Multi-Megabit/s data rates can be achieved thanks to the dedicated
+DMA controller that reads input data and the keystream directly from X RAM and stores
+output data into X RAM.
+
+A software support library, libmfcrypto, software support routines, such as AES keystream
+expansion, as well as additional, software-only, algorithms, such as DES.
+
+www.onsemi.com
+          3
+
+Cryptographic Functions Programming Manual  ON Semiconductor
+
+2. ACRONYMS AND ABBREVIATIONS
+
+AX8052  MCU 8052
+
+                  www.onsemi.com
+                            4
+
+Cryptographic Functions Programming Manual  ON Semiconductor
+
+3. ADDRESS SPACE
+
+For a description of the AX8052 memory architecture and address spaces, please refer to
+the AX8052 Family Programming Manual.
+
+www.onsemi.com
+          5
+
+Cryptographic Functions Programming Manual                                  ON Semiconductor
+
+3.1 X REGISTER ADDRESS MAP
+
+Address Register
+
+Hex      0               1               2                     3                4             5           6            7
+                                                               B                C             D           E            F
+0x7080-  8               9                     A               RNGCLKSRC1       -             -           -            -
+         RNGMODE                RNGBYTE        RNGCLKSRC0      -                -             -           -            -
+                                               -               AESKEYADDR1      AESINADDR0    AESINADDR1  AESOUTADDR0  AESOUTADDR1
+0x708F   -                  -                  AESKEYADDR0     -                -             -           -            -
+0x7090-  AESMODE            AESCONFIG          -
+
+0x709F AESCURBLOCK          -
+
+3.2 REGISTER OVERVIEW
+
+Addr Name                   Dir R Reset     Bit                                                           Description
+Hex
+Random Number Generator                     7      6        5  4             3  2             1  0
+7080 RNGMODE
+                            RW R ----1110   RNG    -        -  -             RNGENTROPY(2:0)     RNG IRQ  Random Number Generator Mode
+                            R R --------                                                         EN       Random Byte
+                                            AVAIL
+
+7081 RNGBYTE                                RNGBYTE(7:0)
+
+7082  RNGCLKSRC0            RW R --001111 -        -        RNGCLKDIV0(2:0)     RNGCLKSRC0(2:0)           Random Number Generator Clock Source 0
+7083  RNGCLKSRC1                                            RNGCLKDIV1(2:0)     RNGCLKSRC1(2:0)           Random Number Generator Clock Source 1
+                            RW R --000111 -        -
+
+AES                         RW R 00000000 AES RUN AES INV AESCOUNT(5:0)                                   AES Mode
+7090 AESMODE
+
+                                                                                                                                       www.onsemi.com
+                                                                  6
+
+Cryptographic Functions Programming Manual                        ON Semiconductor
+
+Addr Name         Dir R Reset  Bit
+
+Hex                            7            6     5  4              3  2            1  0
+7091 AESCONFIG
+                  RW R 00001010 AESCMODE(1:0)     AESROUNDS(5:0)
+
+7092 AESKEYADDR0  RW R 00000000 AESKEYADDR(7:0)
+
+7093 AESKEYADDR1  RW R 00000000 AESKEYADDR(15:8)
+
+7094 AESINADDR0   RW R 00000000 AESINADDR(7:0)
+
+7095 AESINADDR1   RW R 00000000 AESINADDR(15:8)
+
+7096 AESOUTADDR0  RW R 00000000 AESOUTADDR(7:0)
+
+7097 AESOUTADDR1  RW R 00000000 AESOUTADDR(15:8)
+
+7098 AESCURBLOCK  R R -------- AES RUN -          AESCURBLOCK(5:0)
+
+                               www.onsemi.com
+                                         7
+
+Cryptographic Functions Programming Manual     ON Semiconductor
+
+4. RANDOM NUMBER GENERATOR
+
+The Random Number Generator uses on-chip noise sources to generate a string of random
+bits. This is in contrast to pseudo-random number generators often used, which only look
+random but are in fact generated by a deterministic algorithm.
+
+The output of the Random Number Generator passes the FIPS Test Suite. For high security
+applications, bits from the RNGBYTE should not be used directly, however, because each bit
+provides only slightly less than one bit entropy. Bits should be fed however into an entropy
+pool first.
+
+The recommended settings are:
+
+Register    Value
+
+RNGMODE     0x0F
+RNGCLKSRC0  0x09
+RNGCLKSRC1  0x00
+
+                               www.onsemi.com
+                                         8
+
+Cryptographic Functions Programming Manual  ON Semiconductor
+
+   4.1 REGISTER : RNGMODE
+
+Name      Bits R/W Reset Description
+
+RNGIRQEN 0 RW 0        Random Number Generator Interrupt Enable
+RNGENTROPY 3:1 RW 111
+                       Entropy assumed to be within one input bit
+RNGAVAIL  7R -          Bits Meaning
+
+                        000 1 Bit
+
+                                 1
+                       001 2 Bit
+
+                                 1
+                       010 4 Bit
+
+                                 1
+                       011 8 Bit
+
+                                  1
+                       100 16 Bit
+
+                                  1
+                       101 32 Bit
+
+                                  1
+                       110 64 Bit
+
+                                   1
+                       111 128 Bit
+
+                       When 1, a random byte is available in RNGBYTE; this bit
+                       is cleared by reading RNGBYTE
+
+                       www.onsemi.com
+                                 9
+
+Cryptographic Functions Programming Manual  ON Semiconductor
+
+  4.2 REGISTER : RNGBYTE
+
+Name     Bits R/W Reset Description
+RNGBYTE
+         7:0 R -       Random Byte
+
+4.3 REGISTER : RNGCLKSRC0
+
+Name     Bits R/W Reset Description
+
+RNGCLKSRC0 2:0 RW 111  Clock Source
+RNGCLKDIV0 5:3 RW 001  Bits Meaning
+                       000 FRCOSC
+                       001 LPOSC
+                       010 XOSC
+                       011 LPXOSC
+                       100 RSYSCLK
+                       101 T0CLK
+                       110 System Clock
+                       111 Off
+
+                       Clock Prescaler
+                       Bits Meaning
+                       000 ×2
+                       001 ×1
+                       010 ÷2
+                       011 ÷4
+                       100 ÷8
+                       101 ÷16
+                       110 ÷32
+                       111 ÷64
+
+                           www.onsemi.com
+                                    10
+
+Cryptographic Functions Programming Manual  ON Semiconductor
+
+4.4 REGISTER : RNGCLKSRC1
+
+Name  Bits R/W Reset Description
+
+RNGCLKSRC1 2:0 RW 111  Clock Source
+RNGCLKDIV1 5:3 RW 000  Bits Meaning
+                       000 FRCOSC
+                       001 LPOSC
+                       010 XOSC
+                       011 LPXOSC
+                       100 RSYSCLK
+                       101 T0CLK
+                       110 System Clock
+                       111 Off
+
+                       Clock Prescaler
+                       Bits Meaning
+                       000 ÷1
+                       001 ÷2
+                       010 ÷4
+                       011 ÷8
+                       100 ÷16
+                       101 ÷32
+                       110 ÷64
+                       111 ÷128
+
+                           www.onsemi.com
+                                    11
+
+Cryptographic Functions Programming Manual              ON Semiconductor
+
+5. AES
+
+      The AES Block implements the government mandated Advanced Encryption Standard (AES)
+      encryption algorithm data path. It offers a programmable round number, a programmable
+      number of 16 Byte blocks and the ECB, CFB and OFB modes are directly implemented in
+      hardware.
+
+      It encrypts or decrypts a buffer in X memory into a buffer in X memory. Since it features 16
+      bit wide datapaths into X memory, it is recommended that its buffers be even address
+      aligned. A small performance penalty results from using odd address aligned buffers.
+
+      The key schedule must be precomputed in software and stored in a keystream buffer (up to
+      about 256 Bytes) somewhere in X memory.
+
+5.1 REGISTER : AESMODE
+
+Name    Bits R/W Reset Description
+
+AESCOUNT 5:0 RW  000000 AES Input/Output Buffer Length (number of 16 Byte or
+                               128 Bit AES Blocks)
+
+AESINV  6 RW     0        AES Mode; 0 = encrypt, 1 = decrypt
+AESRUN  7 RW
+                 0        AES Run; writing 1 starts encryption/decryption
+
+5.2 REGISTER : AESCONFIG
+
+Name    Bits R/W Reset Description
+
+AESROUNDS 5:0 RW 001010 Number of Rounds; usually 10 for AES-128, 12 for AES-
+                                                     192 and 14 for AES-256
+
+AESCMODE 7:6 RW 00        AES Cipher Chaining Mode
+                          Bits Meaning
+
+                          00 ECB (Electronic Codebook)
+
+                          01 invalid
+
+                          10 CFB (Cipher Feedback)
+
+                          11 OFB (Output Feedback)
+
+                          www.onsemi.com
+                                   12
+
+Cryptographic Functions Programming Manual  ON Semiconductor
+
+   5.3 REGISTER : AESKEYADDR0, AESKEYADDR1
+
+Name    Bits R/W Reset Description
+
+AESKEYADDR 15:0 RW 0x0000 X Space Address of the Keystream Buffer
+
+5.4 REGISTER : AESINADDR0, AESINADDR1
+
+Name    Bits R/W Reset Description
+
+AESINADDR 15:0 RW 0x0000 X Space Address of the Input Buffer
+
+5.5 REGISTER : AESOUTADDR0, AESOUTADDR1
+
+Name    Bits R/W Reset Description
+
+AESOUTADDR 15:0 RW 0x0000 X Space Address of the Output Buffer
+
+5.6 REGISTER : AECCURBLOCK
+
+Name    Bits R/W Reset Description
+
+AESCURBLOCK 5:0 R  -        Current Block (16 Byte, 128 Bit chunk); Processing
+                            starts at 1 and ends at AESCOUNT
+AESRUN  7 R        -
+                            AES Run; 1 means encryption/decryption ongoing, 0
+                            means idle
+
+                            www.onsemi.com
+                                     13
+
+Cryptographic Functions Programming Manual  ON Semiconductor
+
+6. HISTORY
+
+Version  Date  Comments
+    1.0
+    1.1        Added AX8052 Crypto programming manual details
+
+         12-Feb-2019 Format changes
+
+               www.onsemi.com
+                        14
+
+Cryptographic Functions Programming Manual                          ON Semiconductor
+
+7. CONTACT INFORMATION
+
+ON Semiconductor                            Phone +41 44 882 17 07
+Oskar-Bider-Strasse 1                       Fax +41 44 882 17 09
+CH-8600 Dübendorf                           Email sales@onsemi.com
+SWITZERLAND                                 www.onsemi.com
+
+For further product related or sales information please visit our website or contact your local
+representative.
+
+                        www.onsemi.com
+                                 15
+

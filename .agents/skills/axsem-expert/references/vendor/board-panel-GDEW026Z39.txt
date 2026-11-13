@@ -1,0 +1,2382 @@
+            PLAY
+        DIS
+ OOD 2.6 inch
+G E-paper Display Series
+
+                                   GDEW026Z39
+
+                                                                            Dalian Good Display Co., Ltd.
+
+                                                                             GDEW026Z39
+
+Product Specifications
+
+Customer                 ISPLAY Standard
+Description
+Model Name               2.6" E-PAPER DISPLAY
+
+                         D GDEW026Z39
+
+Date                     2018/12/12                     Design Engineering  Design
+                         2.0                                       Check
+GOOD Revision
+                                              Approval
+
+No.17 Gonghua Street, Shahekou District, Dalian 116021 China
+
+Tel: +86-411-84619565 Fax: +86-411-84619585-810
+
+                 Email: info@good-display.com
+             Website: www.e-paper-display.com
+
+www.e-paper-display.com  244                            2.6 Inch Series
+
+                              GDEW026Z39
+
+Table of Contents
+
+   1. General Description.................................................... 5
+        1.1 Overview............................................................ 5
+        1.2 Feature .............................................................. 5
+        1.3 Mechanical Specification........................................ 5
+        1.4 Mechanical Drawing of EPD module ....................... 6
+
+ Y 1.5 Input/Output Terminals........................................ 7
+ A 1.6 Reference Circuit ................................................ 9
+
+        1.7 Matched Development Kit ..................................... 10
+
+L 2. Environmental............................................................ 11
+ P 2.1 Handling, Safety and Environmental Requirements... 11
+
+        2.2 Reliability test..................................................... 12
+
+S 3. Electrical Characteristics ............................................. 14
+ I 3.1 Absolute maximum rating..................................... 14
+
+        3.2 Panel DC Characteristics....................................... 14
+
+ D 3.3 Panel AC Characteristics........................................ 15
+
+        3.4 Power Consumption.............................................. 17
+   4. Typical Operating Sequence......................................... 18
+
+        4.1 Normal Operation Flow......................................... 18
+
+ D 4.2 Reference Program Code...................................... 20
+
+   5. Command Table......................................................... 22
+
+O 6. Optical characteristics................................................. 40
+
+        6.1 Specifications .................................................... 40
+
+ O 6.2 Definition of contrast ratio................................... 40
+
+        6.3 Reflection Ratio.................................................. 41
+
+ G6.4 Bi-stability ........................................................ 41
+
+   7. Point and line standard............................................... 42
+   8. Packing..................................................................... 43
+   9. Precautions ................................................................44
+
+www.e-paper-display.com  344  2.6 Inch Series
+
+                                           GDEW026Z39
+
+                         Revision History
+
+Rev.  Issued Date  Preliminary          Revised Contents
+ 1.0  Sep.11.2016  1. In part 7-5):
+                   2. In part 8-2):  Y modify reference circuit.
+ 1.1  Oct.20.2017  1. In part 7-5):
+                   1. Updating       modify reference program code.
+ 1.2  Oct.26.2018
+ 2.0  Dec.12.2018                    DISPLA modify reference circuit.
+
+ OOD
+G
+
+www.e-paper-display.com  444               2.6 Inch Series
+
+                                                   GDEW026Z39
+
+1. General Description
+
+1.1 Over View
+
+       The display is a TFT active matrix electrophoretic display, with interface and a
+       reference system design. The 2.6" active area contains 296×152 pixels, and has
+       1-bit white/black and 1-bit red full display capabilities. An integrated circuit
+       contains gate buffer, source buffer, interface, timing control logic, oscillator, DC-
+       DC, SRAM, LUT, VCOM and border are supplied with each panel.
+
+Y 1.2 Features
+       · High contrast
+ A · High reflectance
+       · Ultra wide viewing angle
+ L · Ultra low power consumption
+       · Pure reflective mode
+ P · Bi-stable
+       · Commercial temperature range
+ S · Landscape, portrait mode
+ I · Antiglare hard-coated front-surface
+       · Low current deep sleep mode
+
+       · On chip display RAM
+
+ D · Waveform stored in On-chip OTP
+
+       · Serial peripheral interface available
+       · On-chip oscillator
+       · On-chip booster and regulator control for generating VCOM, Gate and source driving
+
+         voltage
+
+ D · I2C Signal Master Interface to read external temperature sensor
+
+       · Available in COG package IC thickness 280um
+
+O 1.3 Mechanical Specifications
+OParameter
+                         Specifications     Unit   Remark
+     Screen Size                  2.6       Inch   Dpi: 125
+                                            Pixel
+GDisplay Resolution      296(H)×152(V)
+
+Active Area              60.09(H)×30.7 (V)  mm
+
+Pixel Pitch              0.203×0.202        mm
+
+Pixel Configuration      Square
+
+Outline Dimension 71.82(H)×36.3(V)×1.18(D) mm
+
+Weight                   6.04±0.5           g
+
+www.e-paper-display.com  544                       2.6 Inch Series
+
+www.e-paper-display.com                                    GR1,8                                                                   0.75                                         36.30±0.2 Outline                                                                                                                            1.4 Mechanical Drawing of EPD module
+                                                           0.203                              R1,9                                  1.35                                           34.80±0.2 PS                          0.75
+                                                                                                                                   0.70                                            32.10±0.2 FPL                    1.35
+                                                                                                 2.90                                                                              30.70±0.1 AA
+                                                                                     5.80±0.2                                                                                                                   0.70
+                                                                                     8.50±0.2
+                                                                                     07.2
+                                                                                                                  2.0 0±7.4
+                                                                                                                        2.0 ±07.4
+                         0.202                                                                                                                                    60.09±0.1 AA                                                     0,7±0,07
+                                                                                                                                                             66.19±0.2 FPL
+                                                                                                                                                        68.89±0.2 PS                                                                         1,18±0,1
+
+                                                                                 OO71.82±0.2 DOutline                                                                                                                64.19±0.2 PS
+                                                                                                                                                                                                                61.49±0.2 FPL
+
+644                                                                                                                                       D
+                                                                                                                                            IS
+                                                                                                                                              PL                                                     11.15±0.2
+                                                                                                                                                6.00±0.3 AY
+                                                                                                                                                                                                                                                                           stiffener
+                                                                                                                                          14.30±0.2
+                                (without protective film)                                                                                                                                            12.05±0.2                                        0.30±0.03
+
+                                                                                                                                                                                B  1             24                                          side                                     24        1
+
+                                                                                                                                                                                      12.50±0.1
+
+                                                                                                                                                                                      Front                                                                                               Back
+
+                                                                                       (rtv area)                                  Note
+                                                                                                                                   1.Unlabeled tolerances±0.15
+                                                                                     1.08 max                                      2.Resolution:152*296
+                                                                                                                                   3.DPI:125
+                                                                            0.9max
+                                                                                                                                                                                                                 APPROVALS
+                                                                 PS   EC    RTV  IC
+                                                           FPL       GLASS                                                                                                                                               DRAWN:
+
+2.6 Inch Series                   (ec area)                          EPD thickness                                                                                                                                      CHECKED:             DALIAN GOOD DISPLAY CO., LTD.                                                                                         GDEW026Z39
+                                                                     (section drawing)
+                                1.13 max                                                                                                                                                                                                     DATE File Serial Number:                           Version Number:
+
+                                                                                                                                                                                                                                                                 GDEW026Z39
+
+                                                                                                                                                                                                                                                                 P/N:                           Publish Date:    Note:
+                                                                                                                                                                                                                                                                                                                    IL0373
+                                                                                                                                                                                                                                                                           GDEW026Z39
+
+                                                                                                                                                                                                                                                                 SIZE: mm  SCALE: 1:1                          SHEET 1 OF 1
+
+                                                       GDEW026Z39
+
+1.5 Input/Output Terminals
+1.5-1) Pin out List
+
+Pin# Type Single Description                                        Remark
+
+1       NC  No connection and do not connect with other NC pins Keep Open
+ Y 4 C
+2  O    GDR N-Channel MOSFET Gate Drive Control
+
+3  O    RESE Current Sense Input for the Control Loop
+ A 6
+        VGL Negative Gate driving voltage
+ L 7 I/O TSDA I2C Interface to digital temperature sensor Date pin
+ 5 C    VGH Positive Gate driving voltage
+
+        TSCL I2C Interface to digital temperature sensor Clock pin
+ P 9O
+
+ S 10 I                                                             Note 1.5-5
+ 8 I    BS1 Bus selection pin
+
+ I 11 I                                                             Note 1.5-4
+   O    BUSY Busy state output pin
+
+        RES # Reset                                                 Note 1.5-3
+
+ D 13 I/O D0
+        D/C # Data /Command control pin                             Note 1.5-2
+
+ 12 I   CS # Chip Select input pin                                  Note 1.5-1
+
+            serial clock pin (SPI)
+
+14 I/O D1   serial data pin (SPI)
+D 17
+15 I    VDDIO Power for interface logic pins
+
+16 I    VCI Power Supply pin for the chip
+O 19 C
+        VSS Ground
+
+ 18 C   VDD Core logic power pin
+O 21 C
+        VPP Power Supply for OTP Programming
+
+ 20 C   VSH Positive Source driving voltage
+ G23 C
+        PREVGHPower Supply pin for VGH and VSH
+
+22 C    VSL Negative Source driving voltage
+
+        PREVGLPower Supply pin for VCOM, VGL and VSL
+
+ 24 C   VCOM VCOM driving voltage
+
+www.e-paper-display.com        744                     2.6 Inch Series
+
+                                                              GDEW026Z39
+
+Note 1.5-1: This pin (CS#) is the chip select input connecting to the MCU. The chip is
+                   enabled for MCU communication only when CS# is pulled Low.
+
+Note 1 .5-2: This pin (D/C#) is Data/Command control pin connecting to the MCU. When
+                   the pin is pulled HIGH, the data will be interpreted as data. When the pin is
+                   pulled Low, the data will be interpreted as command.
+
+Note  1.5-3: This pin (RES#) is reset signal input. The Reset is active Low.
+Note
+      1 .5-4: This pin (BUSY) is Busy state output pin. When Busy is Low, the operation
+Note               of chip should not be interrupted and any commands should not be issued
+                   to the module. The driver IC will put Busy pin Low when the driver IC is
+
+       Y working such as:
+
+            - Outputting display waveform; or
+
+      A - Programming with OTP
+
+            - Communicating with digital temperature sensor
+
+      L 1.5-5: This pin (BS1) is for 3-line SPI or 4-line SPI selection. When it is "Low", 4-line
+                 SPI is selected. When it is "High", 3-line SPI (9 bits SPI) is selected. Please
+       P refer to below Table.
+      S BS1
+        L
+      DI H
+            Table: Bus interface selection
+                                MPU Interface
+
+               4-lines serial peripheral interface (SPI)
+      3-lines serial peripheral interface (SPI) - 9 bits SPI
+
+       OOD
+      G
+
+www.e-paper-display.com  844  2.6 Inch Series
+
+                              GDEW026Z39
+
+1.6 Reference Circuit
+
+ISPLAY Note
+D 1. Inductor L1 is wire-wound inductor. There are no special requirements
+
+         for other parameters.
+
+   2. Suggests using Si1304BDL or Si1308EDL TUBE MOS (Q1) , otherwise it
+         may affect the normal boost of the circuit.
+
+D 3. The default circuit is 4-wire SPI. If the user wants to use 3-wire SPI, the
+         resistor R4 can be removed when users design.
+
+GOO 4. Default voltage value of all capacitors is 50V.
+
+www.e-paper-display.com  944  2.6 Inch Series
+
+                                                                                            GDEW026Z39
+
+     1.7 Matched Development Kit
+
+Our Development Kit designed for SPI E-paper Display aims to help users to
+learn how to use E-paper Display more easily. It can refresh black-white E-
+paper Display and three-color (black, white and red/Yellow) Good Display `s E-
+paper Display. And it is also added the functions of USB serial port, Raspberry
+Pi and LED indicator light ect.
+DESPI Development Kit consists of the development board and the pinboard.
+
+Y More details about the Development Kit, please click to the following link:
+DISPLA http://www.e-paper-display.com/products_detail/productId=402.html
+
+ OOD
+G
+
+www.e-paper-display.com  1044  2.6 Inch Series
+
+                                                     GDEW026Z39
+
+2. Environmental
+2.1 Handling, Safety and Environmental Requirements
+
+                         WARNING
+
+   The display glass may break when it is dropped or bumped on a hard surface.
+   Handle with care.
+   Should the display break, do not touch the electrophoretic material. In case of
+   contact with electrophoretic material, wash with water and soap.
+
+                                                            CAUTION
+
+Y The display module should not be exposed to harmful gases, such as acid and
+
+   alkali gases, which corrode electronic components.
+   Disassembling the display module can cause permanent damage and invalidate
+
+A the warranty agreements.
+L Observe general precautions that are common to handling delicate electronic
+
+components. The glass can break and front surfaces can easily be damaged. Moreover
+
+P the display is sensitive to static electricity and other rough environmental conditions.
+      S Data sheet status
+
+I Product specification The data sheet contains final product specifications.
+                                                    Limiting values
+   Limiting values given are in accordance with the Absolute Maximum Rating System
+
+D (IEC 134).
+
+Stress above one or more of the limiting values may cause permanent damage to
+the device.
+These are stress ratings only and operation of the device at these or any other
+
+D conditions above those given in the Characteristics sections of the specification is
+
+not implied. Exposure to limiting values for extended periods may affect device
+
+O reliability.
+                                           Application information
+Where application information is given, it is advisory and dose not form part of
+
+O the specification.
+GRoHS
+       Product Environmental certification
+
+www.e-paper-display.com  1144               2.6 Inch Series
+
+                                                                           GDEW026Z39
+
+2.2 Reliability test
+
+TEST CONDITION                   METHOD                                    REMARK
+
+                           When the experimental cycle finished, the When
+
+                           EPD samples will be taken out from the experiment
+
+High-    T = 40,           high temperature environmental chamber          finished, the
+                           and set aside for a few minutes. As EPDs        EPD must meet
+1 Temperature RH=35%,      return to room temperature, testers will        electrical and
+    Operation for 240 hrs  observe the appearance, and test                optical
+                           electrical and optical performance based        performance
+                           on standard # IEC 60 068-2-2Bp.                 standards.
+                           When the experimental cycle finished, the
+                           EPD samples will be taken out from the          When
+                           low temperature environmental chamber           experiment
+                           and set aside for a few minutes. As EPDs        finished, the
+                           return room temperature, testers will           EPD must meet
+                           observe the appearance, and test                electrical and
+                           electrical and optical performance based        optical
+                           on standard # IEC 60 068-2-2Ab.                 performance
+Y Low-                                                                     standards.
+A 2 Temperature
+L Operation 240 hrsT = 0 for
+
+                           P When the experimental cycle finished, the When
+S 3 Temperature 240 hrs Test return to room temperature, testers will electrical and
+                           EPD samples will be taken out from the experiment
+I Storage
+High-    T = +60, high temperature environmental chamber finished, the
+         RH= 35%, for and set aside for a few minutes. As EPDs EPD must meet
+
+         in white          D When the experimental cycle finished, the When
+                           observe the appearance, and test                optical
+
+         pattern           electrical and optical performance based performance
+
+                           on standard # IEC 60 068-2-2Bp.                 standards.
+
+                           EPD samples will be taken out from the experiment
+
+Low-     T = -25 for low temperature environmental chamber finished, the
+
+                           and set aside for a few minutes. As EPDs EPD must meet
+         240 hrs           Don standard # IEC 60 068-2-2Ab
+4 Temperature Test in white return to room temperature, testers will electrical and
+Storage                    observe the appearance, and test
+         pattern                                                           optical
+
+O Temperature,T=+40,       electrical and optical performance based performance
+
+                                                                           standards.
+
+                           When the experimental cycle finished, the When
+
+High                       EPD samples will be taken out from the experiment
+5 High-
+    Humidity               environmental chamber and set aside for finished, the
+
+O OperationRH=80%          a few minutes. As EPDs return to room EPD must meet
+         for 240 hrs
+                           temperature, testers will observe the           electrical and
+
+                           appearance, and test electrical and optical optical
+G EPD samples will be taken out from the When
+                           performance based on standard                   performance
+
+                           # IEC 60 068-2-3CA.                             standards.
+
+                           When the experimental cycle finished, the
+
+High     T=+50,            environmental chamber and set aside for experiment
+
+Temperature,RH=80%         a few minutes. As EPDs return to room finished, the
+
+6 High-  for240hrs         temperature, testers will observe the           EPD must meet
+
+Humidity Test in white appearance, and test electrical and optical electrical
+Storage                                                                    performance
+         pattern           performance based on standard
+                                                                           standards.
+                           # IEC 60 068-2-3CA.
+
+www.e-paper-display.com    1244                                       2.6 Inch Series
+
+                                                                     GDEW026Z39
+
+                            1. Samples are put in the Temp & Humid.
+
+                            Environmental Chamber. Temperature
+
+                            cycle starts with -25, storage period 30
+
+                            minutes. After 30 minutes, it needs 30min
+
+                            to let temperature rise to 60. After      When
+                                                                      experiment
+         [-25 30mins]       30min, temperature will be adjusted to
+
+                            60, RH=35% and storage period is 30 finished,
+          [+60,Y Test in white 2. Temperature cycle repeats 50 times.
+                            minutes. After 30 minutes, it needs 30minthe EPD
+Temperature RH=35%
+7 Cycle                     to let temperature rise to -25. One       must meet
+         30mins],
+                            A and set aside a few minutes. As EPDs
+         50cycles           temperature cycle (2hrs) is complete. electrical
+                                                                      and optical
+
+                            3. When 50 cycles finished, the samples will performanc
+         pattern            L observe the appearance, and test
+                            be taken out from experiment chamber e standards.
+
+P 8 UV exposure 765 W/m2 for
+    Resistance 168 hrs,40
+                            return to room temperature, tests will
+
+                            electrical and optical performance based
+S Electrostatic Machine model:
+                            on standard # IEC 60 068-2-14NB.
+
+I 9 discharge +/-250V,
+                            Standard # IEC 60 068-2-5 Sa
+
+                            Standard # IEC61000-4-2
+D 10 Package
+     Vibration0,200pF
+
+         1.04G,Frequency
+
+          : 10~500Hz
+         Direction : X,Y,Z Full packed for shipment
+         Duration:1hous
+
+         in each direction
+D Package
+         Drop from
+
+         height of 122
+
+         cm on Concrete
+
+         OOne drop forsurface Drop
+
+11 Drop Impact sequence:1   Full packed for shipment
+
+         corner, 3edges,
+
+         6face
+O Actual EMC level to be measured on customer application.
+         each.
+Note: (1) The protective film must be removed before temperature test.
+          (2) There's temperature vs display quality limitation in our display module, we
+
+ Gguarantee 1 pixel display quality from 5 ~ 30, and 2 pixel display quality
+
+         for 0~ 5 & 30 ~ 40.
+
+(3) In order to make sure the display module can provide the best display quality,
+     the update should be made after putting the display module in stable
+
+     temperature environment for 4 hours at 25.
+
+www.e-paper-display.com       1344                                2.6 Inch Series
+
+                                                                                  GDEW026Z39
+
+3. Electrical Characteristics
+
+3.1 Absolute maximum rating
+
+Parameter                Symbol           Rating                               Unit
+
+Logic Supply Voltage           VCI        -0.3 to +6.0                            V
+
+Logic Input Voltage      VIN        -0.3 to VCI +2.4                              V
+
+Operating Temp. range    TOPR             0 to +40                                
+
+Storage Temp. range      TSTG             -25 to +60                             
+    Humidity range          -                40~70                             %RH
+Y 3.2 Panel DC Characteristics
+*Note: Avoid direct sunlight.
+A The following specifications apply for: VSS = 0V, VCI = 3.3V, TA = 25
+L Single ground
+P High level input voltageParameterSymbolConditions     Min Typ Max Unit
+
+                         VSS              -                                 -  0     -  V
+
+S High level output voltage VOH Digital input pins , VCI-0.4 - - V
+                                                               IOH=400uA
+Logic Supply Voltage     VCI              -             2.3 3.3 3.6 V
+
+                         VIH        Digital input pins 0.7VCI - VCI V
+I Low level output voltage VOL Digital input pins , 0 - 0.4 V
+                                                              IOL= -400uA
+Low level input voltage  VIL        Digital input pins  0                      - 0.3VCI V
+
+D Standby panel current IstandbyIUPDATE
+Image update current                      -                                 -  8 10 mA
+
+                                          -                                 -  -     5 uA
+
+Power panel (update)     PUPDATE          -                                 - 26.4 40 mW
+
+D Image update Time at 25 PSTBY           -                                 -  - 0.0165 mW
+Standby power panel
+
+Operating temperature    -                -             0                      - 40 
+
+Storage temperature      -                -             -25                    -     60 
+                                                                DC/DC off
+                         -                -                                 -  12 15 Sec
+O Deep sleep mode current IVCI No clock -
+                                                              No input load
+                                                         Ram data not retain
+O Sleep mode current                                                           2     5  uA
+
+G- The Typical power consumption is measured with following pattern transition:
+                                            DC/DC off   -                      35 50 uA
+                         IVCI No clock
+
+                                         No input load
+                                       Ram data retain
+
+from horizontal 2 gray scale pattern to vertical 2 gray scale pattern.(Note 3-1 )
+
+- The standby power is the consumed power when the panel controller is in standby
+   mode.
+
+- The listed electrical/optical characteristics are only guaranteed under the controller
+   & waveform provided by Good Display.
+
+- Vcom is recommended to be set in the range of assigned value ± 0.1V. Note 3-1
+
+www.e-paper-display.com             1444                                       2.6 Inch Series
+
+                                                                GDEW026Z39
+
+The Typical power consumption
+
+Y 3.3-1) Oscillator frequency
+3.3 Panel AC Characteristics
+A Parameter
+L Internal Oscillator frequency Fosc VCI=2.3 to 3.6V - 1.625 -
+The following specifications apply for : VSS = 0V, VCI = 3.3V, TA = 25
+
+                                     Symbol Conditions Min Typ Max      Unit
+P 3.3-2-1) MCU Interface Selection                                      MHz
+
+In this module, there are 4-wire SPI and 3-wire SPI that can communicate with MCU.
+
+S The MCU interface mode can be set by hardware selection on BS1 pins. When it is
+I "Low", 4-wire SPI is selected. When it is "High", 3-wire SPI (9 bits SPI) is selected.
+3.3-2) MCU Interface
+
+D SPI4
+Pin Name Data/Command Interface                     Control Signal
+
+Bus interface         D1             D0        CS#    D/C#              RES#
+
+                      SDIN           SCLK      CS#    D/C#              RES#
+
+SPI3                  SDIN           SCLK      CS#         L            RES#
+
+                Table 3-1: MCU interface assignment under different bus interface mode
+
+Note 3-2: L is connected to VSS
+Note 3-3: H is connected to VCI
+D 3.3-2-2) MCU Serial Interface (4-wire SPI)
+O D0 acts as SCLK, D1 acts as SDIN.
+O Write Command L
+The 4-wire SPI consists of serial clock SCLK, serial data SDIN, D/C#, CS#. In SPI       mode,
+
+                      Function              CS# D/C# SCLK
+
+GTable 3-2: Control pins of 4-wire Serial Peripheral interfaceL
+
+                      Write data            L  H    
+
+Note 3-4: stands for rising edge of signal
+
+SDIN is shifted into an 8-bit shift register in the order of D7, D6, ... D0. The data byte in
+the shift register is written to the Graphic Display Data RAM (RAM) or command register
+in the same clock. Under serial mode, only write operations are allowed.
+
+www.e-paper-display.com              1544                       2.6 Inch Series
+
+                                                                   GDEW026Z39
+
+AY Figure 3-1: Write procedure in 4-wire Serial Peripheral Interface mode
+L 3.3-2-3) MCU Serial Interface (3-wire SPI)
+P In 3-wire SPI mode, D0 acts as SCLK, D1 acts as SDIN, The pin D/C# can be connected
+
+to an external ground.
+S The operation is similar to 4-wire serial interface while D/C# pin is not used. There
+The 3-wire serial interface consists of serial clock SCLK, serial data ADIN and CS#.
+
+I are altogether 9-bits will be shifted into the shift register on every ninth clock in
+D only write operations are allowed.
+sequence: D/C# bit, D7 to D0 bit. The D/C# bit (first bit of the sequential data) will
+
+determine the following data byte in shift register is written to the Display Data
+
+RAM (D/C# bit = 1) or the command register (D/C# bit = 0).Under serial mode,
+
+Function                 CS# D/C# SCLK
+
+  D Table 3-3: Control pins of 3-wire Serial Peripheral InterfaceWrite CommandLTie LOW
+GOO Note 3-5: stands for rising edge of signal
+Write data               L     Tie LOW  
+
+Figure 3-2: Write procedure in 3-wire Serial Peripheral Interface mode
+
+www.e-paper-display.com  1644             2.6 Inch Series
+
+                                                                GDEW026Z39
+
+3.3-3) Timing Characteristics of Series Interface
+
+                     SPLAY Parameter
+                    I Chip Select Setup Time
+
+                      Chip Select Hold Time
+                     Chip Select Setup Time
+
+                    D Chip Select Setup Time
+
+                    Serial clock cycle (write)
+Symbol      Signal                                 Min Typ Max Unit
+   tcss      CS#
+   tcsh                                            60 -      -  ns
+   tscc
+  tchw                                             65 -      -  ns
+
+ tscycw                                            20 -      -  ns
+
+                                                   40 -      -  ns
+
+                                                   100 -     -  ns
+
+tshw  D tshr        SCL "H" pulse width (write) 35 -         -  ns
+
+ tslw       SCLK    SCL"L" pulse width (write) 35 -          -  ns
+tscycr               Serial clock cycle (Read) 150 -
+tsds                                                         -  ns
+
+O tsdh              SCL "H" pulse width (Read) 60 -          -  ns
+
+tacc  tslr          SCL "L" pulse width (Read) 60 -          -  ns
+toh
+O 3.4 Power Consumption    Data setup time         30 -      -  ns
+                            Data hold time
+             SDIN                                  30 -      -  ns
+             (DIN)            Access time
+            (DOUT)       Output disable time       -  -      10 ns
+
+GParameter                                         15 -      -  ns
+
+                                   Symbol Condition TYP Max Unit Remark
+
+Panel power consumption during update -       25 26.4 40 mW          -
+
+Power consumption in standby mode  -          25      - 0.016 mW     -
+
+                                                          5
+
+www.e-paper-display.com            1744                      2.6 Inch Series
+
+                                                        GDEW026Z39
+
+4. Typical Operating Sequence
+4.1 Normal Operation Flow
+
+4.1-1) BWR mode & LUT form Register
+
+                         System Power
+
+                         Reset the EPD driver IC
+
+                         Y Booster soft start
+                         A Power setting
+                          L Power on
+                         P Panel setting
+                         IS PLL control
+                         D Resolution setting
+
+                       Load image data
+
+ DDisplay refresh
+O Border floating
+GO Turn off
+                                       Enter into deep
+                                         sleep mode
+
+www.e-paper-display.com  1844                           2.6 Inch Series
+
+                                                                                                GDEW026Z39
+
+4.1-2) BWR mode & LUT form OTP
+
+                                                                 System Power
+
+                         Reset the EPD driver IC
+
+                         Booster soft start
+
+                         Y Power on
+                         A Panel setting
+                         L Resolution setting
+                         SP Load image data
+                         I Display refresh
+                         D Border floating
+
+    DTurn off                                                                  Enter into deep
+   O                                                                             sleep mode
+GO
+
+www.e-paper-display.com  1944                                                                   2.6 Inch Series
+
+                                                                        GDEW026Z39
+
+4.2 Reference Program Code
+
+4.2-1) BWR mode & LUT from register
+
+System power                                  LUT
+
+Reset the EPD driver IC                              Data start transmission
+                                                             1 SPI (0x10)
+ Booster soft start SPI
+(0x06,0x17,0x17,0x17)                          Y Transport B/W data
+                                              A Data start transmission
+             Power setting SPI                 L 2 SPI (0x13)
+(0x01,0x03,0x00,0x2b,0x2b,0x09)                PTransport red data
+                                              SDisplay refresh
+ Power on                                     I SPI (0x12)
+SPI (0x04)
+
+Check BUSY pin                  BUSY=Low  D Check BUSY pin
+                                                             BUSY=High
+                             BUSY=High                                       BUSY=Low
+                 Panel setting
+               SPI (0x00,0xaf)                    Vcom and data interval
+                                              setting SPI (0x50,value)Note1
+                  PLL control
+              SPI (0x30,0x3a)                  Power off
+                                              SPI (0x02)
+ D Resolution setting SPI
+ O (0x61,0x98,0x01,0x28)                          Deep sleep
+ OVCM_DC setting                              SPI (0x07,0xa5)
+
+              SPI (0x82,0x12)
+
+GVcom and data interval
+
+        setting SPI (0x50,0x77)
+
+Note1: Set border to floating.
+
+www.e-paper-display.com                 2044              2.6 Inch Series
+
+                                                                            GDEW026Z39
+
+4.2-2) BWR mode & LUT from OTP
+
+      System power                                Data start transmission
+Reset the EPD driver IC                                   2 SPI (0x13)
+
+                                                  Y Display refresh
+                                                     SPI (0x12)
+                                                  Transport red data
+
+ Booster soft start SPI                           A Check BUSY pin
+(0x06,0x17,0x17,0x17)                             L BUSY=High
+
+              Power on                            PVcom and data interval        BUSY=Low
+             SPI (0x04)
+                          BUSY=Low                setting SPI (0x50,value)Note1
+         Check BUSY pin                           ISPower off
+BUSY=High                                                       SPI (0x02)
+                                            D Deep sleep
+           Panel setting
+         SPI (0x00,0x0f)
+
+                    Resolution setting SPI        SPI (0x07,0xa5)
+                   (0x61,0x98,0x01,0x28)
+
+                   Vcom and data interval
+                   setting SPI (0x50,0x77)
+
+  D Data start transmission
+
+                             1 SPI (0x10)
+
+  O Transport B/W data
+GO Note1: Set border to floating.
+
+www.e-paper-display.com                     2144                            2.6 Inch Series
+
+                                                             GDEW026Z39
+
+5. Command Table
+
+W/R: 0: Write cycle 1: Read cycle   C/D: 0: Command 1: Data
+
+D7~D0: -: Don't care #: Valid Data
+
+# Command W/R C/D D7 D6 D5 D4 D3 D2 D1 D0          Registers  Default
+
+1 Panel Setting   0 0 00000000                                00h
+   (PSR)
+                 0 1 # # # # # # # # RES[1:0],REG,KW/R,U 0Fh
+                                                                               D,SHL,SHD_N,RST_N
+
+                  0  0 00000001                               01h
+2 Power Setting 0 0
+
+Y (PWR)
+                               0
+                     1 - - - - - - # # VDS_EN,VDG_EN          03h
+
+                     1 - - - - - # # # VCOM_HV,VGHL_LV[1: 00h
+                                                                           0]
+                  A 0
+                     1 - - # # # # # # VDH[5:0]               26h
+
+L Power OFF                                                   26h
+                  0  1 - - # # # # # # VDL[5:0]
+
+                     1 - - # # # # # # VDHR[5:0]              03h
+
+3 Power OFF(POF) 0   0 00000010                               02h
+P 5 Power ON(PON) 0
+                 0   0 00000011                               03h
+
+4 Sequence       0   1 - - # # - - - - T_VDS_OF               00h
+
+Setting(PFS)      S 0
+
+                     0 00000100                               04h
+I 7 Booster Soft 0
+6 Power ON 0         0 00000101                               05h
+   Measure(PMES)
+
+                     0 00000110                               06h
+    D 0
+
+8 Deep Sleep
+                               0
+                     1 # # # # # # # # BT_PHA[7:0]            17h
+
+Start(BTST)      0   1 # # # # # # # # BT_PHB[7:0]            17h
+
+                 0   1 - - # # # # # # BT_PHC[5:0]            17h
+
+                     0 00000111                               07h
+
+                     1 1 0 1 0 0 1 0 1 Check code             A5h
+D white/black
+Display Start     0  0 0 0 0 1 0 0 0 0 B/W Pixel Data         10h
+
+Transmission                               (160×296)
+
+9 1(DTM1, 0          1 # # # # # # # # KPXL[1:8]              00h
+
+                                001 .. .. .. .. .. .. .. .. .....
+
+O 10 Data Stop
+                                1
+Data) (x-byte     0  1 # # # # # # # # KPXL[n-1:n]            00h
+
+command)
+
+O Display Start      0 00010001                               11h
+
+                     1 #- - - - - - -                         00h
+
+11 Display 0         0 00010010                               12h
+    Refresh(DRF)
+GData) (x-byte 0
+                 0   0 0 0 0 1 0 0 1 1 Red Pixel              13h
+                                           Data(160×296)
+    Transmission
+12 2(DTM2, Red 0     1 # # # # # # # # RPXL[1:8]              00h
+
+                     1 .. .. .. .. .. .. .. .. ..             ..
+
+command)          0  1 # # # # # # # # RPXL[n-1:n]            00h
+
+    VCOM
+    LUT(LUTC) (45-
+13 byte command, 0 0 0 0 1 0 0 0 0 0 20h
+    structure of
+    bytes 2~7
+    repeated)
+
+www.e-paper-display.com             2244                     2.6 Inch Series
+
+                                                                  GDEW026Z39
+
+#  Command             W/R C/D D7 D6             D5 D4 D3 D2 D1 D0 Registers Default
+
+   W2W LUT (LUTWW)
+
+   (43-byte command,
+
+14 structure of bytes                   0  0 00  1 0 0 0 0 1                                        21h
+                                           0 00
+   2~7 repeated 7                          0 00
+                                           0 00
+   times)
+
+   B2W LUT (LUTBW/
+
+   LUTR) (43-byte
+
+15 command, structure 0                          Y 1 0 0 0 1 1
+                                                 1 0 0 0 1 0                                        22h
+
+   of bytes 2~7
+
+   repeated 7 times)
+
+   W2B LUT (LUTWB/                               LA 1 0 0 1 0 0
+
+   LUTW) (43-byte
+
+16 command, structure 0                                                                             23h
+
+   of bytes 2~7
+
+   repeated 7 times)
+
+   B2B LUT (LUTBB/                               P 1 1 0 0 0 0
+
+   LUTB) (43-byte
+
+17 command, structure 0                                                                             24h
+
+   of bytes 2~7                                  S 0 0 0 0 0 0
+
+   repeated 7 times)
+
+18 PLL control(PLL)    0 0 00                    I # # # # # # LM[10:3]/TSR[7 00h                   30h
+                       0 1 --                                                       :0]
+                                                 # # # # # # M[2:0],N[2:0] 3Ch
+
+                       0 0 01                                                                       40h
+
+19 Temperature Sensor 1                    1 ##  D0 0 0 0 0 1
+    Calibration (TSC)
+
+                                        1 1 ##   # - - - - - LM[2:0]/-                              00h
+
+20 Temperature Sensor 0                    0 01                                                     41h
+                                           1 #-
+   Selection (TSE)                      0        - - # # # # TSE,TO[3:0]                            00h
+
+                       0                D 00 01  0 0 0 0 1 0                                        42h
+                                           1 ##
+21 Temperature Sensor 0                    1 ##  # # # # # # WATTR[7:0]                             00h
+                                           1 ##
+   Write(TSW)                           0  0 01  # # # # # # WMSB[7:0]                              00h
+                                           1 ##
+                                       0   1 ##  # # # # # # WLSB[7:0]                              00h
+22 Temperature Sensor 1                    0 01
+                                                 0 0 0 0 1 1                                        43h
+    Read (TSR)                             1 ##
+                                                 # # # # # # RMSB[7:0]                              00h
+    O1                                     0 01
+                                        0  1 --  # # # # # # RLSB[7:0]                              00h
+23 Vcom and data                           0 01
+                                                 0 1 0 0 0 0                                        50h
+O interval setting (CDI) 0                 1 ##
+   G0                                            # # # # # # VBD[1:0],DDX[                          D7h
+                                                                                    1:0], CDI[3:0]
+
+24 Lower Power 0                                 0 1 0 0 0 1                                        51h
+
+   Detection (LPD)                      1        - - - - - # LPD                                    01h
+
+                                                 1 0 0 0 0 0                                        60h
+
+25 TCON setting (TCON)                           # # # # # # S2G[3:0],G2S[3 22h
+                                       0                                            :0]
+
+www.e-paper-display.com                          2344             2.6 Inch Series
+
+                                                                   GDEW026Z39
+
+# Command        W/R C/D D7 D6 D5 D4       D3 D2 D1 D0     Registers    Default
+                   0 0 0110
+    Resolution     0 1 ####                0 0 0 1                      61h
+26 setting         0 1----
+                   0 1 ####                # 0 0 0 HRES[7:3]            00h
+    (TRES)         0 0 0111
+                   0 1 ####                - - -#       VRES[8:0]       00h
+27 Revision        0 0 0111
+    (REV)                                  # # # #                      00h
+                   1 1 - ###
+28 Get Status                              0 0 0 0                      70h
+    (FLG)
+                                                                  PTL_FLAG ,I2C_ERR,00h
+
+                                           Y # # # # I2C_BUSYN,DATA_FLAG, 13h
+                                                                  PON, POF, BUSY_N
+                                           # # # # LUT_REV[7:0]
+
+                                           0 0 0 1                      71h
+
+                                           A # # # # AMVT[1:0], XON,AMVS, 10h
+                                                                  AMV,AMVE
+Auto                        0 1000         L 0 0 0 1                    80h
+                 0          1 - - ##       0 0 0 0
+
+29 Measurement   0
+
+Vcom                                       P 0 0 1 0
+
+30 Read Vcom 0              0 1000                                      81h
+                            1 - - ##
+Value(VV)        1                         # # # # VV[5:0]              00h
+                                           S 0 0 0 0
+    VCM_DC       0 0 1000                                               82h
+31 Setting       0 1 - - ##
+                                           I # 1 1 1 HRED[7:3]          00h
+    (VDCS)                                 # # # # VDCS[5:0]
+
+                 0 0 1001                                               90h
+
+                 0 1 ####                  # 0 0 0 HRST[7:3]            00h
+                                           D- - - #
+                 0 1 ####                                               07h
+                 0 1----
+    Partial      0 1 ####                  - - -#       VRST[8:0]       00h
+32 Window        0 1----
+                                           # # # #                      00h
+    (PTL)
+
+                                                        VRED[8:0]       00h
+
+                           01 ####         # # # #                      00h
+                           01 ----
+33 Partial In 0             0 1001         - - - # PT_SCAN              01h
+    (PTIN)
+                            0 1001         0 0 0                        91h
+D 34 Partial Out 0          0 1010
+    (PTOUT)                 1 1010         0 0 1 0                      92h
+35 Program 0
+                            0 1010         0 0 0 0                      A0h
+O Mode (PGM) 0
+                            0 1010         0 1 0 1 Check code = A5h     A5h
+    Active                  1 ----
+36 Progrmming 0             1 ####         0 0 0 1                      A1h
+                            1 .. .. .. ..
+O (APG)                                    0 0 1 0                      A2h
+                           0
+                           1               - - - - Read Dummy           N/A
+
+G37 Read OTP 1                             # # # # Data of Address = 000h N/A
+    (ROTP)
+                           1               .. .. .. .. ..               N/A
+
+                 1 1 ####                  # # # # Data of address = n  N/A
+
+38 Power Saving  0          0 1110         0 0 1 1                      E3h
+                            1 ####
+(PWS)            0                         # # # # VCOM_W[3:0],SD_W[3: 00h
+                                                                  0]
+
+www.e-paper-display.com       2444                                 2.6 Inch Series
+
+                                                                GDEW026Z39
+
+(1) Panel Setting (PSR) (Register: R00H)
+
+      Action W/R C/D D7 D6 D5 D4 D3 D2 D1 D0
+
+      Setting the 0      00 0                   0  0 00      0  0
+
+      panel  0           1 RES1 RES0 REG_EN BWR UD SHL SHD_N RST_N
+
+RES[1:0]: Display Resolution setting (source x gate)
+
+      00b: 96x230 (Default) Active source channels: S0 ~ S95.
+      Y 10b: 128x296 Active source channels: S0 ~ S127.
+                              Active gate channels: G0 ~ G229.
+
+      01b: 96x252 Active source channels: S0 ~ S95.
+
+      A 11b: 160x296 Active source channels: S0 ~ S159.
+                           Active gate channels: G0 ~ G251.
+
+L REG_EN: LUT selection
+                           Active gate channels: G0 ~ G295.
+
+      P 1: LUT from register.
+                           Active gate channels: G0 ~ G295.
+
+      S 0: Pixel with B/W/Red. (Default)
+      0: LUT from OTP. (Default)
+
+BWR:  I 1: Pixel with B/W.
+      Black / White / Red
+
+      D 1: Scan up. (default) First line to last line: G0  G1  G2  ...  Gn-1
+UD: Gate Scan Direction
+
+      0: Scan down. First line to last line: Gn-1  Gn-2  Gn-3  ...  G0
+
+SHL:  Source Shift direction
+                1: Shift right. (default) First data to last data: S0  S1  S2  ...  Sn-1
+
+D SHD_N: Booster Switch
+
+                0: Booster OFF, register data are kept, and SEG/BG/VCOM are kept 0V or
+
+  O floating.
+
+                1: Booster ON (Default)
+
+                When SHD_N become LOW, charge pump will be turned OFF, register and
+
+  OSRAM data will keep until VDD OFF, and SD output and VCOM will remain
+
+                previous condition. SHD_N may have two conditions: 0v or floating.
+
+RST_N: Soft Reset
+
+ G1: No effect (Default). Booster OFF, Register data are set to their default
+                  values, and SEG/BG/VCOM: 0V
+      0: Shift left First data to last data: Sn-1  Sn-2  Sn-3  ...  S0
+
+      When RST_N become LOW, the driver will be reset, all registers will be reset to
+      their default value. All driver functions will be disabled. SD output and VCOM
+      will base on previous condition. It may have two conditions: 0v or floating.
+
+www.e-paper-display.com                   2544                  2.6 Inch Series
+
+                                                                           GDEW026Z39
+
+(2)Power Setting (PWR) (R01H)
+
+Action             W/R C/D D7 D6 D5 D4 D3                  D2              D1  D0
+
+                   0 0 0000 0                              0               0   1
+
+                   0 1 ---- -                              - VDS_EN VDG_EN
+
+Selecting          0 1 - - - - - VCOM_HV VGHL_LV[1:0]
+
+Internal/External  0 1 --                                 VDH[5:0]
+
+Power
+
+                   0 1 --                                 VDL[5:0]
+
+                   0 1 --                                 VDHR[5:0]
+Y 1: Internal DC/DC function for generating VDH/VDL
+VDS_EN: Source power selection
+
+0: External source power from VDH/VDL pins
+  A 1: Internal DC/DC function for generating VGH/VGL
+L VCOM_HV: VCOM Voltage Level
+VDG_EN: Gate power selection
+
+0: External gate power from VGH/VGL pins
+
+        P 1: VCOML=VGH, VCOML=VGL
+        0: VCOMH=VDH+VCOMDC, VCOML=VHL+VCOMDC
+                    VGHL_LV
+
+                   S 00(Default)
+                   I 01
+
+                         10
+                         11
+VGHL_LV[1:0]: VGH / VGL Voltage Level selection.
+
+                                       VGHL voltage level
+                                     VGH=16V,VGL= -16V
+                                     VGH=15V,VGL= -15V
+                                     VGH=14V,VGL= -14V
+                                     VGH=13V,VGL= -13V
+D VDH[5:0]: Internal VDH power selection for B/W pixel.(Default value: 100110b)
+
+                        VDH          VDH_V        VDH        VDH_V
+                      000000          2.4V          ...         ...
+                      000001          2.6V
+                      000010          2.8V      100110        10.0V
+                                      3.0V      100111        10.2V
+                   D000011            3.2V      101000        10.4V
+                                      3.4V      101001        10.6V
+                      000100          3.6V      101010        10.8V
+                      000101          3.8V      101011        11.0V
+                                               (others)       11.0V
+                   O000110
+                                              B/W pixel.  (Default value:
+                      000111                      VDL       VDL_V
+O VDL[5:0]: Internal VDL power selection for        ...        ...
+                               VDL                          -10.0V         100110b)
+                             000000             100110      -10.2V
+                                     VDL_V      100111
+G 000001                             -2.4V
+                             000010  -2.6V
+                                     -2.8V
+
+                   000011 -3.0V 101000 -10.4V
+
+                   000100 -3.2V 101001 -10.6V
+
+                   000101 -3.4V 101010 -10.8V
+
+                   000110 -3.6V 101011 -11.0V
+
+                   000111 -3.8V (others) -11.0V
+
+www.e-paper-display.com              2644                                  2.6 Inch Series
+
+                                                            GDEW026Z39
+
+VDHR[5:0]: Internal VDHR power selection for Red pixel. (Default value: 000011b)
+
+          VDHR VDHR _V VDHR VDHR _V
+
+          000000                     2.4V  ...       ...
+
+          000001                     2.6V  100110 10.0V
+
+          000010                     2.8V  100111 10.2V
+
+          000011                     3.0V  101000 10.4V
+
+          000100                     3.2V  101001    10.6V
+          000101                     3.4V  101010    10.8V
+          000110                     3.6V  101011    11.0V
+                                     3.8V  (others)  11.0V
+          Y 000111
+A Turning OFF the power 0 0 0 0 0 0 0 0 1 0
+(3) Power OFF (PWR) (R02H)
+L After the Power Off command, the driver will power off following the Power Off Sequence.
+Action
+This command will turn off charge pump, T-con, source driver, gate driver, VCOM, and
+temperature sensor, but register data will be kept until VDD becomes OFF. Source
+
+P Driver output and Vcom will remain as previous condition, which may have 2 condition:
+
+0V or floating.
+                            W/R C/D D7 D6 D5 D4 D3 D2 D1 D0
+
+S (4)Power off sequence setting (PFS) (R03H)
+I Action
+D sequence                                           D4 D3 D2 D1 D0
+                           W/R C/D D7 D6 D5
+
+Setting Power OFF 0 0 0 0                  0         0      0 0 1 1
+
+                           0 1 - - T_VDS_OFF[1:0] - - - -
+
+T_VDS_OFF[1:0]: Power OFF Sequence of VDH and VDL.
+
+00b: 1frame (Default) 01b: 2 frames 10b: 3frames 11b:4 frame
+D Action
+(5) Power ON (PON) (R04H)
+
+After the Power ON command, the driver will be powered ON following the Power ON
+
+O Sequence. Refer to the Power ON Sequence section. In the sequence, temperature
+
+sensor will be activated for one time sensing before enabling booster.
+                            W/R C/D D7 D6 D5 D4 D3 D2 D1 D0
+
+Turning ON the Power 0 0 0 0 0 0 0 1 0 0
+
+O (6)Power ON Measure (PMES) (R05H)
+G Action                    W/R C/D D7 D6 D5 D4 D3 D2 D1 D0
+                              0 0 0 0 0 0 0 1 0 1
+
+This command enables the internal bandgap, which will be cleared by the next POF.
+
+www.e-paper-display.com              2744                   2.6 Inch Series
+
+                                                                   GDEW026Z39
+
+(7)Booster Soft Start (BTST) (R06H)
+
+Action W/R C/D D7  D6                D5  D4    D3  D2           D1  D0
+
+Starting 0 0 0     0                 0   0     0   1            1   0
+
+data       0 1 BT_PHA BT_PHA BT_PHA BT_PHA BT_PHA BT_PHA BT_PHA BT_PHA
+
+transmiss  7       6                 5   4     3   2            1   0
+
+ion        0 1 BT_PHB BT_PHB BT_PHB BT_PHB BT_PHB BT_PHB BT_PHB BT_PHB
+
+           7       6                 5   4     3   2            1   0
+BTPHA[7:6]: Soft start period of phase A.
+
+   Y 00b: 10mS 01b: 20mS 10b: 30mS 11b: 40mS
+
+BTPHA[5:3]: Driving strength of phase A
+
+ A 000b:strength 1 001b:strength 2 010b:strength 3 011b:strength 4
+
+       100b:strength 5 101b:strength 6 110b:strength 7 111b:strength 8 (strongest)
+
+L BTPHA[2:0]: Minimum OFF time setting of GDR in phase B
+                        000b: 0.27uS 001b: 0.34uS 010b: 0.40uS 011b: 0.54uS
+   P 100b: 0.80uS 101b: 1.54uS 110b: 3.34uS 111b: 6.58uS
+BTPHB[7:6]: Soft start period of phase B.
+
+                     00b: 10mS 01b: 20mS 10b: 30mS 11b: 40mS
+
+S BTPHB[5:3]: Driving strength of phase B
+ I 000b:strength 1 001b:strength 2 010b:strength 3 011b: strength 4
+
+       100b:strength 5 101b:strength 6 110b:strength 7 111b:strength 8 (strongest)
+BTPHB[2:0]: Minimum OFF time setting of GDR in phase B
+
+  D 000b: 0.27uS 001b: 0.34uS 010b: 0.40uS 011b: 0.54uS
+           0 1-    -                 BT_PHC BT_PHC BT_PHC BT_PHC BT_PHC BT_PHC
+
+                                     5   4     3   2            1   0
+
+                        100b: 0.80uS 101b: 1.54uS 110b: 3.34uS 111b: 6.58uS
+   BTPHC[5:3]: Driving strength of phase C
+
+          000b:strength 1 001b:strength 2 010b:strength 3 011b:strength 4
+
+ D 100b:strength 5 101b:strength 6 110b:strength 7 111b:strength 8 (strongest)
+
+   BTPHC[2:0]: Minimum OFF time setting of GDR in phase C
+                        000b: 0.27uS 001b: 0.34uS 010b: 0.40uS 011b: 0.54uS
+
+   O 100b: 0.80uS 101b: 1.54uS 110b: 3.34uS 111b: 6.58uS
+
+(8) Deep Sleep (DSLP) (R07H)
+
+   OAction W/R C/D D7 D6 D5 D4 D3 D2 D1 D0
+
+                            Deep 0 0 0 0 0 0 0 1 1 1
+
+ G Sleep 0 1 1 0 1 0 0 1 0 1
+
+   After this command is transmitted, the chip would enter the deep-sleep mode to save
+
+power.
+
+The deep sleep mode would return to standby by hardware reset.
+
+The only one parameter is a check code, the command would be executed if check code
+= 0xA5.
+
+www.e-paper-display.com                  2844                   2.6 Inch Series
+
+                                                                   GDEW026Z39
+
+(9) Data Start Transmission 1 (DTM1) (R10H)
+
+Action W/R C/D D7                         D6     D5    D4  D3  D2  D1      D0
+
+              0 0                     0   0      0     1   0   0   0       0
+
+                       0      1 Pixel1 Pixel2 Pixel3 Pixel4 Pixel5 Pixel6 Pixel7 Pixel8
+Starting data transmission 0
+                              1       ..  ..     ..    ..  ..  ..  ..      ..
+                       0
+                              1 Pixel(n- Pixel(n- Pixel(n- Pixel(n- Pixel(n- Pixel(n- Pixel(n- Pixel(n)
+                                      7)  6)     5)    4)  3)  2)  1)
+
+This command starts transmitting data and write them into SRAM. To complete data
+transmission, command DSP (Data transmission Stop) must be issued. Then the chip
+will start to send data/VCOM for panel.
+
+In B/W mode, this command writes "OLD" data to SRAM.
+
+Y In B/W/Red mode, this command writes "B/W" data to SRAM.
+
+In Program mode, this command writes "OTP" data to SRAM for programming.
+A (10) Data Stop (DSP) (R11H)
+                L Action
+      P transmission 1 1 Data_fla - - - - - - -
+                                      W/R C/D D7 D6 D5 D4 D3 D2 D1 D0
+
+To stop data transmission, this command must be issued to check the data_flag.Stopping data 0 0
+
+S Data_flag: Data flag of receiving user data.
+                0: Driver didn't receive all the data.
+  I 1: Driver has already received all the one-frame data (DTM1 and DTM2).
+After "Data Start" (R10h) or "Data Stop" (R11h) commands and when data_flag=1, the
+
+D refreshing of panel starts and BUSY signal will become "0".
+                                              0      0 0 1 0 0 0 1
+
+(11) Display Refresh (DRF) (R12H)
+D While user sent this command, driver will refresh display (data/VCOM) according to
+                              Action
+SRAM data and LUT. After Display Refresh command, BUSY signal will become "0" and
+the refreshing of panel starts.
+                                          W/R C/D D7 D6 D5 D4 D3 D2 D1 D0
+
+      Refreshing the display 0 0 0 0 0 1 0 0 1 0
+
+O (12) Data Start Transmission 2 (DTM2) (R13H)
+              O0 0
+Action W/R C/D D7                         D6     D5    D4  D3  D2  D1      D0
+G transmission
+                                      0   0      0     1   0   0   1       1
+
+Starting 0                    1 Pixel1 Pixel2 Pixel3 Pixel4 Pixel5 Pixel6 Pixel7 Pixel8
+
+data          0               1       ..  ..     ..    ..  ..  ..  ..      ..
+
+              0               1 Pixel(n- Pixel(n- Pixel(n- Pixel(n- Pixel(n- Pixel(n- Pixel(n- Pixel(n)
+                                      7)  6)     5)    4)  3)  2)  1)
+
+This command starts transmitting data and write them into SRAM. To complete data
+transmission, command DSP (Data transmission Stop) must be issued. Then the chip will
+start to send data/VCOM for panel.
+
+In B/W mode, this command writes "NEW" data to SRAM.
+
+In B/W/Red mode, this command writes "RED" data to SRAM.
+
+www.e-paper-display.com                          2944              2.6 Inch Series
+
+                                                                GDEW026Z39
+
+(13) VCOM LUT (LUTC) (R20H)
+   This command builds Look-up Table for VCOM
+
+(14) W2W LUT (LUTWW) (R21H)
+   This command builds Look-up Table for White-to-White.
+
+(15) B2W LUT (LUTBW/LUTR) (R22H)
+
+This command builds Look-up Table for Black-to-White.
+Y (17) B2B LUT (LUTBB / LUTB) (R24H)
+
+   This command builds Look-up Table for Black - to- Black.
+(16) W2B LUT (LUTWB/LUTW) (R23H)
+   This command builds Look-up Table for White - to- Black.
+A (18) PLL Control (PLL) (R30H)
+      L Action
+                 P 0 1 - -
+                 W/R C/D D7 D6 D5 D4 D3 D2 D1 D0
+
+                 0000 1 10000
+The command controls the PLL clock frequency. The PLL structure must support the
+
+S following frame rates:
+Controlling PLL                                M[2:0]           N[2:0]
+
+I 1 29 Hz
+M N Frame Rate M N Frame Rate M N Frame Rate M N Frame Rate
+D 1 4
+                 1 86 Hz                       1 150 Hz      1  200 Hz
+
+2 14 Hz          2 43 Hz                       2 72 Hz       2  100 Hz
+
+3 10 Hz          3 29 Hz                       3 48 Hz       3  67 Hz
+
+      7 Hz   3 4 21 Hz 5 4 36 Hz 7 4 50 Hz (Default)
+
+     5 6 Hz       5      17 Hz         5       29 Hz         5  40 Hz
+     6 5 Hz       6      14 Hz         6       24 Hz
+     7 4 Hz       7       12Hz         7       20 Hz         6          33Hz
+     157 Hz       1      114 Hz        1       171 Hz
+      29 Hz       2      57 Hz         2       86 Hz         7  29 Hz
+D 2   19 Hz       3      38 Hz         3       57 Hz
+      14 Hz  4 4          29Hz    6 4          43 Hz
+     311 Hz       5      23 Hz         5       34 Hz
+2 4   10 Hz       6      19 Hz         6       29 Hz
+       8 Hz       7      16 Hz         7       24 Hz
+O 5
+
+     6
+
+GO7
+
+www.e-paper-display.com           3044                          2.6 Inch Series
+
+                                                                           GDEW026Z39
+
+(19) Temperature Sensor Calibration (TSC) (R40H)
+
+    Action W/R           C/D D7  D6           D5      D4      D3      D2   D1       D0
+                      0                        0       0       0       0
+                         0   0   1         D8/TS5  D7/TS4  D6/TS3  D5/TS2  0        0
+   Sensing 1                                  D0       -       -       -
+Temperature              1 D10/TS7 D9/TS6                                  D4/TS1 D3/TS0
+
+                      1  1 D2    D1                                        -        -
+
+This command reads the temperature sensed by the temperature sensor.
+
+TS[7:0]: When TSE (R41h) is set to 0, this command reads internal temperature sensor
+               value.
+
+D[10:0]: When TSE (R41h) is set to 1, this command reads external LM75 temperature
+               sensor value.
+Y TS[7:0]/D[1 Temperature
+A 1110_0111 -25
+                                 TS[7:0]/D[1 Temperature   TS[7:0]/D[1 Temperature
+L 1110_1001 -23
+0:3]                     ()      0:3]      ()              0:3]    ()
+
+                                 0000_0000 0               0001_1001 25
+
+P 1110_1011 -21
+1110_1000 -24                    0000_0001 1               0001_1010 26
+
+                                 0000_0010 2               0001_1011 27
+
+1110_1010 -22                    0000_0011 3               0001_1100 28
+S 1110_1101 -19
+                                 0000_0100 4               0001_1101 29
+I 1110_1111 -17
+1110_1100 -20                    0000_0101 5               0001_1110 30
+
+                                 0000_0110 6               0001_1111 31
+
+1110_1110 -18                    0000_0111 7               0010_0000 32
+D 1111_0010 -14
+                                 0000_1000 8               0010_0001 33
+
+1111_0000 -16                    0000_1001 9               0010_0010 34
+
+1111_0001 -15                    0000_1010 10              0010_0011 35
+
+                                 0000_1011 11              0010_0100 36
+
+1111_0011 -13                    0000_1100 12              0010_0101 37
+1111_0100 -12                    0000_1101 13              0010_0110 38
+1111_0101 -11                    0000_1110 14              0010_0111 39
+1111_0110 -10                    0000_1111 15              0010_1000 40
+                                 0001_0000 16              0010_1001 41
+D 1111_0111 -9                   0001_0001 17              0010_1010 42
+                                 0001_0010 18              0010_1011 43
+1111_1000 -8                     0001_0011 19              0010_1100 44
+                                 0001_0100 20              0010_1101 45
+O 1111_1001 -7                   0001_0101 21              0010_1110 46
+                                 0001_0110 22              0010_1111 47
+1111_1010 -6                     0001_0111 23              0011_0000 48
+1111_1011 -5                     0001_1000 24              0011_0001 49
+
+O 1111_1100 -4
+
+1111_1101 -3
+1111_1110 -2
+
+G1111_1111 -1
+
+www.e-paper-display.com                    3144                    2.6 Inch Series
+
+                                                                         GDEW026Z39
+
+(20) Temperature Sensor Enable (TSE)(R41H)
+
+      Action          W/R C/D D7 D6 D5 D4 D3 D2 D1 D0
+
+Enable Temperature    0            0  0         1        0  0         0  0 01
+
+      Sensor/Offset   0            1 TSE -               -  -            TO[3:0]
+
+This command selects Internal or External temperature sensor.
+
+TSE:  Internal temperature sensor switch
+
+      0: Enable (Default)                1: Disable; using external sensor.
+
+AY TO[3:0]:Temperature offset.     Calculation  TO[3:0]  Calculation
+                         TO[3:0]          0       1000         -8
+                          0000 b          1       1001         -7
+                           0001           2       1010         -6
+                           0010          ...        ...        ...
+                              ...         6       1110         -2
+                           0110           7       1111         -1
+                           0111
+L (21) Temperature Sensor Write (TSW)
+      P Action
+                                                (R42H)
+      S Write External
+                      W/R C/D D7 D6 D5 D4 D3 D2 D1 D0
+                       I 0
+                      0            0  0         1        0  0         0  0 10
+
+                      0            1                        WATTR[7:0]
+                                                            WMSB[7:0]
+Temperature Sensor     0           1
+D WATTR: D[7:6]: I2C Write Byte Number
+                                   0                        WLSB[7:0]
+
+This command reads the temperature sensed by the temperature sensor.
+
+              00b : 1 byte (head byte only)
+
+                           01b : 2 bytes (head byte + pointer)
+                           10b : 3 bytes (head byte + pointer + 1st parameter)
+                           11b : 4 bytes (head byte + pointer + 1st parameter + 2nd parameter)
+
+  D D[5:3]: User-defined address bits (A2, A1, A0)
+
+               D[2:0]: Pointer setting
+WMSB[7:0]: MSByte of write-data to external temperature sensor.
+
+O WLSB[7:0]: LSByte of write-data to external temperature sensor.
+O (22) Temperature Sensor Read (TSR)(R43H)
+      GRead ExternalActionW/R C/D D7 D6 D5 D4 D3 D2 D1 D0
+
+                       0           0  0         1        0  0         0  0 11
+
+Temperature Sensor    1            1                        RMSB[7:0]
+
+                       1           1                        RLSB[7:0]
+
+This command reads the temperature sensed by the temperature sensor.
+RMSB[7:0]: MSByte read data from external temperature sensor
+
+RLSB[7:0]:    LSByte read data from external temperature sensor
+
+www.e-paper-display.com               3244                               2.6 Inch Series
+
+                                                                                       GDEW026Z39
+
+(23) VCOM And Data Interval Setting (CDI) (R50H)
+
+Action         W/R C/D D7 D6 D5 D4 D3 D2 D1 D0
+
+Set Interval Between 0   0                      0     1        0      1      0         0 00
+
+Vcom and Data  0         1 VBD[1:0] DDX[1:0]                                    CDI[3:0]
+
+This command indicates the interval of Vcom and data output. When setting the vertical
+back porch, the total blanking will be kept (20 Hsync).
+
+VBD[1:0]: Border data selection
+B/W/Red mode (BWR=0)
+
+                        DDX[0] VBD[1:0]
+                                          00
+
+     Y 01
+
+                             0
+                                          10
+
+     A 11
+                            LUT DDX[0] VBD[1:0]                                 LUT
+                                                                               LUTB
+                         Floating                                 00          LUTW
+                                                                               LUTR
+                            LUTR                   1(Default)     01         Floating
+
+L B/W mode (BWR=1)          LUTW                                  10
+ P DDX[0] VBD[1:0]
+                            LUTB                                  11
+                              00
+                              01                                                    LUT
+                                                                                 Floating
+  S 0                                                                        LUTWB (10)
+                              10                                             LUTBW (01)
+    I 11                                                                         Floating
+                      LUT                            DDX[0] VBD[1:0]
+                   Floating                                              00
+               LUTBW (10)                                                01
+               LUTWB (01)
+                   Floating                        1(Default)
+                                                                         10
+                                                                         11
+D DDX[1:0]:
+Data polality.
+DDX[1] for RED data, DDX[0] for BW data in the B/W/Red mode.
+DDX[0] for B/W mode.
+
+B/W/Red mode (BWR=0)                             LUT  DDX[1:0]    Data{Red, B/W}        LUT
+                                                LUTW       10               00         LUTR
+              DDX[1:0] Data{Red, B/W}           LUTB                        01         LUTR
+                                                LUTR       11               10         LUTW
+     D00                                        LUTR                        11         LUTB
+                                                LUTB                        00         LUTR
+                                            01  LUTW                        01         LUTR
+                   00                           LUTR                        10         LUTB
+                                                LUTR                        11         LUTW
+                                            10
+
+    O11
+
+                                            00
+
+  O 01
+
+             01(Default)
+                                            10
+
+ G 11
+
+www.e-paper-display.com                         3344                            2.6 Inch Series
+
+                                                                        GDEW026Z39
+
+B/W mode (BWR=1)
+
+DDX[0] Data{New, Old}            LUT         DDX[0] Data{New, Old}       LUT
+
+           00                LUTWW (00)                     00          LUTBB (00)
+
+0          01                LUTBW (10)      1(Default)     01          LUTWB (01)
+
+           10                LUTWB (01)                     10          LUTBW (10)
+
+           11                LUTBB (11)                     11          LUTWW (11)
+
+   Y 0000 b
+CDI[3:0]: Vcom and data interval
+
+   CDI[3:0] Vcom and Data Interval           CDI[3:0]    Vcom and Data Interval
+                                               0110                      11
+                                                0111
+                                                  ...            10 (Default)
+                                               1101                      ...
+                                                1110                     4
+                                                1111                     3
+                                                                         2
+   A 0010              17 hsync
+
+   0001                      16
+   L 0100
+                             15
+
+   0011                      14
+P (24) Low Power Detection (LPD)
+                             13
+
+   0101                      12
+   S Detect Low
+   I Power                        (R51H)
+
+   Action         W/R C/D D7 D6 D5 D4 D3 D2 D1 D0
+
+                  0          0    0       1  0           1  0   0 01
+D LPD: Interval Low Power Detection Flag
+                  1          1    -       -  -           -  -   -       - LPD
+
+This command indicates the input power condition. Host can read this flag to learn the
+battery condition.
+
+   0: Low power input (VDD < 2.5V)           1: Normal status (default)
+
+D Set Gate/Source Non-
+     overlap Period
+(25) TCON Setting (TCON) (R60H)
+
+   Action                    W/R C/D D7 D6 D5 D4 D3 D2 D1 D0
+O This command defines non-overlap period of Gate and Source.
+                                000 1 1 0                      0 0 0 0
+                                                                     G2S[3:0]
+                                0 1          S2G[3:0]
+
+                S2G[3:0] or
+
+ OG2S[3:0]
+                    0000b
+                     0001
+
+G 0010
+                     0011
+S2G[3:0] or G2S[3:0]: Source to Gate / Gate to Source Non-overlap period
+
+                                 Period      S2G[3:0] or        Period
+                                               G2S[3:0]
+                                    4               ...            ...
+                                    8             1011            48
+                             12(Default)          1100            52
+                                   16             1101            56
+
+           0100                   20            1110            60
+
+           0101                   24            1111            64
+
+   Period = 660 nS.
+
+www.e-paper-display.com               3444                              2.6 Inch Series
+
+                                                                              GDEW026Z39
+
+                                 1-line period
+
+      Source
+
+      G(n)              S2G                      G2S
+
+                                                         S2G                  G2S
+
+      G(n+1)
+
+      Y Action
+
+      Set Display
+
+      A Resolution
+(26) Resolution Setting (TRES)(R61H)
+
+                     W/R C/D D7            D6 D5 D4 D3 D2                     D1         D0
+
+                     0  0        0         1     1          0     0     0          0     1
+L This command defines alternative resolution and this setting is of higher priority than the
+                     0  1                      HRES[7:3]                0          0     0
+RES[1:0] in R00H (PSR).
+                     0  1            -     -     -          -     -     -          - VRES[8]
+P HRES[7:3]: Horizontal Display Resolution
+                     0  0                                   VRES[7:0]
+VRES[8:0]: Vertical Display Resolution
+
+S Active channel calculation:
+         GD : First active gate = G0 (Fixed); LAST active gate = VRES[8:0] - 1
+ I SD : First active source =S0 (Fixed); LAST active source = HRES[7:3]*8 - 1
+D (27) Revision (REV) (R70H)
+      Action         W/R C/D D7 D6 D5 D4 D3 D2 D1 D0
+
+D (28) Get Status (FLG) (R71H)00        0     1       1        1     0     0          0  0
+      Chip Revision
+                     1     1                                  LUT_REV
+
+The LUT_REV is read from OTP address = 0x001.
+      Action
+
+      O Read
+
+      Flags
+O This command reads the IC status.        D5
+      W/R C/D D7 D6                                   D4          D3    D2 D1 D0
+
+              0 00            1            1             1        0        00 1
+
+              1 1 - PTL_flag I2C_ERR I2C_ BUSY data_ flag PON POF BUSY
+
+PTL_FLAG Partial display status (high: partial mode)
+I2C_ERR: I2C master error status
+
+GI2C_BUSY: I2C master busy status (low active)
+
+data_flag: Driver has already received all the one frame data
+
+PON:  Power ON status
+
+POF:  Power OFF status
+
+BUSY: Driver busy status (low active)
+
+www.e-paper-display.com                    3544                               2.6 Inch Series
+
+                                                                        GDEW026Z39
+
+(29) Auto Measure Vcom (AMV)       (R80H)
+
+      Action        W/R C/D D7 D6                 D5 D4        D3   D2   D1    D0
+                      0 0 10                                    0         0     0
+Automatically         0 1--                       0  0        XON    0  AMV  AMVE
+measure Vcom                                                       AMV
+                                                  AMVT[1:0]
+                                                                     S
+This command reads the IC status.
+
+AMVT[1:0]:       Auto Measure Vcom Time
+
+00b: 3s 01b: 5s (Default)
+
+10b: 8s 11b: 10s
+
+XON: All Gate ON of AMV
+
+            0: Gate normally scan during Auto Measure VCOM period. (default)
+
+ Y 1: All Gate ON during Auto Measure VCOM period.
+
+AMVS: Source output of AMV
+
+  A 0: Source output 0V during Auto Measure VCOM period. (default)
+
+               1: Source output VDHR during Auto Measure VCOM period.
+
+L AMV: Analog signal
+
+               0: Get Vcom value with the VV command (R81h) (default)
+
+  P 1: Get Vcom value in analog signal. (External analog to digital converter)
+
+AMVE: Auto Measure Vcom Enable (/Disable)
+
+  S 0: No effect
+  I 1: Trigger auto Vcom sensing.
+D (30)
+Vcom Value (VV) (R81H)            W/R C/D D7 D6 D5 D4 D3 D2 D1 D0
+                         Action     0 0 10000001
+
+                   Automatically
+
+               DVV[5:0]measure Vcom1        1 - -             VV[5:0]
+
+This command gets the Vcom value. 00 0000b
+VV[5:0]: Vcom Value Output
+             O00 0001b
+                                  00 0010b        Vcom value
+                                         :           -0.10 V
+                                                     -0.15 V
+            O 11 1010b                               -0.20 V
+G (31) VCM_DC Setting (VDCS) (R82H)                       :
+                     Action W/R C/D D7 D6 D5         -3.00 V
+
+                                                     D4 D3 D2           D1 D0
+
+            Set  0       0 10 0                      0 0 0              1 0
+                         1 --
+VCM_DC 0                                             VDCS[5:0]
+
+This command sets VCOM_DC value VDCS[5:0]: VCOM_DC Setting
+
+www.e-paper-display.com                     3644                        2.6 Inch Series
+
+                                                                              GDEW026Z39
+
+                             VDCS[5:0]            Vcom value
+                             00 0000b          -0.10 V (default)
+                             00 0001b
+                             00 0010b                 -0.15 V
+                                                      -0.20 V
+                                    :
+                              11 1010b                     :
+                                                      -3.00 V
+
+(32) Partial Window(PTL)Y 0     (R90H)
+
+         Action W/R C/D D7               D6 D5 D4 D3 D2                    D1     D0
+
+         A Set Partial 00 0        1     0     0       1     0       0     0      0
+
+                          1                 HRST[7:3]                0     0      0
+
+                 0        1                 HRED[7:3]                1     1      1
+                  L 0
+                          1        -     -     -       -     -       -     - VRST[8]
+
+         Window   0       1                            VRST[7:0]
+P This command sets partial window.
+                          1        -     -     -       -     -       -     - VRED[8]
+HRST[7:3]: Horizontal start channel bank. (value 00h~13h)
+                 0        1                            VRED[7:0]
+S HRED[7:3]: Horizontal end channel bank. (value 00h~13h).
+I HRED must be greater than HRST.01-     -     -       -     -       -     - PT_SCAN
+
+VRST[8:0]: Vertical start line. (value 000h~127h)
+VRED[8:0]: Vertical end line. (value 000h~127h). VRED must be greater than VRST.
+
+D PT_SCAN: 0: Gates scan only inside of the partial window.
+
+         1: Gates scan both inside and outside of the        partial window. (default)
+         D Partial In 0
+(33)     Partial In (PTIN) (R91H)
+
+   This  O Partial Out (PTOUT)                               D3 D2 D1 D0
+(34)     Action W/R C/D D7 D6 D5 D4
+
+   This                      0        1     0     0       1     0       0     0   1
+(35)
+         command makes the display enter partial mode.
+         OPartial In 0
+                                (R92H)
+
+         Action W/R C/D D7 D6 D5 D4                          D3 D2 D1 D0
+         GProgram Mode (PGM) (RA0H)
+                             0        1     0     0       1     0       0     1   0
+
+         command makes the display exit partial mode and     enter normal mode.
+
+         Action   W/R C/D D7 D6 D5 D4 D3 D2 D1 D0
+
+         Enter Program 0     0        1     0     1       0       0     0      0  0
+
+         Mode        0       1        1     0     1       0       0     1      0  1
+
+www.e-paper-display.com                     3744                           2.6 Inch Series
+
+                                                                                                              GDEW026Z39
+
+After this command is issued, the chip would enter the program mode.
+The mode would return to standby by hardware reset.
+The only one parameter is a check code, the command would be excuted if check code =
+0xA5.
+
+(36) Active Program (APG) (RA1H)
+
+Action                   W/R C/D D7 D6 D5 D4 D3 D2 D1 D0
+   After this command is transmitted, the programming state machine would be activated.
+   The BUSY flag would fall to 0 until the programming is completed.
+
+Y (37) Read OTP Data (ROTP) (RA2H)
+Active Program OTP 0 0 1 0 1 0 0 0 0 1
+
+        A 0 0 1
+   L 1 1ActionW/R C/D D7
+
+Read OTP data 1 1
+    for check
+
+   P 1 1
+                                  D6 D5 D4 D3 D2 D1 D0
+
+                                  0     1                                                        0      0  0  1  0
+
+        1 1                                                                                      Dummy
+
+                                  The data of address 0x000 in the OTP
+
+                                  The data of address 0x001 in the OTP
+S The command is used for reading the content of OTP for checking the data of
+I programming.                                                                                      ..
+
+The value of (n) is depending on the amount of programmed data, tha max address =
+
+D 0xFFF.
+        1 1                       The data of address (n-1) in the OTP
+
+        1 1                       The data of address (n) in the OTP
+
+                                                                     Supply Power, Reset
+
+                                                        PGM command(into Program Mode)
+
+     DDTM command(write data)
+   O Apply VPP=7.75V
+
+                                                           APG command(activate program)
+                                                                                     Remove VPP
+
+ O ROD command(check data)
+G correctness? Fail
+
+                                                                           Pass
+                                                                          Finish, Reset
+
+        The sequence of programming OTP
+
+www.e-paper-display.com           3844                                                                        2.6 Inch Series
+
+                                                                               GDEW026Z39
+
+(38) Power Saving (PWS)       (RE3H)
+
+Action        W/R C/D D7 D6 D5 D4 D3 D2 D1 D0
+
+Power Saving for 0       0         1  1            1   0        0        0     1    1
+
+Vcom &Source 0           1            VCOM W[3:0]                        SD W[3:0]
+
+This command is set for saving power during fresh period. If the output voltage of VCOM
+
+/ Source is from negative to positive or from positive to negative, the power saving
+
+mechanism will be activated. The active period width is defined by the following two
+
+parameters.
+VCOM_W[3:0]: VCOM power saving width
+        Y VSYNC
+                                                   (unit = line period)
+
+              VCOM W[3:0]
+        A Source
+                         CDI[3:0]
+L SD_W[3:0]: Source power saving width (unit = 660nS)
+        VCOM                             Frame N VCOM
+
+P Gate                                   Frame N Data
+
+IS Source           S2G[3:0]                          G2S[3:0]
+
+              D SD W[3:0]             Line N Data               Line(N+1)Data
+
+ OOD
+G
+
+www.e-paper-display.com               3944                                  2.6 Inch Series
+
+                                                                          GDEW026Z39
+
+6. Optical characteristics
+
+6.1 Specifications
+
+Measurements are made with that the illumination is under an angle of 45 degrees, the
+detection is perpendicular unless otherwise specified.
+
+                                                                               T=25
+
+SYMBOL PARAMETER CONDITIONS MIN TYPE                                      MAX UNIT Note
+                                                                                            Note
+
+                                                                          - % 6-1
+ Y CR
+R   Reflectance White                     30  35
+
+ A Panel's life
+Gn  2Grey Level -                         - DS(WS-DS)×n(m-1) - L* -
+
+    Contrast Ratio indoor                 8                               - -  -
+L Panel
+                    0~40                      1000000 times or 5 years         Note
+                                                                               6-2
+
+    P Update Time Operation
+    Image Update Storage and                  Update the white screen
+                          transportation
+
+                                              Suggest update once
+                                              every 24 hours or at least
+                                              10 days to update again.
+S WS: White state, DS: Dark state
+
+Gray state from Dark to White : DSWS
+
+I m: 2
+
+Note 6-1: Luminance meter: Eye - One Pro Spectrophotometer
+
+D Note 6-2: Panel life will not guaranteed when work in temperature below 0 degree or
+                above 40 degree. Each update interval time should be minimum at 180
+
+                seconds.
+
+6.2 Definition of contrast ratio
+
+D The contrast ratio (CR) is the ratio between the reflectance in a full white area (R1) and
+
+the reflectance in a dark area (Rd)() : R1: white reflectance Rd: dark reflectance
+     CR = R1/Rd
+
+    O Display
+  O
+ G Ring light
+
+www.e-paper-display.com                          Detector              2.6 Inch Series
+                                          4044
+
+                                                                       GDEW026Z39
+
+6.3 Reflection Ratio
+
+The reflection ratio is expressed as:
+
+R = Reflectance Factor white board  x (L center / L white board)
+
+L center is the luminance measured at center in a white area (R=G =B=1). L white board is the
+luminance of a standard white board. Both are measured with equivalent illumination
+source. The viewing angle shall be no more than 2 degrees.
+
+                  Viewing                 Y 12 o'clock
+                  direction
+                                               dirction 90°
+                                     
+                                             LA 3 o'clock
+9 o'clock                                DISPdirction 0°
+
+dirction 180°
+
+                     6 o'clock
+                  dirction 270°
+
+6.4 Bi-stabilityD Bi-stability
+GOO 24 hours Luminance drift
+The Bi-stability standard as follows:
+
+                                                      Result
+
+                                                                  AVG  MAX
+                                                                         3
+                                         White state  L*          -      3
+                                         Black state
+                                                      L*          -
+
+www.e-paper-display.com                  4144                          2.6 Inch Series
+
+                                                                        GDEW026Z39
+
+7. Point and line standard
+
+Shipment Inseption Standard
+
+Part-AActive area Part-BBorder area
+
+EquipmentElectrical test fixture, Point gauge
+
+Outline dimension
+
+71.82(H)×36.3(V) ×1.18(D)                                    Unitmm
+
+                                               Y Spot size              Time    Angle
+                 Temperature     Humidity Illuminance Distance                  Part-B
+                                                                                Ignore
+Environment          23±2        55±5%RH 1200                300 mm 35 Sec      Ignore
+     Name                                           1500Lux                     Ignore
+      Spot           Causes      A 0.25mm  D  0.4mm
+                                                                        Part-A
+ Scratch or   B/W spot in glass
+ line defect     or protection   L Length
+                sheet, foreign
+ Air bubble      mat. Pin hole   L 2.0mm
+                                     D  0.25mm                          Ignore
+      Side    Scratch on glass
+  Fragment    or Scratch on FPL                                         4
+
+                 or Particle is        0.4mm  D                         0
+              Protection sheet.  P 2.0mm<L5.0mm 0.2mm<W0.3mm 2
+                                                                 Width  Part-A
+                   Air bubble                                W0.2 mm    Ignore
+                                 S 0.2 mm < D1,D2  0.35mm
+                                 5.0 mm < LDI0.35mm < D1, D2 0.3mm < W  0
+
+                                 D1, D2  0.2 mm                         Ignore
+
+                                                                        4
+
+                                                                        0
+
+                                 X5mmY1mm & display is ok, Ignore
+Any defect which is visible under gray pattern or transition process but invisible
+
+D under black and white is disregarded.
+Remarks: Spot define: That only can be seen under WS or DS defects.
+
+O Definition for L/W and D (major axis)
+Here is definition of the "Spot" and "Scratch or line defect".
+
+Spot: W > 1/4LGOFPC bonding area pad doesn't allowed visual inspection.
+                             Scratch or line defect: W 1/4L
+
+Note: AQL = 0.4
+
+www.e-paper-display.com          4244                                   2.6 Inch Series
+
+                               GDEW026Z39
+
+7. Packing
+
+                             PLAY
+                         DIS
+
+ OOD
+G
+
+www.e-paper-display.com  4344  2.6 Inch Series
+
+                                                                                                          GDEW026Z39
+
+9. Precautions
+
+ (1) Do not apply pressure to the EPD panel in order to prevent damaging it.
+ (2) Do not connect or disconnect the interface connector while the EPD panel is in operation.
+ (3) Do not touch IC bonding area. It may scratch TFT lead or damage IC function.
+ (4) Please be mindful of moisture to avoid its penetration into the EPD panel, which may
+
+         cause damage during operation.
+ (5) If the EPD Panel / Module is not refreshed every 24 hours, a phenomena known as
+
+ Y "Ghosting" or "Image Sticking" may occur. It is recommended to refreshed the ESL /
+
+         EPD Tag every 24 hours in use case. It is recommended that customer ships or stores the
+
+ A ESL / EPD Tag with a completely white image to avoid this issue
+L (6) High temperature, high humidity, sunlight or fluorescent light may degrade the EPD
+
+         panel's performance. Please do not expose the unprotected EPD panel to high
+
+ DISP temperature, high humidity, sunlight, or fluorescent for long periods of time.
+   OOD
+
+  G
+
+www.e-paper-display.com  4444  2.6 Inch Series
+
