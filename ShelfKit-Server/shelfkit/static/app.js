@@ -35,7 +35,7 @@ const FILTERS = [
 ];
 const JOB_LABEL = {
   image: "Image", service: "Service label", firmware: "Firmware", id: "New ID",
-  wipe: "Factory reset", read: "Flash read",
+  wipe: "Factory reset", read: "Flash read", interval: "Ping interval",
 };
 const JOB_STATE = {
   pending: "Waiting for the tag", running: "Running", done: "Done", failed: "Failed",
@@ -215,7 +215,8 @@ const ui = {
   inspectorGlass: $("inspector-glass"),
   inspectorFacts: $("inspector-facts"),
   inspectorAlert: $("inspector-alert"),
-  inspectorPush: $("inspector-push"),
+  inspectorInterval: $("inspector-interval"),
+  inspectorIntervalNote: $("inspector-interval-note"),
   inspectorService: $("inspector-service"),
   inspectorForm: $("inspector-form"),
   inspectorAliasInput: $("inspector-alias-input"),
@@ -477,11 +478,17 @@ function tagRows() {
     const detail = info[String(addr)] || { count, seen: null, push: null };
     const mine = jobs.filter((job) => job.addr === hex);
     const seen = detail.seen;
+    // A tag told to check in every 30 minutes or 2 hours is not late after 5: the
+    // limits stretch with the interval it acknowledged (one missed check-in = late,
+    // two = silent), and never drop below the ones in Settings.
+    const pollS = detail.poll_s || detail.poll_default_s || 300;
+    const lateAfter = Math.max(prefs.late_after_s, pollS * 1.1 + 30);
+    const silentAfter = Math.max(prefs.silent_after_s, pollS * 2.1 + 30);
     // whether the tag itself is checking in, whatever is queued for it
-    const quiet = seen === null || seen > prefs.late_after_s;
+    const quiet = seen === null || seen > lateAfter;
     let status = "silent";
-    if (seen !== null && seen <= prefs.late_after_s) status = "online";
-    else if (seen !== null && seen <= prefs.silent_after_s) status = "late";
+    if (seen !== null && seen <= lateAfter) status = "online";
+    else if (seen !== null && seen <= silentAfter) status = "late";
     if (mine.some((job) => job.state === "pending")) status = "waiting";
     if (mine.some((job) => job.state === "running")
         || (state.sending && Number(state.send_to) === Number(addr))) status = "sending";
@@ -513,6 +520,10 @@ function tagRows() {
       seen,
       count: detail.count ?? count,
       push: detail.push || null,
+      pollS,                                        // seconds between idle check-ins
+      pollSet: detail.poll_s != null,               // false = firmware default, never set
+      pollPending: detail.poll_pending_s ?? null,   // a change still waiting for the tag
+      silentAfter,
     };
   });
 }
@@ -1340,7 +1351,7 @@ function renderFleet() {
   ui.fleetTableWrap.hidden = fleetView !== "table" || rows.length === 0;
   ui.wallSize.hidden = fleetView !== "wall";
   ui.fleetForgetStale.hidden = !all.some(
-    (row) => row.seen === null || row.seen > prefs.forget_after_s);
+    (row) => row.seen === null || row.seen > Math.max(prefs.forget_after_s, row.silentAfter));
   setText(ui.fleetForgetStale, `Forget tags silent for ${minutesText(prefs.forget_after_s)}`);
   for (const button of ui.fleetView.querySelectorAll("button")) {
     button.classList.toggle("on", button.dataset.view === fleetView);
@@ -1617,6 +1628,17 @@ function renderInspector() {
       ui.inspectorFacts.append(el("dt", null, key), el("dd", bad ? "bad" : null, value));
     }
   }
+  // The interval picker shows what is queued if a change is waiting, else what the
+  // tag acknowledged. Left alone while it is open, so a poll does not snap it back.
+  if (document.activeElement !== ui.inspectorInterval) {
+    ui.inspectorInterval.value = String(row.pollPending ?? row.pollS);
+  }
+  const intervalNote = row.pollPending != null
+    ? "Queued. The tag picks it up at its next check-in."
+    : row.pollSet ? "" : "Firmware default, not set from here yet.";
+  ui.inspectorIntervalNote.hidden = !intervalNote;
+  setText(ui.inspectorIntervalNote, intervalNote);
+
   const alertText = row.failed
     ? `${row.reason}: ${row.failed.error || "see Logs for what happened."}`
     : row.low ? `The battery is at ${row.battery.toFixed(2)} V. Replace the CR2450 soon.` : "";
@@ -3197,8 +3219,13 @@ ui.flashCancel.addEventListener("click", async () => {
 ui.inspectorClose.addEventListener("click", closeInspector);
 ui.inspectorForm.addEventListener("submit", saveInspector);
 ui.inspectorForm.addEventListener("input", () => setFormDirty(true));
-ui.inspectorPush.addEventListener("click", () => {
-  if (inspected) openEditorFor([inspected]);
+ui.inspectorInterval.addEventListener("change", () => {
+  if (!inspected) return;
+  const seconds = Number(ui.inspectorInterval.value);
+  ui.inspectorInterval.blur();        // let the next render show the queued value
+  queueCommand(inspected, "interval", { seconds },
+    `Ping interval for ${inspected} queued: ${minutesText(seconds)}, from its next check-in`,
+    ui.inspectorInterval);
 });
 ui.inspectorService.addEventListener("click", () => {
   if (inspected) {

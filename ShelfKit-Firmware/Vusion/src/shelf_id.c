@@ -20,6 +20,7 @@
 #include "shelfhw.h"
 #include "shelfid.h"
 #include "shelflink.h"
+#include "shelfmsg.h"
 #include "shelfota.h"
 #include "spi.h"
 
@@ -166,6 +167,80 @@ uint8_t shelf_id_factory_reset(void) __reentrant
     wipe_owned_sectors();
     extflash_power_down();
     return 1;
+}
+
+/* ── configuration record (see shelf_id.h) ──────────────────────────────── */
+
+#define CFG_BYTES   10
+static uint16_t __xdata cfg_poll_s = SHELF_POLL_IDLE_S;
+static uint16_t __xdata cfg_crc;
+
+/* rec[] holds a record: 1 = it is a valid one, and then cfg_crc is its interval */
+static uint8_t cfg_parse(void) __reentrant
+{
+    if (rec[0] != 'S' || rec[1] != 'K' || rec[2] != 'C' || rec[3] != 'F' || rec[4] != 1)
+        return 0;
+    cfg_crc = ota_crc16(rec, 8, OTA_CRC_INIT);
+    if (rec[8] != (uint8_t)cfg_crc || rec[9] != (uint8_t)(cfg_crc >> 8))
+        return 0;
+    cfg_crc = (uint16_t)rec[5] | ((uint16_t)rec[6] << 8);
+    return cfg_crc >= SM_POLL_S_MIN;
+}
+
+void shelf_cfg_boot(void) __reentrant
+{
+    extflash_power_up();
+    spi_init();
+    extflash_release_powerdown();
+    delay(2000);
+    extflash_read(OTA_RESERVED_ADDR, rec, CFG_BYTES);
+    if (cfg_parse())
+        cfg_poll_s = cfg_crc;
+    extflash_power_down();
+    log_puts("poll every ");
+    log_dec(cfg_poll_s);
+    log_puts(" s\r\n");
+}
+
+uint16_t shelf_cfg_poll_s(void)
+{
+    return cfg_poll_s;
+}
+
+uint8_t shelf_cfg_set_poll(uint16_t seconds) __reentrant
+{
+    uint8_t ok;
+
+    if (seconds < SM_POLL_S_MIN)
+        return 0;
+    if (seconds == cfg_poll_s)
+        return 1;                   /* a repeat: no reason to wear the sector */
+
+    extflash_power_up();
+    spi_init();
+    extflash_release_powerdown();
+    rec[0] = 'S';
+    rec[1] = 'K';
+    rec[2] = 'C';
+    rec[3] = 'F';
+    rec[4] = 1;
+    rec[5] = (uint8_t)seconds;
+    rec[6] = (uint8_t)(seconds >> 8);
+    rec[7] = 0;
+    cfg_crc = ota_crc16(rec, 8, OTA_CRC_INIT);
+    rec[8] = (uint8_t)cfg_crc;
+    rec[9] = (uint8_t)(cfg_crc >> 8);
+    ok = extflash_erase(OTA_RESERVED_ADDR, (uint16_t)OTA_SECTOR)
+         && extflash_write(OTA_RESERVED_ADDR, rec, CFG_BYTES);
+    if (ok) {
+        /* as with the id: only what reads back is what the tag runs with */
+        extflash_read(OTA_RESERVED_ADDR, rec, CFG_BYTES);
+        ok = (uint8_t)(cfg_parse() && cfg_crc == seconds);
+    }
+    extflash_power_down();
+    if (ok)
+        cfg_poll_s = seconds;
+    return ok;
 }
 
 uint8_t shelf_id_assign(uint16_t node_id) __reentrant

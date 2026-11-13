@@ -19,7 +19,7 @@ import threading
 import time
 from pathlib import Path
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 MAX_EVENTS = 5000      # keep the newest N; the Logs screen never shows more
 MAX_BITMAPS = 64       # content store ceiling (each row ~15 KB of blobs)
 
@@ -48,6 +48,7 @@ CREATE TABLE IF NOT EXISTS tags (
     avg_ua      INTEGER,               -- average current since the tag's boot
     life_days   INTEGER,               -- estimated battery life from that
     fw_at       REAL,                  -- when that report arrived
+    poll_s      INTEGER,               -- idle check-in interval the tag acknowledged (SM_OP_SET_POLL)
     created_at  REAL NOT NULL
 );
 
@@ -135,6 +136,8 @@ class Store:
                 for column in ("fw_version TEXT", "fw_build INTEGER", "avg_ua INTEGER",
                                "life_days INTEGER", "fw_at REAL"):
                     self._db.execute(f"ALTER TABLE tags ADD COLUMN {column}")
+            if version <= 5:
+                self._db.execute("ALTER TABLE tags ADD COLUMN poll_s INTEGER")
             self._db.executescript(_SCHEMA)     # IF NOT EXISTS: adds voltage, power_runs
         self._db.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
         self._db.commit()
@@ -222,8 +225,8 @@ class Store:
             self._db.commit()
 
     def update_tag(self, hex_id: str, **fields) -> dict | None:
-        """Set editable tag fields: alias, notes, grid_row, grid_col, battery, last_status."""
-        allowed = {"alias", "notes", "grid_row", "grid_col", "battery", "last_status"}
+        """Set editable tag fields: alias, notes, grid_row, grid_col, battery, last_status, poll_s."""
+        allowed = {"alias", "notes", "grid_row", "grid_col", "battery", "last_status", "poll_s"}
         sets = {k: v for k, v in fields.items() if k in allowed}
         with self._lock:
             self._ensure_tag(hex_id, time.time())

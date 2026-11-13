@@ -35,6 +35,11 @@ RESET_PULSE_S = 0.1  # how long the momentary Reset button holds RTS asserted
 SM_OP_SET_ID = 7
 # Erases the tag's flash and resets it into a fresh random identity
 SM_OP_WIPE = 8
+SM_OP_SET_POLL = 13     # shelfmsg.h: [1..2] idle check-in interval in seconds, little endian
+# What the tag inspector offers. A tag that was never told anything runs on its firmware
+# default, SHELF_POLL_IDLE_S in the tag's shelf_config.h.
+POLL_INTERVALS_S = (60, 300, 1800, 7200)
+POLL_DEFAULT_S = 300
 # What the tag logs when it has handled one (see Vusion/src/fw_rx.c): "id set 0102"
 # or "id set FAILED, ...". The link-layer ACK only proves the frame arrived.
 RE_ID_RESULT = re.compile(r"id set (\S+)")
@@ -305,6 +310,7 @@ class App:
                 "notes": row["notes"],
                 "row": row["grid_row"],
                 "col": row["grid_col"],
+                "poll_s": row.get("poll_s"),
             }
         if self.image is not None:
             # Re-render so the preview and its thumbnails are live again.
@@ -739,6 +745,14 @@ class App:
                     "notes": meta.get("notes"),
                     "row": meta.get("row"),
                     "col": meta.get("col"),
+                    # the idle check-in interval: what the tag last acknowledged (None =
+                    # never set, it runs on the firmware default) and what is still queued
+                    "poll_s": meta.get("poll_s"),
+                    "poll_default_s": POLL_DEFAULT_S,
+                    "poll_pending_s": next(
+                        (j["params"].get("seconds") for j in reversed(self.queue)
+                         if j["addr"] == addr and j["kind"] == "interval"
+                         and j["state"] in ("pending", "running")), None),
                     "vdd": self._vdd_of(addr, now),
                     "fw": self._fw_of(addr, now),
                     "push": (
@@ -1274,7 +1288,11 @@ class App:
             if not_seen_for is not None:
                 for addr in list(self.tags):
                     seen = self.tag_seen.get(addr)
-                    if seen is None or now - seen >= float(not_seen_for):
+                    # a tag set to check in every 2 h is not "silent" after 15 minutes:
+                    # give it two of its own intervals before it counts
+                    own = (self.tag_meta.get(addr) or {}).get("poll_s") or 0
+                    limit = max(float(not_seen_for), 2.1 * own + 30.0)
+                    if seen is None or now - seen >= limit:
                         targets.add(addr)
             # never pull the rug out from under a transfer, and only report ids
             # that really were known ("forgot 1" for an unknown id would be a lie)
@@ -1537,6 +1555,57 @@ class App:
         with self.lock:
             self.status = f"{addr:04X} wiped, it will come back with a new id"
         return {"ok": True, "old": f"{addr:04X}"}
+
+    def set_poll_interval(self, addr: int, seconds) -> dict:
+        """Tell a tag how often to check in when idle (SM_OP_SET_POLL).
+
+        One DATA frame, like an id change. The tag writes the interval to the
+        configuration sector of its SPI flash, reads it back and uses it from its next
+        check-in on - and after every reset. The link-layer ACK is the confirmation:
+        the tag's own log is not visible from here.
+        """
+        try:
+            seconds = int(seconds)
+        except (TypeError, ValueError):
+            return {"ok": False, "error": "the interval must be a number of seconds"}
+        if seconds not in POLL_INTERVALS_S:
+            return {"ok": False, "error": f"{seconds} s is not one of the offered intervals"}
+        key = self.hub_key()
+        pane = self.panes.get(key)
+        if pane is None:
+            return {"ok": False, "error": "no hub pane"}
+        if not pane.worker.is_open:
+            return {"ok": False, "error": f"open the {pane.spec.name} port first"}
+        cancel = threading.Event()
+        if not self._ping_hub(key, cancel):
+            return {"ok": False, "error": "the hub did not answer P"}
+        with self.lock:
+            self.status = f"setting {addr:04X} to check in every {seconds} s ..."
+        payload = bytes([SM_OP_SET_POLL, seconds & 0xFF, seconds >> 8])
+        if not self._send_frame(key, addr, payload, cancel):
+            with self.lock:
+                self.status = f"{addr:04X} did not acknowledge the new interval"
+            return {"ok": False, "error": "the tag did not acknowledge"}
+        hex_code = f"{addr:04X}"
+        with self.lock:
+            meta = self.tag_meta.setdefault(addr, {"alias": None, "notes": None,
+                                                   "row": None, "col": None})
+            meta["poll_s"] = seconds
+            self.status = f"{hex_code} now checks in every {seconds} s"
+        if self.store is not None:
+            self.store.update_tag(hex_code, poll_s=seconds)
+        self._event("interval", hex_code, f"{seconds} s")
+        return {"ok": True, "id": hex_code, "seconds": seconds}
+
+    def queue_poll_interval(self, addr: int, seconds) -> dict:
+        """Queue an interval change for the tag's next check-in (it only listens then)."""
+        try:
+            seconds = int(seconds)
+        except (TypeError, ValueError):
+            return {"ok": False, "error": "the interval must be a number of seconds"}
+        if seconds not in POLL_INTERVALS_S:
+            return {"ok": False, "error": f"{seconds} s is not one of the offered intervals"}
+        return self.enqueue("interval", addr, f"check in every {seconds} s", seconds=seconds)
 
     def _fw_of(self, addr: int, now: float) -> dict | None:
         """Firmware version and power figures from the tag's last tapped poll, if any."""
@@ -1902,6 +1971,11 @@ class App:
                     )
                 except Exception as exc:  # noqa: BLE001 - report at click time
                     return {"ok": False, "error": f"cannot prepare the image: {exc}"}
+            if kind == "interval":
+                # only the newest choice matters: drop one that is still waiting
+                self.queue = [j for j in self.queue
+                              if not (j["addr"] == addr and j["state"] == "pending"
+                                      and j["kind"] == "interval")]
             source = params.get("source")
             if source:
                 # One pending image per tag from the same source (an InkService app):
@@ -2141,6 +2215,9 @@ class App:
                 ok, error = bool(finished.get("ok")), finished.get("error")
             elif kind == "wipe":
                 finished = self.factory_reset(addr)
+                ok, error = bool(finished.get("ok")), finished.get("error")
+            elif kind == "interval":
+                finished = self.set_poll_interval(addr, params.get("seconds"))
                 ok, error = bool(finished.get("ok")), finished.get("error")
             else:
                 error = f"unknown queued command {kind!r}"

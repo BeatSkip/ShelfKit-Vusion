@@ -45,6 +45,7 @@ long-lived poll connection per browser tab. The API is small and boring:
     POST /api/tags/<hex>/flash     {"path": "Release/vusion-....hex"}  OTA firmware update
     POST /api/tags/<hex>/forget    delete the server's record of one tag
     POST /api/tags/<hex>/wipe      wipe the tag's flash and reset it into a new id
+    POST /api/tags/<hex>/interval  {"seconds": 300}  idle check-in interval, stored on the tag
     POST /api/tags/<hex>/service   draw this tag's service label and push it
     POST /api/tags/<hex>/read      {"start": 0, "length": 12288} SPI flash read-back
     POST /api/queue/cancel         cancel every queued command
@@ -339,6 +340,13 @@ class Handler(BaseHTTPRequestHandler):
                 except ValueError:
                     return self._error(f"bad tag id {parts[2]}")
                 result = self.app.enqueue("wipe", addr, "factory reset")
+                return self._json({"result": result, "state": self.app.state()})
+            if len(parts) == 4 and parts[1] == "tags" and parts[3] == "interval":
+                try:
+                    addr = int(parts[2], 16)
+                except ValueError:
+                    return self._error(f"bad tag id {parts[2]}")
+                result = self.app.queue_poll_interval(addr, body.get("seconds"))
                 return self._json({"result": result, "state": self.app.state()})
             if len(parts) == 4 and parts[1] == "tags" and parts[3] == "forget":
                 try:

@@ -112,8 +112,15 @@ def describe(data: bytes, base: int) -> list[str]:
         if data[0] == 0x02:
             notes.append(f"internal reset jump: ljmp 0x{(data[1] << 8) | data[2]:04X}")
     if base <= 0x2000 and base + len(data) >= 0x2010:
+        # sector 2 holds the tag's configuration record (shelf_id.h in the tag firmware):
+        # "SKCF", version, idle check-in interval in seconds (LE), a zero, CRC-16
         reserved = data[0x2000 - base:0x2000 - base + 16]
-        notes.append("reserved sector: " + ("blank" if reserved == b"\xff" * 16 else "in use"))
+        if reserved[:4] == b"SKCF":
+            seconds = reserved[5] | (reserved[6] << 8)
+            notes.append(f"config sector: check-in every {seconds} s (format {reserved[4]})")
+        else:
+            notes.append("reserved sector: "
+                         + ("blank" if reserved == b"\xff" * 16 else "in use"))
     return notes
 
 

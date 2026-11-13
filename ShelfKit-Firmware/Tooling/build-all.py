@@ -519,6 +519,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", default=str(DEFAULT_OUT), help=f"output folder (default {DEFAULT_OUT})")
     parser.add_argument("--clean", action="store_true",
                         help="accepted for compatibility; old .hex/.map are always removed")
+    parser.add_argument("--allow-oversize", action="store_true",
+                        help="do not fail when the tag image is over the OTA window "
+                             "(a wire-only test image; it cannot be sent over the air)")
     parser.add_argument("--no-bundle", action="store_true",
                         help="do not also write the bootloader+application HEX")
     args = parser.parse_args(argv)
@@ -567,11 +570,23 @@ def main(argv: list[str] | None = None) -> int:
         except SystemExit as exc:
             print(f"\n!!! could not bundle: {exc}")
 
+    # The tag image has to fit the OTA window (shelfota.h OTA_MAX_IMAGE), or the fleet can
+    # only be updated over the wire. Checked on every build: the margin is printed, and an
+    # image that is over makes the build FAIL (exit code 1) unless --allow-oversize says it
+    # is a wire-only test image on purpose.
+    over_ota = False
     for row in results:
-        if row["target"] == "Vusion" and row.get("code", 0) > OTA_IMAGE_WINDOW:
-            print(f"\n!!! the tag image is {row['code']} B, over the {OTA_IMAGE_WINDOW} B OTA window:")
+        if row["target"] != "Vusion" or not row.get("code"):
+            continue
+        if row["code"] > OTA_IMAGE_WINDOW:
+            over_ota = True
+            print(f"\n!!! the tag image is {row['code']} B, over the {OTA_IMAGE_WINDOW} B OTA window"
+                  f" by {row['code'] - OTA_IMAGE_WINDOW} B:")
             print("    it flashes over the wire, but ota-send.py and the server will refuse it.")
             print("    Free space in the application, or move bytes out of it.")
+        else:
+            print(f"\nOTA size: the tag image is {row['code']} of {OTA_IMAGE_WINDOW} B, "
+                  f"{OTA_IMAGE_WINDOW - row['code']} B free")
 
     if args.no_record:
         print(f"\n=== test build {version_text(stamped)} (not recorded) ===")
@@ -589,6 +604,10 @@ def main(argv: list[str] | None = None) -> int:
         print("       so OTA updates can never be applied.)")
     if hub is not None:
         print(f"Hub:  python {HERE / 'axsem-flasher.py'} {hub} -p COM4")
+    if over_ota and not args.allow_oversize:
+        print("\nFAILED: the tag image does not fit the OTA window (see above). "
+              "Pass --allow-oversize for a wire-only test image.")
+        return 1
     return 0
 
 

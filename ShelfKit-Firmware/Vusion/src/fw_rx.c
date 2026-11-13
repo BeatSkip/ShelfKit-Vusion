@@ -251,6 +251,16 @@ uint8_t fw_rx_data(const uint8_t __xdata *payload, uint8_t len)
             log_puts("id set FAILED\r\n");
         }
         break;
+    case SM_OP_SET_POLL:
+        if (len < 3)
+            return 1;
+        id = (uint16_t)msg[1] | ((uint16_t)msg[2] << 8);
+        /* stored, read back and in use from the next check-in on: next_interval() in
+         * main.c asks shelf_cfg_poll_s() every time it arms the poll timer */
+        log_puts(shelf_cfg_set_poll(id) ? "poll set " : "poll set FAILED ");
+        log_dec(id);
+        log_nl();
+        break;
     default:
         return 0;
     }

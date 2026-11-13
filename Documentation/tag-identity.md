@@ -11,7 +11,7 @@ SPI flash sector 1, in the gap the OTA update never touches:
 |---|---|---|
 | `0x000000` | OTA header (magic, length, CRC) | app on `BEGIN`, bootloader after flashing |
 | `0x001000` | **identity record**: magic `SKID`, version, flags, node id (LE), CRC-16 | only when the id is (re)assigned |
-| `0x002000` | reserved for future persistent storage — deliberately empty, never touched | — |
+| `0x002000` | configuration record: the idle check-in interval (`SM_OP_SET_POLL`). Magic `SKCF`, version, interval in seconds (LE), a zero, CRC-16. Blank = firmware default (300 s). Written by `shelf_cfg_set_poll()` in `Vusion/src/shelf_id.c` | 10 bytes |
 | `0x003000` | OTA image | app on `BEGIN` |
 
 The record is checked by its own CRC. A torn write, or a flash sector that never
@@ -55,7 +55,7 @@ generates the random id (`SHELF_WIPE_FIRST_BOOT` in `shelf_config.h`, ~0.5 s onc
 |---|---|
 | `0x0000` OTA header | a leftover magic here would make the bootloader overwrite this application on the next reset |
 | `0x1000` identity | its contents are exactly what was just judged untrusted |
-| `0x2000` reserved | future storage, unknown content |
+| `0x2000` configuration | the check-in interval, so the tag falls back to the firmware default |
 | `0x3000`+ image window | a stale image nobody will ever want |
 
 Sectors above the image window are left alone: they are not this firmware's.

@@ -541,7 +541,17 @@
         <div class="inspector-side">
           <dl class="facts" id="inspector-facts"></dl>
           <div class="inspector-send">
-            <button id="inspector-push" class="primary" type="button">Push image</button>
+            <label class="inspector-interval"
+                   title="How often this tag checks in when nothing is queued for it. Stored on the tag, so it survives resets and updates. A change reaches the tag at its next check-in.">
+              <span>Ping interval</span>
+              <select id="inspector-interval">
+                <option value="60">1 minute</option>
+                <option value="300">5 minutes</option>
+                <option value="1800">30 minutes</option>
+                <option value="7200">2 hours</option>
+              </select>
+            </label>
+            <p id="inspector-interval-note" class="interval-note" hidden></p>
             <button id="inspector-service" type="button"
                     title="Draw a label with this tag's ID, alias and notes, then send it">Send service label</button>
           </div>

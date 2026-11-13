@@ -748,6 +748,9 @@ tr.failed .state-word, tr.failed .detail { color: var(--red); font-weight: 500; 
 .inspector-side { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
 .inspector-send { margin-top: auto; align-self: flex-start; display: flex; flex-direction: column; gap: 6px; }
 .inspector-send button { width: 100%; }
+.inspector-interval { display: flex; flex-direction: column; gap: 3px; font-size: var(--t-small); color: var(--ink-2); }
+.inspector-interval select { width: 100%; color: var(--ink); font-size: var(--t-body); }
+.interval-note { margin: 0; font-size: var(--t-small); color: var(--ink-2); max-width: 14em; }
 .inspector-form { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid var(--rule); align-items: flex-start; }
 .inspector-form label { display: flex; flex-direction: column; gap: 3px; font-size: var(--t-small); color: var(--ink-2); width: 100%; }
 .inspector-form input { width: 100%; color: var(--ink); font-size: var(--t-body); }

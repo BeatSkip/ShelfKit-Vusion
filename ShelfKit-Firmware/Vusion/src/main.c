@@ -133,11 +133,16 @@ static uint32_t next_interval(void) __reentrant
         /* data just ended: drop to a slow rate, then to idle */
         cooldown_left--;
         interval = SHELF_POLL_COOLDOWN_S;
-    } else if (last_hub_rssi < SHELF_WEAK_RSSI_DBM) {
-        /* the hub hears us badly: retrying costs more than waiting */
-        interval = SHELF_POLL_MAX_S;
+        if (interval > shelf_cfg_poll_s())      /* never slower than the idle rate itself */
+            interval = shelf_cfg_poll_s();
     } else {
-        interval = SHELF_POLL_IDLE_S;
+        /* The idle rate: what the server configured (SM_OP_SET_POLL, kept in the SPI
+         * flash, see shelf_id.h) or the default SHELF_POLL_IDLE_S. Asked for on every
+         * arm, so a change takes effect with the very next interval. */
+        interval = shelf_cfg_poll_s();
+        /* the hub hears us badly: retrying costs more than waiting */
+        if (last_hub_rssi < SHELF_WEAK_RSSI_DBM && interval < SHELF_POLL_MAX_S)
+            interval = SHELF_POLL_MAX_S;
     }
 
     if (ap_delay_s > interval)          /* the hub asked for a longer gap */
@@ -527,6 +532,7 @@ void main(void)
     pwr_on();
 #endif
     node_id = shelf_id_boot();
+    shelf_cfg_boot();               /* the stored check-in interval, if there is one */
 
 #if SHELF_NFC_PROBE
     /* Read-only: the UID and the configuration area, for when this work resumes. */
@@ -573,7 +579,7 @@ void main(void)
     log_puts("radio ok, pll rng=");
     log_dec(axradio_get_pllrange());
     log_puts(", polling every ");
-    log_dec(SHELF_POLL_INTERVAL_S);
+    log_dec(shelf_cfg_poll_s());
     log_puts(" s");
     log_nl();
     shelfhw_log_boot_done();

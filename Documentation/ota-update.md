@@ -28,7 +28,7 @@ so the existing reliable relay (one frame in flight, ACK per frame) carries them
 |---|---|
 | `0x000000` | header, 16 bytes used: magic `SKFW`, format version, flags, image length (LE), image CRC-16 (LE), header CRC-16 (LE) |
 | `0x001000` | the tag's identity record - see [tag-identity.md](tag-identity.md); never erased by an update |
-| `0x002000` | **reserved** for future persistent storage (`OTA_RESERVED_ADDR`); an update never touches it |
+| `0x002000` | the tag's **configuration record** (`OTA_RESERVED_ADDR`): the check-in interval, see tag-identity.md; an update never touches it |
 | `0x003000` | the image, byte 0 = internal flash address 0 |
 
 A tag that has never seen this firmware may still carry a *valid* header from

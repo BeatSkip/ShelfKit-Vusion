@@ -388,6 +388,24 @@ def main() -> int:
               len(body) == 0x3000 and body[0x1000:0x100A] == IDENTITY,
               [len(body), body[0x1000:0x100A].hex()])
 
+        # the check-in interval: queued like any command, one DATA frame, kept per tag
+        bad = post("/api/tags/0100/interval", {"seconds": 45})["result"]
+        check("an interval that is not offered is refused", bad.get("ok") is False, bad)
+        result = post("/api/tags/0100/interval", {"seconds": 1800})["result"]
+        check("interval change queued", result.get("ok") is True and result.get("queued"), result)
+        info = get("/api/state")["tag_info"][str(0x100)]
+        check("the queued interval shows as pending",
+              info.get("poll_pending_s") == 1800 or info.get("poll_s") == 1800, info)
+        check("the queue delivered the interval", wait_job(result["queued"]), result)
+        check("it went out as SM_OP_SET_POLL, seconds little endian",
+              bytes([13, 0x08, 0x07]) in PORTS["SMOKE1"].frames,
+              [f.hex() for f in PORTS["SMOKE1"].frames[-3:]])
+        info = get("/api/state")["tag_info"][str(0x100)]
+        check("the acknowledged interval is kept for the tag",
+              info.get("poll_s") == 1800 and info.get("poll_pending_s") is None, info)
+        check("and it is in the database",
+              next(r for r in app.store.tags() if r["hex_id"] == "0100").get("poll_s") == 1800)
+
         # ── pre-arms: the tag only stays awake after a poll when the hub was told ──
         hub = PORTS["SMOKE1"]
 

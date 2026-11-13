@@ -149,4 +149,16 @@
 #define SM_DUMP_CHUNK       26      /* SL_MAX_PAYLOAD - SM_DUMP_HDR */
 #define SM_DUMP_MAX         4096
 
+/*
+ * Check-in interval (hub -> tag), one DATA frame:
+ *   [0]  SM_OP_SET_POLL, [1..2] idle interval in seconds (LE), SM_POLL_S_MIN..65535
+ *
+ * How often the tag polls when nothing else is going on. The tag stores it in the
+ * configuration sector of its SPI flash (shelf_id.h), so it survives resets and
+ * firmware updates, and uses it from its next check-in on. The burst rate while data
+ * is queued, the back-off after failed polls and the weak-link limit stay as they are.
+ */
+#define SM_OP_SET_POLL      13
+#define SM_POLL_S_MIN       30
+
 #endif /* SHELFMSG_H */
