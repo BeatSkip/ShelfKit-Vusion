@@ -148,6 +148,33 @@ design — flash layout, header, CRC, ordering rules and why it is safe — is i
 Serial flashing is untouched and still works when an OTA image is broken: a bad CRC
 clears the magic and drops into the command loop instead of destroying anything.
 
+## Wake from Sleep: the bootloader steps aside
+
+The AX8052 restarts at 0x0000 when it wakes from Sleep, so the bootloader runs on
+every wake. libmf's `enter_sleep_cont()` expects the application's own startup
+there instead: that finds a marker at the top of IRAM (0xBE at 0xFF, 0x37 at
+0xFE) and resumes the application where it went to sleep.
+
+The normal boot path breaks that, in several ways:
+- its variables and stack overwrite the application's IRAM
+- `GPIOENABLE` stays 0 after Sleep, so every pin it drives is frozen
+- it forces the XOSC on
+- `run_application()` resets `CLKCON`/`WTCFGB`/`IE`
+- an NFC tap (PB3 low) sends it into the command loop
+
+So the first thing `__sdcc_gsinit_startup` (`src/crtstart.asm`) does is this:
+if `PCON.WAKEUP` is set **and** the marker is present, it jumps through
+`jmp_vector` without touching anything. That is what a chip without a
+bootloader does.
+
+The marker requirement protects OTA. The application's `cpu_reset()`
+(`Vusion/src/fw_rx.c`) clears the marker before `PCON.SWRESET`, so an update
+reset always reaches the OTA check, even if `WAKEUP` still reads 1.
+
+**`__sdcc_gsinit_startup` must stay at 0xD838.** Every installed tag has
+`ljmp 0xD838` in page 0, and `erase_app()` and the OTA path rewrite it from this
+label. Check the map after any change to `crtstart.asm`.
+
 ## Deliberately not done yet
 
 - **The application region.** The erase loop steps 1 KB pages from `0x0400` up to the

@@ -194,18 +194,17 @@ uint16_t shelfhw_random(void)
  *   SHELF_FIX_XOSC        0 = force the MCU's fast crystal oscillator on (PA0/PA1, no crystal)
  *   SHELF_FIX_UART_SLEEP  0 = leave U0TXIE set after every log character, which blocks Sleep
  *
- * SHELF_FIX_UART_SLEEP is OFF by default. With it on the MCU really enters Sleep, and on
- * hardware (builds 1.1.0-39 and -40, 2026-11-13) the tag then stopped polling: one poll after
- * boot, then nothing until the battery was pulled - no scheduled poll, and an NFC tap gave
- * neither the blue LED pulse nor a poll. So after the first Sleep the tag does not come back
- * at all, by the wake-up timer or by the port change. Cause not found; see
- * Documentation/power-findings-2026-11-13.md. Until that is solved the old Standby behaviour
- * (about 0.1 mA) is the working one; the XOSC fix alone was the large saving. */
+ * SHELF_FIX_UART_SLEEP: builds 1.1.0-39 and -40 (2026-11-13) with it on stopped polling after
+ * the first Sleep. Cause (2026-11-14): Sleep restarts at 0x0000 = the bootloader, which
+ * reinitialised everything and never handed back to libmf's resume path. The bootloader now
+ * steps aside on a wake (Bootloader/src/crtstart.asm, needs that bootloader on the tag) and
+ * shelfhw_poll() restores clocks and timers after a wake, so it is on again. Build with
+ * --define SHELF_FIX_UART_SLEEP=0 for the Standby baseline (build B, about 0.1 mA). */
 #ifndef SHELF_FIX_XOSC
 #define SHELF_FIX_XOSC 1
 #endif
 #ifndef SHELF_FIX_UART_SLEEP
-#define SHELF_FIX_UART_SLEEP 0
+#define SHELF_FIX_UART_SLEEP 1
 #endif
 #if SHELF_LOG_UART
 static uint8_t __xdata log_quiet;
@@ -263,8 +262,8 @@ void log_putc(uint8_t c)
 #if !SHELF_FIX_UART_SLEEP
     /* U0TXIE. No UART interrupt is enabled to clear it again, and libmf's wtimer_cansleep()
      * asks uart_txidle(), which reports "busy" for as long as the bit is set: after the
-     * first logged character the MCU only ever reaches Standby, never Sleep. That is
-     * currently relied on, see SHELF_FIX_UART_SLEEP above. */
+     * first logged character the MCU only ever reaches Standby, never Sleep. Only built
+     * with SHELF_FIX_UART_SLEEP=0, the Standby baseline. */
     U0CTRL |= 0x08;
 #endif
 #endif
@@ -373,13 +372,74 @@ static void log_uart_start(void)
 {
     uart_timer0_baud(CLKSRC_FRCOSC, 115200, 20000000);
     uart0_init(0, 8, 1);
+    /* libmf's uart0_init() ends with EIE_4 = 1: it enables the UART0 interrupt for its own
+     * buffered driver, with the receive interrupt armed (U0CTRL = 0x07). This firmware polls
+     * the UART and has NO handler at that vector (0x5B is in the middle of other code), so
+     * the first received byte would jump into garbage. At boot shelfhw_init() happened to
+     * clear EIE afterwards; the wake from Sleep did not, and PB5 - the UART's RX pin - is
+     * also the panel's reset line: the reset pulse of an image BEGIN is a start bit. That
+     * crashed the tag on the first image transfer after any Sleep (1.1.0-44/-45: BEGIN
+     * acked, then "no ack" for ever). Switch it off right here, for every caller. */
+    EIE_4 = 0;
+}
+#endif
+
+/* Let the FRC's calibration loop against the 32 kHz crystal settle: 128 calibration
+ * updates, idling in Standby between them (the clock-management interrupt wakes it). */
+static void frc_calibrate(void)
+{
+    uint8_t i = 128;
+
+    OSCCALIB = 0x01;
+    IE_5 = 1;
+    do {
+        while (!(OSCCALIB & 0x40))
+            enter_standby();
+        (void)FRCOSCFREQ1;
+    } while (--i);
+    IE_5 = 0;
+    OSCCALIB = 0x00;
+}
+
+#if SHELF_MCU_SLEEP
+/* What the first wake from Sleep found, logged once so the next build can drop whatever
+ * turns out to survive Sleep (see shelfhw_poll()). */
+static uint8_t __xdata wake_logged;
+static uint8_t __xdata wake_clkcon;
+static uint8_t __xdata wake_force;
+static uint16_t __xdata wake_frq;
+
+/* After a wake from Sleep. enter_sleep_cont() now really comes back here: the bootloader
+ * steps aside on a wake (Bootloader/src/crtstart.asm), so none of its setup runs and the
+ * application has to restore what Sleep reset. AND9349/D only says "CPU registers are not
+ * preserved", so restore the whole clock setup of shelfhw_init() rather than guess:
+ *  - CLKCON resets to FRC/2 (10 MHz): every baud rate and delay() would be half speed;
+ *  - the FRC tuning and its reference setup, and the flash calibration (REF, ADC trims);
+ *  - wtimer_preparesleep() switched wake-up timer 1 off (WTCFGB = 0x0F) and dropped its
+ *    interrupt from WTIRQEN, and nothing in libmf turns it back on.
+ * Not done here on purpose: turn_off_xosc() (the bootloader no longer runs on a wake, so
+ * nothing re-forced the XOSC), any PCON write (SWRESET boot loop, see shelfhw_init) and
+ * wake-up timer 0, which kept counting through Sleep and woke us. */
+static void shelfhw_resume_clocks(void)
+{
+    flash_apply_calibration();
+    CLKCON = 0x00;
+    FRCOSCREF = 19531;
+    FRCOSCKFILT = 2800;
+    LPXOSCGM = 0x90;
+    OSCFORCERUN |= 0x08;
+    FRCOSCCONFIG = (6 << 3) | CLKSRC_LPXOSC;
+    wtimer1_setclksrc(CLKSRC_FRCOSC, 7);
+    frc_calibrate();
+    LPOSCCONFIG = 0x09;
+    /* PCON.WAKEUP is set, so this is libmf's wake path: it keeps wake-up timer 0's queue,
+     * re-enables both timer interrupts in WTIRQEN and re-reads timer 1's counter */
+    wtimer_init();
 }
 #endif
 
 void shelfhw_init(void)
 {
-    uint8_t i;
-
     /* PA3/PA4 carry the 32 kHz LPXOSC crystal */
     ANALOGA |= 0x18;
 
@@ -451,16 +511,7 @@ void shelfhw_init(void)
 #endif
     FRCOSCCONFIG = (6 << 3) | CLKSRC_LPXOSC;
     WTCFGB = (1 << 3) | CLKSRC_LPXOSC;
-    i = 128;
-    OSCCALIB = 0x01;
-    IE_5 = 1;
-    do {
-        while (!(OSCCALIB & 0x40))
-            enter_standby();
-        (void)FRCOSCFREQ1;
-    } while (--i);
-    IE_5 = 0;
-    OSCCALIB = 0x00;
+    frc_calibrate();
 
     /* Wake-up timers as the radio engine expects them */
     LPOSCCONFIG = 0x09;
@@ -701,28 +752,51 @@ void shelfhw_poll(void)
      * the startup returns here instead of restarting at 0x0000; CANSLEEP is the
      * plain restarting sleep as a fallback, and CANSTANDBY is the last resort
      * when wtimer_cansleep() says a wake-up is too close. */
-    woke = wtimer_idle(WTFLAG_CANSLEEPCONT | WTFLAG_CANSLEEP | WTFLAG_CANSTANDBY);
+    /* Only while the radio is in deep sleep. Sleep wakes on the wake-up timer and the port
+     * change only, never on the radio interrupt, and enter_sleep_cont() drops RADIOMUX: with
+     * the receiver on, an incoming frame could not wake the MCU and the tag went deaf. Image
+     * transfers on 1.1.0-44 got the first DATA frame acked and then "no ack" for every
+     * frame after it. Until 1.1.0-44 the U0TXIE veto kept every idle in Standby, which
+     * hid this. Standby wakes on any enabled interrupt, the radio's included. */
+    woke = wtimer_idle(radio_deep ? (WTFLAG_CANSLEEPCONT | WTFLAG_CANSLEEP | WTFLAG_CANSTANDBY)
+                                  : WTFLAG_CANSTANDBY);
 #else
     woke = wtimer_idle(WTFLAG_CANSTANDBY);
 #endif
+#if SHELF_MCU_SLEEP
     if (woke == WTIDLE_SLEEP) {
         /* Sleep powers down the CPU and radio-interface registers (AND9349/D,
          * "Power Modes") and enter_sleep_cont() latched the pins. Nothing in the
          * continue-after-sleep path restores them, so the radio interrupt stayed
          * disabled and the radio SPI mux was gone: the transmit FIFO never got
          * fed and every poll after the first sleep went unheard. */
+        wake_clkcon = CLKCON;       /* before anything is restored: see the wake log */
+        wake_force = OSCFORCERUN;
+        wake_frq = FRCOSCFREQ;
         GPIOENABLE = 1;
+        shelfhw_resume_clocks();
         IE = 0x40;
 #if SHELF_LOG_UART
         log_uart_start();
 #endif
 
-        if (!radio_deep) {
-            axradio_commsleepexit();
-            axradio_setup_pincfg2();
-            enable_radio_interrupt_in_mcu_pin();
+        /* Sleep is only chosen with the radio in deep sleep (above), and
+         * shelfhw_radio_wake() -> radio_wakeup_deepsleep() sets DIRR/PORTR/RADIOMUX/RADIOACC
+         * up from scratch, so the radio interface needs nothing here. */
+        if (!wake_logged) {
+            wake_logged = 1;
+            log_puts("wake clk=");
+            log_hex8(wake_clkcon);
+            log_puts(" frun=");
+            log_hex8(wake_force);
+            log_puts(" frq=");
+            log_hex16(wake_frq);
+            log_puts(" now frq=");
+            log_hex16(FRCOSCFREQ);
+            log_nl();
         }
     }
+#endif
 #if SHELF_NFC_POLL
     if (nfc_armed) {
         if (PINCHGB & 0x08) {       /* PB3 moved while we idled: a reader */

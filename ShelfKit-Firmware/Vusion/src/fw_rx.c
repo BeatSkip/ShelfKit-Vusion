@@ -62,7 +62,14 @@ static void cpu_reset(void)
      * "writing 1 resets the chip"). `ljmp 0x0000` only jumped, so the bootloader
      * inherited the application's SPI/oscillator state and hung on its first
      * flash read: the tag wrote the OTA image and then needed a manual reset
-     * before the bootloader would program it. */
+     * before the bootloader would program it.
+     *
+     * Clear libmf's sleep-resume marker first (IRAM 0xFF/0xFE, written by
+     * enter_sleep_cont()). The bootloader only skips itself on a wake when that
+     * marker is present, so with it gone this reset always reaches the OTA
+     * check, even if PCON.WAKEUP still reads 1 from an earlier Sleep. */
+    *(__idata volatile uint8_t *)0xFF = 0;
+    *(__idata volatile uint8_t *)0xFE = 0;
     PCON |= 0x10;
     for (;;)
         ;                       /* the reset takes effect here */

@@ -46,3 +46,6 @@ Appended by `Tooling/build-all.py`. `dirty` = the build had uncommitted changes,
 | 2026-11-13 01:05 | 1.1.0 | 41 | 13752fa dirty | Vusion a590d5e0b40e847c (119305 B); compare E-both-no-nfc: SHELF_NFC_POLL=0 SHELF_NFC_RAIL_HOLD=0 |
 | 2026-11-13 01:40 | 1.1.0 | 42 | 13752fa dirty | Vusion b0a0b6ac7ccc9aa4 (121153 B); Bootloader e2310ad4eda7e837 (24931 B); compare D-uart-test: SHELF_FIX_UART_SLEEP=1, for the wired serial test |
 | 2026-11-13 02:01 | 1.1.0 | 43 | 64aaf91 dirty | Vusion 09bc58ecf0af9334 (121172 B); Vusion-Hub 8bd03a980534d688 (89829 B); Bootloader 992d7887d3eae9c2 (24931 B) |
+| 2026-11-14 01:55 | 1.1.0 | 44 | ca55e1e dirty | Vusion 9fe19e4b9f642a6a (121886 B); Vusion-Hub 39f6eb1800a62000 (89665 B); Bootloader b2835f795398531d (25027 B) |
+| 2026-11-14 02:19 | 1.1.0 | 45 | ca55e1e dirty | Vusion 2268f9928fac1a38 (103902 B); Vusion-Hub b37bba3da23b2147 (71599 B); Bootloader a1e4c52e2121be54 (25027 B) |
+| 2026-11-14 02:48 | 1.1.0 | 46 | ca55e1e dirty | Vusion c26dcf5de95a6d83 (103908 B); Vusion-Hub e22675ae9382091d (71605 B); Bootloader b7334e404aae7c6a (25027 B) |

@@ -74,6 +74,17 @@ static void axradio_exit_critical(criticalsection_t crit)
 #define __enable_irq()      (EA = 1)
 #define __disable_irq()     (EA = 0)
 
+/* ShelfKit (tag and hub) only ever selects AXRADIO_MODE_OFF, _DEEPSLEEP and _ASYNC_RECEIVE,
+ * and transmits from ASYNC_RECEIVE; acks, retries and batching are done by shelflink. The
+ * AX-RadioLAB engine also carries the ACK, WOR, SYNC master/slave, STREAM and CW modes and a
+ * few helpers nothing calls, and all of that sat in every image without ever running.
+ * AXRADIO_ALL_MODES 0 compiles it out: the remaining paths are the same code as before, the
+ * other modes return AXRADIO_ERR_NOTSUPPORTED from axradio_set_mode(). Build with
+ * --define AXRADIO_ALL_MODES=1 to get the full engine back (e.g. to try WOR or CW). */
+#ifndef AXRADIO_ALL_MODES
+#define AXRADIO_ALL_MODES 0
+#endif
+
 typedef enum {
 	syncstate_off,                  /* 0 */
 	syncstate_lbt,                  /* 1 */
@@ -194,6 +205,7 @@ struct axradio_callback_simple __xdata axradio_cb_transmitend;
 struct axradio_callback_simple __xdata axradio_cb_transmitdata;
 struct wtimer_desc __xdata axradio_timer;
 
+#if AXRADIO_ALL_MODES
 volatile uint8_t __xdata f30_saved = 0x3f;
 volatile uint8_t __xdata f31_saved = 0xf0;
 volatile uint8_t __xdata f32_saved = 0x3f;
@@ -201,6 +213,7 @@ volatile uint8_t __xdata f33_saved = 0xf0;
 
 uint8_t __xdata radio_lcd_display[] = {"found AX5043\n"};
 uint8_t __xdata radio_not_found_lcd_display[] = {"No Radio\nchip found"};
+#endif
 
 #if defined __ICC8051__
 
@@ -376,6 +389,7 @@ static __reentrantb void receive_isr(void) __reentrant
 			flags = radio_read8(AX5043_REG_FIFODATA);
 			--len;
 			ax5043_readfifo(axradio_rxbuffer, len);
+#if AXRADIO_ALL_MODES
 			if(axradio_mode == AXRADIO_MODE_WOR_RECEIVE || axradio_mode == AXRADIO_MODE_WOR_ACK_RECEIVE) {
 				f30_saved = radio_read8(AX5043_REG_0xF30);
 				f31_saved = radio_read8(AX5043_REG_0xF31);
@@ -385,10 +399,12 @@ static __reentrantb void receive_isr(void) __reentrant
 			if (axradio_mode == AXRADIO_MODE_WOR_RECEIVE ||
 			    axradio_mode == AXRADIO_MODE_SYNC_SLAVE)
 				radio_write8(AX5043_REG_PWRMODE, AX5043_PWRSTATE_POWERDOWN);
+#endif
 			radio_write8(AX5043_REG_IRQMASK0, (radio_read8(AX5043_REG_IRQMASK0) & (uint8_t)~0x01)); // disable FIFO not empty irq
 			wtimer_remove_callback(&axradio_cb_receive.cb);
 			axradio_cb_receive.st.error = AXRADIO_ERR_NOERROR;
 			axradio_cb_receive.st.rx.mac.raw = axradio_rxbuffer;
+#if AXRADIO_ALL_MODES
 			if (AXRADIO_MODE_IS_STREAM_RECEIVE(axradio_mode)) {
 				axradio_cb_receive.st.rx.pktdata = axradio_rxbuffer;
 				axradio_cb_receive.st.rx.pktlen = len;
@@ -404,6 +420,7 @@ static __reentrantb void receive_isr(void) __reentrant
 				wtimer_add_callback(&axradio_cb_receive.cb);
 				break;
 			}
+#endif
 			axradio_cb_receive.st.rx.pktdata = &axradio_rxbuffer[axradio_framing_maclen];
 			if (len < axradio_framing_maclen) {
 				len = 0;
@@ -412,9 +429,11 @@ static __reentrantb void receive_isr(void) __reentrant
 				len -= axradio_framing_maclen;
 				axradio_cb_receive.st.rx.pktlen = len;
 				wtimer_add_callback(&axradio_cb_receive.cb);
+#if AXRADIO_ALL_MODES
 				if (axradio_mode == AXRADIO_MODE_SYNC_SLAVE ||
 				    axradio_mode == AXRADIO_MODE_SYNC_ACK_SLAVE)
 					wtimer_remove(&axradio_timer);
+#endif
 			}
 			break;
 
@@ -499,9 +518,11 @@ static __reentrantb void transmit_isr(void) __reentrant
 		case trxstate_tx_longpreamble:
 			if (!axradio_txbuffer_cnt) {
 				axradio_trxstate = trxstate_tx_shortpreamble;
+#if AXRADIO_ALL_MODES
 				if( axradio_mode == AXRADIO_MODE_WOR_TRANSMIT || axradio_mode == AXRADIO_MODE_WOR_ACK_TRANSMIT )
 					axradio_txbuffer_cnt = axradio_phy_preamble_wor_len;
 				else
+#endif
 					axradio_txbuffer_cnt = axradio_phy_preamble_len;
 				goto shortpreamble;
 			}
@@ -692,6 +713,7 @@ void RADIO_IRQ(void)
 		radio_write8(AX5043_REG_PWRMODE, AX5043_PWRSTATE_FULL_TX);
 		update_timeanchor();
 		wtimer_remove_callback(&axradio_cb_transmitstart.cb);
+#if AXRADIO_ALL_MODES
 		switch (axradio_mode) {
 		case AXRADIO_MODE_ACK_TRANSMIT:
 		case AXRADIO_MODE_WOR_ACK_TRANSMIT:
@@ -704,6 +726,9 @@ void RADIO_IRQ(void)
 			axradio_cb_transmitstart.st.error = AXRADIO_ERR_NOERROR;
 			break;
 		}
+#else
+		axradio_cb_transmitstart.st.error = AXRADIO_ERR_NOERROR;
+#endif
 		axradio_cb_transmitstart.st.time.t = axradio_timeanchor.radiotimer;
 		wtimer_add_callback(&axradio_cb_transmitstart.cb);
 		break;
@@ -726,6 +751,7 @@ void RADIO_IRQ(void)
 			ax5043_receiver_on_continuous();
 			break;
 
+#if AXRADIO_ALL_MODES
 		case AXRADIO_MODE_ACK_RECEIVE:
 			if (axradio_cb_receive.st.error == AXRADIO_ERR_PACKETDONE) {
 				ax5043_init_registers_rx();
@@ -765,27 +791,33 @@ void RADIO_IRQ(void)
 		case AXRADIO_MODE_SYNC_MASTER:
 			axradio_txbuffer_len = axradio_framing_minpayloadlen;
 			// fall through
+#endif
 
 		default:
 			ax5043_off();
 			break;
 		}
+#if AXRADIO_ALL_MODES
 		if (axradio_mode != AXRADIO_MODE_SYNC_MASTER &&
 		    axradio_mode != AXRADIO_MODE_SYNC_ACK_MASTER &&
 		    axradio_mode != AXRADIO_MODE_SYNC_SLAVE &&
 		    axradio_mode != AXRADIO_MODE_SYNC_ACK_SLAVE)
+#endif
 			axradio_syncstate = syncstate_off;
 		update_timeanchor();
 		wtimer_remove_callback(&axradio_cb_transmitend.cb);
 		axradio_cb_transmitend.st.error = AXRADIO_ERR_NOERROR;
+#if AXRADIO_ALL_MODES
 		if (axradio_mode == AXRADIO_MODE_ACK_TRANSMIT ||
 		    axradio_mode == AXRADIO_MODE_WOR_ACK_TRANSMIT ||
 		    axradio_mode == AXRADIO_MODE_SYNC_ACK_MASTER)
 			axradio_cb_transmitend.st.error = AXRADIO_ERR_BUSY;
+#endif
 		axradio_cb_transmitend.st.time.t = axradio_timeanchor.radiotimer;
 		wtimer_add_callback(&axradio_cb_transmitend.cb);
 		break;
 
+#if AXRADIO_ALL_MODES
 
 	case trxstate_txcw_xtalwait:
 		radio_write8(AX5043_REG_IRQMASK1, 0x00);
@@ -871,6 +903,7 @@ void RADIO_IRQ(void)
 		}
 
 		// fall through
+#endif
 	case trxstate_rx:
 		receive_isr();
 		break;
@@ -881,7 +914,11 @@ void RADIO_IRQ(void)
 
 __reentrantb void ax5043_receiver_on_continuous(void) __reentrant
 {
+#if AXRADIO_ALL_MODES
 	uint8_t rschanged_int = (axradio_framing_enable_sfdcallback | (axradio_mode == AXRADIO_MODE_SYNC_ACK_SLAVE) | (axradio_mode == AXRADIO_MODE_SYNC_SLAVE) );
+#else
+	uint8_t rschanged_int = axradio_framing_enable_sfdcallback;
+#endif
 	if (rschanged_int)
 		radio_write8(AX5043_REG_RADIOEVENTMASK0, 0x04);
 	radio_write8(AX5043_REG_RSSIREFERENCE, axradio_phy_rssireference);
@@ -911,6 +948,7 @@ __reentrantb void ax5043_receiver_on_continuous(void) __reentrant
 	radio_write8(AX5043_REG_IRQMASK1, 0x00);
 }
 
+#if AXRADIO_ALL_MODES
 __reentrantb void ax5043_receiver_on_wor(void) __reentrant
 {
 	radio_write8(AX5043_REG_BGNDRSSIGAIN, 0x02);
@@ -948,6 +986,7 @@ __reentrantb void ax5043_receiver_on_wor(void) __reentrant
 		radio_write8(AX5043_REG_WAKEUP0, ((wp >> 0) & 0xFF));
 	}
 }
+#endif
 
 __reentrantb void ax5043_prepare_tx(void) __reentrant
 {
@@ -1033,6 +1072,7 @@ static void ax5043_init_registers(void)
 	axradio_setaddrregs();
 }
 
+#if AXRADIO_ALL_MODES
 /*
  * Synchronous Mode Helper Routines
  */
@@ -1079,6 +1119,7 @@ static void axradio_sync_slave_nextperiod()
 		axradio_sync_addtime(c >> SYNC_K1);
 	}
 }
+#endif
 /*
  * Callbacks
  */
@@ -1136,6 +1177,7 @@ static void axradio_timer_callback(struct wtimer_desc __xdata *desc)
 		wtimer_add_callback(&axradio_cb_transmitstart.cb);
 		break;
 
+#if AXRADIO_ALL_MODES
 	case AXRADIO_MODE_ACK_TRANSMIT:
 	case AXRADIO_MODE_WOR_ACK_TRANSMIT:
 		if (axradio_syncstate == syncstate_lbt)
@@ -1374,6 +1416,7 @@ static void axradio_timer_callback(struct wtimer_desc __xdata *desc)
 			goto transmitack;
 		};
 		break;
+#endif
 
 	default:
 		break;
@@ -1413,6 +1456,7 @@ static void axradio_receive_callback_fwd(struct wtimer_callback __xdata *desc)
 
 	axradio_cb_receive.st.rx.phy.timeoffset = 0;
 	axradio_cb_receive.st.rx.phy.period = 0;
+#if AXRADIO_ALL_MODES
 	if (axradio_mode == AXRADIO_MODE_ACK_TRANSMIT ||
 	    axradio_mode == AXRADIO_MODE_WOR_ACK_TRANSMIT ||
 	    axradio_mode == AXRADIO_MODE_SYNC_ACK_MASTER) {
@@ -1428,10 +1472,12 @@ static void axradio_receive_callback_fwd(struct wtimer_callback __xdata *desc)
 		axradio_cb_transmitend.st.time.t = radio_read24(AX5043_REG_TIMER2);
 		wtimer_add_callback(&axradio_cb_transmitend.cb);
 	}
+#endif
 	if (axradio_framing_destaddrpos != 0xff)
 		memcpy_xdata(&axradio_cb_receive.st.rx.mac.localaddr, &axradio_cb_receive.st.rx.mac.raw[axradio_framing_destaddrpos], axradio_framing_addrlen);
 	if (axradio_framing_sourceaddrpos != 0xff)
 		memcpy_xdata(&axradio_cb_receive.st.rx.mac.remoteaddr, &axradio_cb_receive.st.rx.mac.raw[axradio_framing_sourceaddrpos], axradio_framing_addrlen);
+#if AXRADIO_ALL_MODES
 	if (axradio_mode == AXRADIO_MODE_ACK_RECEIVE ||
 	    axradio_mode == AXRADIO_MODE_WOR_ACK_RECEIVE ||
 	    axradio_mode == AXRADIO_MODE_SYNC_ACK_SLAVE) {
@@ -1504,8 +1550,10 @@ static void axradio_receive_callback_fwd(struct wtimer_callback __xdata *desc)
 			axradio_syncstate = syncstate_slave_rxack;
 		}
 	}
+#endif
 	axradio_statuschange((struct axradio_status __xdata *)&axradio_cb_receive.st);
   endcb:
+#if AXRADIO_ALL_MODES
 	if (axradio_mode == AXRADIO_MODE_WOR_RECEIVE) {
 		ax5043_receiver_on_wor();
 	} else if (axradio_mode == AXRADIO_MODE_ACK_RECEIVE ||
@@ -1523,7 +1571,9 @@ static void axradio_receive_callback_fwd(struct wtimer_callback __xdata *desc)
 			else
 				ax5043_receiver_on_continuous();
 		}
-	} else {
+	} else
+#endif
+	{
 		switch (axradio_trxstate) {
 		case trxstate_rx:
 		case trxstate_rxwor:
@@ -1912,6 +1962,7 @@ uint8_t axradio_set_mode(uint8_t mode)
 		break;
 	}
 
+#if AXRADIO_ALL_MODES
 	case AXRADIO_MODE_STREAM_TRANSMIT:
 	case AXRADIO_MODE_STREAM_TRANSMIT_UNENC:
 	case AXRADIO_MODE_STREAM_TRANSMIT_SCRAM:
@@ -1944,6 +1995,7 @@ uint8_t axradio_set_mode(uint8_t mode)
 		ax5043_off();
 		ax5043_init_registers();
 		axradio_mode = AXRADIO_MODE_OFF;
+#endif
 
 	default:
 		ax5043_off();
@@ -1970,6 +2022,7 @@ uint8_t axradio_set_mode(uint8_t mode)
 		ax5043_init_registers_tx();
 		return AXRADIO_ERR_NOERROR;
 
+#if AXRADIO_ALL_MODES
 	case AXRADIO_MODE_WOR_TRANSMIT:
 	case AXRADIO_MODE_WOR_ACK_TRANSMIT:
 		axradio_mode = mode;
@@ -1977,8 +2030,9 @@ uint8_t axradio_set_mode(uint8_t mode)
 		ax5043_init_registers_tx();
 		return AXRADIO_ERR_NOERROR;
 
-	case AXRADIO_MODE_ASYNC_RECEIVE:
 	case AXRADIO_MODE_ACK_RECEIVE:
+#endif
+	case AXRADIO_MODE_ASYNC_RECEIVE:
 		axradio_mode = mode;
 		axradio_ack_seqnr = 0xff;
 		ax5043_init_registers_rx();
@@ -1991,6 +2045,7 @@ uint8_t axradio_set_mode(uint8_t mode)
 		}
 		return AXRADIO_ERR_NOERROR;
 
+#if AXRADIO_ALL_MODES
 	case AXRADIO_MODE_WOR_RECEIVE:
 	case AXRADIO_MODE_WOR_ACK_RECEIVE:
 		axradio_ack_seqnr = 0xff;
@@ -2101,6 +2156,7 @@ uint8_t axradio_set_mode(uint8_t mode)
 		axradio_cb_receive.st.error = AXRADIO_ERR_RESYNC;
 		wtimer_add_callback(&axradio_cb_receive.cb);
 		return AXRADIO_ERR_NOERROR;
+#endif
 
 	default:
 		return AXRADIO_ERR_NOTSUPPORTED;
@@ -2142,10 +2198,12 @@ uint8_t axradio_set_channel(uint8_t chnum)
 	return AXRADIO_ERR_NOERROR;
 }
 
+#if AXRADIO_ALL_MODES
 uint8_t axradio_get_channel(void)
 {
 	return axradio_curchannel;
 }
+#endif
 
 uint16_t axradio_get_pllrange(void)
 {
@@ -2173,6 +2231,7 @@ uint8_t axradio_get_pllvcoi(void)
     return radio_read8(AX5043_REG_PLLVCOI);
 }
 
+#if AXRADIO_ALL_MODES
 static uint8_t axradio_set_curfreqoffset(int32_t offs)
 {
 	axradio_curfreqoffset = offs;
@@ -2200,6 +2259,7 @@ int32_t axradio_get_freqoffset(void)
 {
 	return axradio_curfreqoffset;
 }
+#endif
 
 void axradio_set_local_address(const struct axradio_address_mask __genericaddr *addr)
 {
@@ -2207,6 +2267,7 @@ void axradio_set_local_address(const struct axradio_address_mask __genericaddr *
 	axradio_setaddrregs();
 }
 
+#if AXRADIO_ALL_MODES
 void axradio_get_local_address(struct axradio_address_mask __genericaddr *addr)
 {
 	memcpy_genericxdata(addr, &axradio_localaddr, sizeof(axradio_localaddr));
@@ -2221,10 +2282,12 @@ void axradio_get_default_remote_address(struct axradio_address __genericaddr *ad
 {
 	memcpy_genericxdata(addr, &axradio_default_remoteaddr, sizeof(axradio_default_remoteaddr));
 }
+#endif
 
 uint8_t axradio_transmit(const struct axradio_address __genericaddr *addr, const uint8_t __genericaddr *pkt, uint16_t pktlen)
 {
 	switch (axradio_mode) {
+#if AXRADIO_ALL_MODES
 	case AXRADIO_MODE_STREAM_TRANSMIT:
 	case AXRADIO_MODE_STREAM_TRANSMIT_UNENC:
 	case AXRADIO_MODE_STREAM_TRANSMIT_SCRAM:
@@ -2259,8 +2322,9 @@ uint8_t axradio_transmit(const struct axradio_address __genericaddr *addr, const
 	case AXRADIO_MODE_SYNC_ACK_MASTER:
 		goto dotx;
 
-	case AXRADIO_MODE_ASYNC_RECEIVE:
 	case AXRADIO_MODE_WOR_RECEIVE:
+#endif
+	case AXRADIO_MODE_ASYNC_RECEIVE:
 		if (axradio_syncstate != syncstate_off)
 			return AXRADIO_ERR_BUSY;
 		radio_write8(AX5043_REG_IRQMASK1, 0x00);
@@ -2299,6 +2363,7 @@ uint8_t axradio_transmit(const struct axradio_address __genericaddr *addr, const
 			axradio_txbuffer_len = axradio_framing_append_crc(axradio_txbuffer, axradio_txbuffer_len);
 		if (axradio_phy_pn9)
 			pn9_buffer(axradio_txbuffer, axradio_txbuffer_len, 0x1ff, -((radio_read8(AX5043_REG_ENCODING) & 0x01)));
+#if AXRADIO_ALL_MODES
 		if (axradio_mode == AXRADIO_MODE_SYNC_MASTER ||
 		    axradio_mode == AXRADIO_MODE_SYNC_ACK_MASTER)
 			return AXRADIO_ERR_NOERROR;
@@ -2306,6 +2371,7 @@ uint8_t axradio_transmit(const struct axradio_address __genericaddr *addr, const
 		    axradio_mode == AXRADIO_MODE_WOR_ACK_TRANSMIT)
 			axradio_txbuffer_cnt = axradio_phy_preamble_wor_longlen;
 		else
+#endif
 			axradio_txbuffer_cnt = axradio_phy_preamble_longlen;
 		if (axradio_phy_lbt_retries) {
 			switch (axradio_mode) {
@@ -2341,6 +2407,7 @@ uint8_t axradio_transmit(const struct axradio_address __genericaddr *addr, const
 	}
 }
 
+#if AXRADIO_ALL_MODES
 static __reentrantb uint8_t axradio_set_paramsets(uint8_t val) __reentrant
 {
 	if (!AXRADIO_MODE_IS_STREAM_RECEIVE(axradio_mode))
@@ -2429,6 +2496,7 @@ void axradio_calibrate_lposc(void)
 
 #endif
 }
+#endif /* AXRADIO_ALL_MODES */
 
 /* Wrapper for libmf commsleepexit */
 __reentrantb void axradio_commsleepexit(void) __reentrant
@@ -2459,6 +2527,7 @@ __reentrantb void axradio_dbgpkt_enableIRQ(void) __reentrant
 }
 #endif /* DBGPKT */
 
+#if AXRADIO_ALL_MODES
 uint8_t axradio_check_fourfsk_modulation(void)
 {
     uint8_t modulation = radio_read8(AX5043_REG_MODULATION);
@@ -2472,3 +2541,4 @@ uint8_t axradio_get_transmitter_pa_type(void)
 {
     return (radio_read8(AX5043_REG_MODCFGA) & 0x03);
 }
+#endif
