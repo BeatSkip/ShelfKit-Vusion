@@ -365,7 +365,9 @@ class App:
             wanted[key] = value.strip().strip('"')
         final = [wanted.get(key, self.panes[key].spec.port) for key in (hub, tag) if key]
         used = [port.casefold() for port in final if port]
-        if len(used) != len(set(used)):
+        # only a request that sets a port is checked: a clash already there (from the
+        # command line or an older run) must not block saving the tag size or a shelf name
+        if wanted and len(used) != len(set(used)):
             problems.append("The hub and the tag can't use the same port")
         changes = {key: port for key, port in wanted.items()
                    if port != self.panes[key].spec.port}
@@ -573,6 +575,37 @@ class App:
         if self.store is not None:
             self.store.update_tag(hex_code, **clean)
         return dict(meta, hex_id=hex_code)
+
+    def set_layout(self, tags, shelf_names=None) -> dict:
+        """Place many tags at once: a drag on the shelf wall renumbers a whole shelf.
+
+        tags: [{"hex": "0100", "grid_row": 2, "grid_col": 1}, ...]; null row/col = not on a
+        shelf. shelf_names, when given, replaces the shelf-name pref in the same request, so
+        reordering shelves moves their names with them. Nothing is changed unless every
+        entry is valid.
+        """
+        if not isinstance(tags, list) or len(tags) > 2000:
+            return {"ok": False, "error": "tags must be a list"}
+        moves = []
+        for entry in tags:
+            if not isinstance(entry, dict):
+                return {"ok": False, "error": "every tag entry must be an object"}
+            try:
+                addr = int(str(entry.get("hex")), 16)
+                if not 0 < addr <= 0xFFFF:
+                    raise ValueError
+                place = [None if entry.get(k) in (None, "") else int(entry.get(k))
+                         for k in ("grid_row", "grid_col")]
+            except (TypeError, ValueError):
+                return {"ok": False, "error": f"bad tag entry {entry!r}"}
+            moves.append((f"{addr:04X}", place))
+        if shelf_names is not None:
+            result = self.set_prefs({"shelf_names": shelf_names})
+            if not result["ok"]:
+                return result
+        for hex_id, (row, col) in moves:
+            self.set_tag(hex_id, grid_row=row, grid_col=col)
+        return {"ok": True, "moved": len(moves)}
 
 
     # ── logging ────────────────────────────────────────────────────────────

@@ -22,10 +22,12 @@ DEFAULTS = {
     "forget_after_s": 900,    # "forget silent tags" cutoff, past the slowest poll
     "low_battery_v": 2.5,     # below this a CR2450 is close to done
     "fleet_view": "wall",     # wall | table
-    "wall_size": "full",      # full | half
+    "wall_size": "full",      # large | full | medium | half | small (WALL_SIZES)
     "axsdb_path": "",         # axsdb.exe, or its folder; empty = look for it
     "show_tag_port": True,    # the optional tag debug serial pane on the Hub screen
     "public_url": "",         # where phones reach the tag pages (a reverse proxy); "" = here
+    "inspector_order": [],    # the tag inspector's sections, top to bottom; [] = page order
+    "shelf_names": {},        # {"<shelf number>": "name"}: the groups on the shelf wall
 }
 # The hub's and the tag's serial ports are also set from the Settings screen, but they
 # live with the panes (see App._plan_ports), not in this dict.
@@ -39,10 +41,18 @@ RANGES = {
 }
 BOOLS = ("show_tag_port",)
 STRINGS = {"axsdb_path": 400}      # name -> longest value
+# Tag sizes on the shelf wall, as a fraction of one panel pixel per screen pixel. The page
+# draws them from the same names (SIZES in static/app.js).
+WALL_SIZES = {"large": 1.5, "full": 1.0, "medium": 0.75, "half": 0.5, "small": 0.33}
 CHOICES = {
     "fleet_view": ("wall", "table"),
-    "wall_size": ("full", "half"),
+    "wall_size": tuple(WALL_SIZES),
 }
+# The inspector sections the page can reorder (data-section in static/index.html). A key
+# the page does not know is dropped, and one missing from a saved order goes at the end.
+INSPECTOR_SECTIONS = ("battery", "details", "wireless", "firmware", "readback", "remove")
+SHELF_NAME_MAX = 40
+SHELF_NAMES_MAX = 200
 
 
 def clean(options: dict, current: dict | None = None) -> tuple[dict, list[str]]:
@@ -59,6 +69,20 @@ def clean(options: dict, current: dict | None = None) -> tuple[dict, list[str]]:
                 problems.append(problem)
             else:
                 prefs[name] = url
+            continue
+        if name == "inspector_order":
+            order, problem = _inspector_order(value)
+            if problem:
+                problems.append(problem)
+            else:
+                prefs[name] = order
+            continue
+        if name == "shelf_names":
+            names, problem = _shelf_names(value)
+            if problem:
+                problems.append(problem)
+            else:
+                prefs[name] = names
             continue
         if name in BOOLS:
             if isinstance(value, bool):
@@ -94,6 +118,37 @@ def clean(options: dict, current: dict | None = None) -> tuple[dict, list[str]]:
         prefs = {**prefs, **{k: (current or DEFAULTS).get(k, DEFAULTS[k])
                              for k in ("late_after_s", "silent_after_s", "forget_after_s")}}
     return prefs, problems
+
+
+def _inspector_order(value) -> tuple[list[str], str]:
+    """A list of known section keys, each once; unknown keys are dropped quietly."""
+    if not isinstance(value, list):
+        return [], "inspector_order must be a list of section names"
+    order: list[str] = []
+    for key in value:
+        if key in INSPECTOR_SECTIONS and key not in order:
+            order.append(key)
+    return order, ""
+
+
+def _shelf_names(value) -> tuple[dict[str, str], str]:
+    """{"<whole number>": "name"}; an empty name removes the entry."""
+    if not isinstance(value, dict) or len(value) > SHELF_NAMES_MAX:
+        return {}, f"shelf_names must be at most {SHELF_NAMES_MAX} shelf numbers with a name each"
+    names: dict[str, str] = {}
+    for key, name in value.items():
+        try:
+            number = int(str(key))
+        except ValueError:
+            return {}, "shelf_names keys must be shelf numbers"
+        if not isinstance(name, str):
+            return {}, "shelf names must be text"
+        text = " ".join(name.split())
+        if len(text) > SHELF_NAME_MAX:
+            return {}, f"a shelf name must be at most {SHELF_NAME_MAX} characters"
+        if text:
+            names[str(number)] = text
+    return names, ""
 
 
 def _public_url(value) -> tuple[str, str]:

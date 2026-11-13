@@ -40,6 +40,7 @@ long-lived poll connection per browser tab. The API is small and boring:
     POST /api/send                 {"addr": 256}
     POST /api/cancel
     POST /api/tags/<hex>           {"alias": "...", "notes": "...", "grid_row": 1, "grid_col": 3}
+    POST /api/tags/layout          {"tags": [{"hex", "grid_row", "grid_col"}], "shelf_names": {}}
     POST /api/tags/<hex>/assign    {"id": "0100"}  (empty = next free) over the hub port
     POST /api/tags/<hex>/flash     {"path": "Release/vusion-....hex"}  OTA firmware update
     POST /api/tags/<hex>/forget    delete the server's record of one tag
@@ -298,6 +299,12 @@ class Handler(BaseHTTPRequestHandler):
                 result = self.app.forget_tags(
                     body.get("addrs") or [], body.get("not_seen_for"))
                 return self._json({"result": result, "state": self.app.state()})
+            if parts == ["api", "tags", "layout"]:
+                # the shelf wall's drag and drop: {"tags": [{"hex", "grid_row", "grid_col"}],
+                # "shelf_names": {...} (optional)}
+                result = self.app.set_layout(body.get("tags"), body.get("shelf_names"))
+                status = HTTPStatus.OK if result["ok"] else HTTPStatus.BAD_REQUEST
+                return self._json({**result, "state": self.app.state()}, status)
             if len(parts) == 3 and parts[1] == "tags":
                 # Tag metadata: alias, notes and the fleet-map position. The only
                 # things on a tag the user types rather than the board reporting.

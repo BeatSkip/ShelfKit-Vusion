@@ -79,8 +79,11 @@
         <div class="filters" id="fleet-filters" role="group" aria-label="Show tags by status"></div>
         <span class="grow"></span>
         <div class="segmented" id="wall-size" role="group" aria-label="Tag size on the shelf">
-          <button type="button" data-size="full" title="One panel pixel per screen pixel">Actual size</button>
-          <button type="button" data-size="half">Half</button>
+          <button type="button" data-size="large" title="One and a half times the panel">150 %</button>
+          <button type="button" data-size="full" title="One panel pixel per screen pixel">100 %</button>
+          <button type="button" data-size="medium" title="Three quarters">75 %</button>
+          <button type="button" data-size="half" title="Half">50 %</button>
+          <button type="button" data-size="small" title="A third: fits the most tags">33 %</button>
         </div>
         <div class="segmented" id="fleet-view" role="group" aria-label="Fleet layout">
           <button type="button" data-view="wall">Shelf</button>
@@ -428,8 +431,11 @@
           <fieldset>
             <legend>Tag size on the shelf</legend>
             <div class="segmented radios" id="set-size">
-              <label><input type="radio" name="set-size" value="full"><span>Actual size</span></label>
-              <label><input type="radio" name="set-size" value="half"><span>Half</span></label>
+              <label title="One and a half times the panel"><input type="radio" name="set-size" value="large"><span>150 %</span></label>
+              <label title="One panel pixel per screen pixel"><input type="radio" name="set-size" value="full"><span>100 %</span></label>
+              <label title="Three quarters"><input type="radio" name="set-size" value="medium"><span>75 %</span></label>
+              <label title="Half"><input type="radio" name="set-size" value="half"><span>50 %</span></label>
+              <label title="A third: fits the most tags"><input type="radio" name="set-size" value="small"><span>33 %</span></label>
             </div>
           </fieldset>
         </section>
@@ -512,8 +518,18 @@
   <!-- Tag inspector -->
   <aside id="inspector" class="inspector" aria-labelledby="inspector-id" hidden>
     <div class="inspector-head">
-      <div id="inspector-id" class="inspector-id"></div>
-      <p id="inspector-alias" class="inspector-alias"></p>
+      <div class="tag-pick">
+        <button id="inspector-prev" class="tag-step" type="button" aria-label="Previous tag"
+                title="Previous tag on the shelf"></button>
+        <label class="tag-select" title="Show another tag">
+          <span id="inspector-id" class="inspector-id"></span>
+          <span id="inspector-alias" class="inspector-alias"></span>
+          <span class="tag-chevron" aria-hidden="true"></span>
+          <select id="inspector-pick" aria-label="Show another tag"></select>
+        </label>
+        <button id="inspector-next" class="tag-step next" type="button" aria-label="Next tag"
+                title="Next tag on the shelf"></button>
+      </div>
       <button id="inspector-close" class="quiet" type="button" aria-label="Close tag details">Close</button>
     </div>
 
@@ -534,7 +550,8 @@
 
       <p id="inspector-alert" class="warning" hidden></p>
 
-      <details class="tool" id="vhist-box" open>
+      <div id="inspector-sections" class="inspector-sections">
+      <details class="tool" id="vhist-box" data-section="battery" open>
         <summary>Battery voltage</summary>
         <div class="vhist">
         <div class="vhist-range">
@@ -578,11 +595,16 @@
           <p id="vhist-archive-msg" class="vhist-msg" role="status"></p>
         </div>
 
-        <h4 class="vhist-runs-title">Archived measurements</h4>
-        <ul id="vhist-runs" class="vhist-runs"></ul>
+        <details class="vhist-runs-box" id="vhist-runs-box">
+          <summary class="vhist-runs-title">Archived measurements
+            <span id="vhist-runs-count" class="vhist-runs-count"></span></summary>
+          <ul id="vhist-runs" class="vhist-runs"></ul>
+        </details>
         </div>
       </details>
 
+      <details class="tool" data-section="details" open>
+        <summary>Name and place</summary>
       <form id="inspector-form" class="inspector-form">
         <label>Alias
           <input id="inspector-alias-input" maxlength="24" placeholder="S03-P4" spellcheck="false">
@@ -600,8 +622,9 @@
         </div>
         <button id="inspector-save" type="submit" disabled>Save tag</button>
       </form>
+      </details>
 
-      <details class="tool">
+      <details class="tool" data-section="wireless">
         <summary>Wireless ID</summary>
         <div class="row">
           <input id="inspector-newid" class="id-input" maxlength="6" spellcheck="false"
@@ -612,7 +635,7 @@
           the field empty to use the next free ID.</p>
       </details>
 
-      <details class="tool">
+      <details class="tool" data-section="firmware">
         <summary>Firmware update</summary>
         <div class="row">
           <select id="inspector-fw" aria-label="Firmware file"></select>
@@ -623,7 +646,7 @@
         <p id="inspector-fw-status" class="hint"></p>
       </details>
 
-      <details class="tool">
+      <details class="tool" data-section="readback">
         <summary>Flash read-back</summary>
         <div class="row">
           <button id="inspector-read" type="button">Read flash</button>
@@ -638,7 +661,7 @@
           record and the reserved sector.</p>
       </details>
 
-      <details class="tool danger-zone">
+      <details class="tool danger-zone" data-section="remove">
         <summary>Remove this tag</summary>
         <div class="row">
           <button id="inspector-forget" class="danger" type="button">Forget tag</button>
@@ -647,6 +670,9 @@
         <p class="hint">Forget deletes the server's record only, and the tag returns when it next
           checks in. Factory reset also erases the tag's flash, and it returns with a new random ID.</p>
       </details>
+      </div>
+      <p class="hint inspector-hint">Drag a section by its handle to reorder, or press Alt+&uarr;/&darr;
+        on its heading.</p>
     </div>
   </aside>
 

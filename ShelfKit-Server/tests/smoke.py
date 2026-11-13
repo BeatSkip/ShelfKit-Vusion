@@ -474,6 +474,34 @@ def main() -> int:
               meta["alias"] == "Dairy" and meta["notes"] is None and meta["row"] == 1, meta)
         check("an import keeps a tag that has not been heard", app.tag_meta[0x0ABC]["alias"] == "Bread")
 
+        # the shelf wall's drag and drop, shelf names, sizes and the inspector's order
+        moved = post("/api/tags/layout", {
+            "tags": [{"hex": "0100", "grid_row": 3, "grid_col": 1},
+                     {"hex": "0ABC", "grid_row": 3, "grid_col": 2}],
+            "shelf_names": {"3": "Dairy aisle"}})
+        meta = moved["state"]["tag_info"]["256"]
+        check("a layout places several tags at once",
+              moved.get("ok") is True and meta["row"] == 3 and meta["col"] == 1
+              and app.tag_meta[0x0ABC]["row"] == 3, moved.get("error"))
+        check("a layout names the shelf",
+              moved["state"]["prefs"]["shelf_names"] == {"3": "Dairy aisle"})
+        try:
+            post("/api/tags/layout", {"tags": [{"hex": "0100", "grid_row": 4, "grid_col": 1},
+                                               {"hex": "zz", "grid_row": 1, "grid_col": 1}]})
+            refused = False
+        except urllib.error.HTTPError as err:
+            refused = err.code == 400
+        check("a layout with a bad tag is refused", refused)
+        check("a refused layout moves nothing", app.tag_meta[0x0100]["row"] == 3)
+        post("/api/tags/layout", {"tags": [{"hex": "0ABC", "grid_row": None, "grid_col": None}]})
+        check("a layout takes a tag off the shelves", app.tag_meta[0x0ABC]["row"] is None)
+        saved = post("/api/prefs", {"wall_size": "small",
+                                    "inspector_order": ["firmware", "battery", "nonsense"]})
+        check("the new tag sizes and the section order save",
+              saved["prefs"]["wall_size"] == "small"
+              and saved["prefs"]["inspector_order"][:2] == ["firmware", "battery"], saved["prefs"])
+        post("/api/prefs", {"wall_size": "full"})
+
         # ── flashing: the serial bootloader and the debugger ──
         flash0 = get("/api/state")["flash"]
         check("the flash starts idle with four steps",

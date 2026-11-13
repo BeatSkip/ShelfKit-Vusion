@@ -18,8 +18,11 @@ const MAX_DOM_LINES = 2000;
 let prefs = {
   late_after_s: 330, silent_after_s: 630, forget_after_s: 900, low_battery_v: 2.5,
   fleet_view: "wall", wall_size: "full", axsdb_path: "", public_url: "",
-  show_tag_port: true, hub_port: "", tag_port: "",
+  show_tag_port: true, hub_port: "", tag_port: "", inspector_order: [], shelf_names: {},
 };
+// Tag sizes on the shelf wall as a fraction of one panel pixel per screen pixel. The same
+// names are validated by the server (WALL_SIZES in shelfkit/prefs.py).
+const SIZES = { large: 1.5, full: 1, medium: 0.75, half: 0.5, small: 0.33 };
 const THEME_KEY = "shelfkit-theme";
 
 const STATUS_LABEL = {
@@ -204,6 +207,10 @@ const ui = {
   inspector: $("inspector"),
   inspectorId: $("inspector-id"),
   inspectorAlias: $("inspector-alias"),
+  inspectorPick: $("inspector-pick"),
+  inspectorPrev: $("inspector-prev"),
+  inspectorNext: $("inspector-next"),
+  inspectorSections: $("inspector-sections"),
   inspectorClose: $("inspector-close"),
   inspectorGlass: $("inspector-glass"),
   inspectorFacts: $("inspector-facts"),
@@ -319,6 +326,18 @@ function store(key, value) {
   } catch (err) {
     /* storage disabled: the choice just will not survive the reload */
   }
+}
+
+/** The shelf wall's scale, and the pixel-font sizes that go with it. */
+function wallScale() {
+  return SIZES[wallSize] ?? 1;
+}
+function captionIdScale() {
+  const scale = wallScale();
+  return scale >= 1 ? 2 : scale >= 0.5 ? 1.5 : 1;
+}
+function glassIdScale() {
+  return Math.max(1, Math.round(4 * wallScale()));
 }
 
 // ── helpers ────────────────────────────────────────────────────────────────
@@ -553,6 +572,7 @@ function paintGlass(glass, row, idScale) {
     glass.replaceChildren();
     if (thumb) {
       const img = el("img");
+      img.draggable = false;           // the tag is dragged, not its picture (see startTagDrag)
       img.src = thumb;
       img.alt = row.push.name || "The frame last pushed to this tag";
       glass.append(img);
@@ -608,7 +628,7 @@ function createSlot(row) {
   box.type = "checkbox";
   box.setAttribute("aria-label", `Select tag ${row.hex}`);
   box.addEventListener("change", () => togglePicked(row.hex, box.checked));
-  top.append(box, pixelText(row.hex, wallSize === "half" ? 1.5 : 2));
+  top.append(box, pixelText(row.hex, captionIdScale()));
   const alias = el("div", "alias");
   const stateLine = el("div", "state-line");
   const mark = el("span");
@@ -618,6 +638,13 @@ function createSlot(row) {
   caption.append(top, alias, stateLine, battery);
   node.append(stage, caption);
   node._parts = { open, glass, box, id: top.querySelector("svg"), alias, mark, word, battery };
+  node.dataset.hex = row.hex;
+  // Drag a tag to another place or shelf. The article is the draggable, not the button
+  // inside it, because Firefox does not start a drag on a <button>.
+  node.draggable = true;
+  node.addEventListener("dragstart", (event) => startTagDrag(event, node));
+  node.addEventListener("dragend", endWallDrag);
+  open.addEventListener("keydown", (event) => moveTagByKey(event, node.dataset.hex));
   return node;
 }
 
@@ -648,11 +675,11 @@ function updateSlot(node, row) {
     row.status === "silent" ? "silent" : "",
     picked.has(row.hex) ? "picked" : "",
     inspected === row.hex ? "open" : "",
+    (landedUntil.get(row.hex) || 0) > Date.now() ? "landed" : "",
   ].filter(Boolean).join(" "));
   parts.box.checked = picked.has(row.hex);
-  const half = wallSize === "half";
-  setPixelText(parts.id, row.hex, half ? 1.5 : 2);
-  paintGlass(parts.glass, row, half ? 2 : 4);
+  setPixelText(parts.id, row.hex, captionIdScale());
+  paintGlass(parts.glass, row, glassIdScale());
 
   const thumb = row.push?.thumb || "";
   if (lastThumb.has(row.hex) && lastThumb.get(row.hex) !== thumb && thumb) {
@@ -667,41 +694,486 @@ function updateSlot(node, row) {
   setClass(parts.word, row.failed ? "reason" : "");
   setText(parts.word, row.failed ? row.reason : `${statusWord(row)}, ${heardText(row).toLowerCase()}`);
   parts.open.setAttribute("aria-label",
-    `Tag ${row.hex}${row.alias ? `, ${row.alias}` : ""}. ${statusWord(row)}. Open details.`);
+    `Tag ${row.hex}${row.alias ? `, ${row.alias}` : ""}. ${statusWord(row)}. Open details. `
+    + "Alt and the arrow keys move it on the shelf.");
   paintBattery(parts.battery, row);
 }
 
+/** "Shelf 2", or the name the shelf was given. */
+function shelfName(key) {
+  if (key === "none") return "Not on a shelf";
+  return (prefs.shelf_names || {})[key] || `Shelf ${key}`;
+}
+
+/** Shelf keys in wall order: numbered shelves ascending, then the unplaced tags. */
+function shelfOrder(rows) {
+  const keys = new Set(rows.map((row) => (row.row === null ? "none" : String(row.row))));
+  const order = [...keys].filter((key) => key !== "none").sort((a, b) => Number(a) - Number(b));
+  if (keys.has("none")) order.push("none");
+  return order;
+}
+
+function bySlot(a, b) {
+  return (a.col ?? Infinity) - (b.col ?? Infinity) || a.hex.localeCompare(b.hex);
+}
+
+function createShelf(key) {
+  const shelf = el("section", "shelf");
+  shelf.dataset.key = key;
+  const title = el("h2", "shelf-title");
+  const grip = el("span", "grip");
+  grip.tabIndex = 0;
+  grip.setAttribute("role", "button");
+  grip.draggable = true;
+  grip.addEventListener("dragstart", (event) => startShelfDrag(event, shelf));
+  grip.addEventListener("dragend", endWallDrag);
+  grip.addEventListener("keydown", (event) => moveShelfByKey(event, shelf.dataset.key));
+  const name = el("span", "shelf-name");
+  const number = el("span", "shelf-number");
+  const rename = el("button", "quiet shelf-rename", "Rename");
+  rename.type = "button";
+  rename.addEventListener("click", () => renameShelf(shelf));
+  name.addEventListener("dblclick", () => renameShelf(shelf));
+  title.append(grip, name, number, rename);
+  const row = el("div", "shelf-row");
+  row.addEventListener("dragover", (event) => overShelfRow(event, shelf));
+  row.addEventListener("drop", (event) => dropOnShelfRow(event, shelf));
+  shelf.addEventListener("dragover", (event) => overShelf(event, shelf));
+  shelf.addEventListener("drop", (event) => dropOnShelf(event, shelf));
+  shelf.append(title, row);
+  Object.assign(shelf, { _title: title, _row: row, _name: name, _number: number, _grip: grip, _rename: rename });
+  return shelf;
+}
+
+function updateShelf(shelf, key, lists, order) {
+  const named = key !== "none" && (prefs.shelf_names || {})[key];
+  // With no shelves set up the heading would only state the obvious.
+  shelf._title.hidden = key === "none" && order.length === 1;
+  if (!shelf._renaming) setText(shelf._name, shelfName(key));
+  setText(shelf._number, named ? `Shelf ${key}` : "");
+  shelf._grip.hidden = key === "none";
+  shelf._rename.hidden = key === "none";
+  shelf._grip.setAttribute("aria-label",
+    `Move ${shelfName(key)}. Drag, or press Alt and the up or down arrow.`);
+  shelf._grip.title = "Drag to move this shelf (or Alt + up/down)";
+  syncKeyed(shelf._row, lists.get(key), (row) => row.hex, createSlot, updateSlot);
+}
+
+// ── fleet: tags sliding to their new place ───────────────────────────────────
+// When the arrangement changes (a drag here, a move from another browser, shelves
+// reordered) every tag glides from where it was to where it is now, and the tag that
+// was moved lights up briefly. Measured before and after the DOM update ("FLIP").
+let wallLayoutSig = "";
+let wallLayoutSize = "";
+let landedHex = null;              // the tag the last move here was about
+const landedUntil = new Map();     // hex -> time its highlight ends
+
+function wallRects() {
+  const rects = new Map();
+  for (const slot of ui.fleetWall.querySelectorAll(".slot")) {
+    rects.set(slot.dataset.hex, slot.getBoundingClientRect());
+  }
+  return rects;
+}
+
+function animateWall(before) {
+  const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  for (const slot of ui.fleetWall.querySelectorAll(".slot")) {
+    if (still || !slot.animate) break;
+    const was = before.get(slot.dataset.hex);
+    const now = slot.getBoundingClientRect();
+    if (!was || !was.width) {
+      slot.animate([{ opacity: 0, transform: "scale(0.92)" }, { opacity: 1, transform: "none" }],
+        { duration: 320, easing: "ease-out" });
+      continue;
+    }
+    const dx = was.left - now.left;
+    const dy = was.top - now.top;
+    if (Math.abs(dx) < 1 && Math.abs(dy) < 1) continue;
+    // a longer trip takes a little longer, so a jump between shelves stays readable
+    const duration = Math.min(700, 360 + Math.hypot(dx, dy) / 4);
+    slot.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: "none" }],
+      { duration, easing: "cubic-bezier(0.2, 0.8, 0.2, 1)" });
+  }
+  const landed = landedHex && ui.fleetWall.querySelector(`.slot[data-hex="${landedHex}"]`);
+  if (landed) {
+    // updateSlot rewrites the class list on every poll, so it is told about the
+    // highlight too (landedUntil) rather than it living on the node alone
+    const hex = landedHex;
+    landedUntil.set(hex, Date.now() + 1600);
+    landed.classList.remove("landed");
+    void landed.offsetWidth;          // restart the highlight
+    landed.classList.add("landed");
+    setTimeout(() => {
+      landedUntil.delete(hex);
+      ui.fleetWall.querySelector(`.slot[data-hex="${hex}"]`)?.classList.remove("landed");
+    }, 1600);
+  }
+  landedHex = null;
+}
+
 function renderWall(rows) {
-  ui.fleetWall.classList.toggle("half", wallSize === "half");
-  const shelves = new Map();
+  const scale = wallScale();
+  ui.fleetWall.style.setProperty("--wall-scale", String(scale));
+  ui.fleetWall.dataset.size = wallSize;
+  ui.fleetWall.classList.toggle("compact", scale <= 0.5);
+  ui.fleetWall.classList.toggle("tiny", scale < 0.4);
+  // A drag or a rename in progress owns the wall: a poll moving nodes under the
+  // pointer would cancel the drag, and a re-render would wipe the name being typed.
+  if (wallDrag || renaming) return;
+  const lists = new Map();
   for (const row of rows) {
     const key = row.row === null ? "none" : String(row.row);
-    if (!shelves.has(key)) shelves.set(key, []);
-    shelves.get(key).push(row);
+    if (!lists.has(key)) lists.set(key, []);
+    lists.get(key).push(row);
   }
-  const placed = [...shelves.keys()].filter((key) => key !== "none");
-  const order = placed.sort((a, b) => Number(a) - Number(b));
-  if (shelves.has("none")) order.push("none");
+  const order = shelfOrder(rows);
+  for (const key of order) if (key !== "none") lists.get(key).sort(bySlot);
+  const signature = order.map((key) => `${key}:${lists.get(key).map((row) => row.hex).join(",")}`)
+    .join(";");
+  // not on the first draw, and not when the tag size changed (everything moves then)
+  const animate = wallLayoutSig !== "" && signature !== wallLayoutSig
+    && wallLayoutSize === wallSize && !ui.fleetWall.hidden;
+  const before = animate ? wallRects() : null;
+  wallLayoutSig = signature;
+  wallLayoutSize = wallSize;
+  syncKeyed(ui.fleetWall, order, (key) => key, createShelf,
+    (shelf, key) => updateShelf(shelf, key, lists, order));
+  if (animate) animateWall(before);
+}
 
-  syncKeyed(ui.fleetWall, order, (key) => key, (key) => {
-    const shelf = el("section", "shelf");
-    const title = el("h2");
-    const row = el("div", "shelf-row");
-    shelf.append(title, row);
-    shelf._title = title;
-    shelf._row = row;
-    shelf.dataset.key = key;
-    return shelf;
-  }, (shelf, key) => {
-    const list = shelves.get(key);
-    // With no shelves set up the heading would only state the obvious.
-    shelf._title.hidden = key === "none" && order.length === 1;
-    setText(shelf._title, key === "none" ? "Not on a shelf" : `Shelf ${key}`);
-    if (key !== "none") {
-      list.sort((a, b) => (a.col ?? Infinity) - (b.col ?? Infinity) || a.hex.localeCompare(b.hex));
-    }
-    syncKeyed(shelf._row, list, (row) => row.hex, createSlot, updateSlot);
+// ── fleet: arranging the shelf wall ──────────────────────────────────────────
+// Tags are dragged between and within shelves, shelves are dragged by their grip, and
+// both can be moved with Alt and the arrow keys. Every move is saved at once through
+// POST /api/tags/layout, which places all affected tags in one request.
+let wallDrag = null;               // {kind: "tag", hex} or {kind: "shelf", key}
+let renaming = false;
+const dropMark = el("div", "drop-mark");
+dropMark.setAttribute("aria-hidden", "true");
+const dropZones = el("div", "drop-zones");
+const zoneNew = el("div", "drop-zone", "Drop here to start a new shelf");
+const zoneOff = el("div", "drop-zone", "Drop here to take it off the shelves");
+dropZones.append(zoneNew, zoneOff);
+for (const [zone, target] of [[zoneNew, "new"], [zoneOff, "none"]]) {
+  zone.addEventListener("dragover", (event) => {
+    if (wallDrag?.kind !== "tag") return;
+    event.preventDefault();
+    event.stopPropagation();
+    dropMark.remove();
+    zone.classList.add("over");
   });
+  zone.addEventListener("dragleave", () => zone.classList.remove("over"));
+  zone.addEventListener("drop", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const hex = wallDrag?.hex;
+    endWallDrag();
+    if (hex) moveTag(hex, target, null);
+  });
+}
+
+// A drop that misses every target must not reach the browser, which would open the
+// dragged text or picture as a page.
+document.addEventListener("dragover", (event) => {
+  if (wallDrag || sectionDrag) event.preventDefault();
+});
+document.addEventListener("drop", (event) => {
+  if (!wallDrag && !sectionDrag) return;
+  event.preventDefault();
+  endWallDrag();
+});
+
+function startTagDrag(event, node) {
+  if (event.target.closest("input")) {
+    event.preventDefault();
+    return;
+  }
+  wallDrag = { kind: "tag", hex: node.dataset.hex };
+  zoneOff.hidden = tagRows().find((row) => row.hex === node.dataset.hex)?.row == null;
+  event.dataTransfer.effectAllowed = "move";
+  event.dataTransfer.setData("text/plain", node.dataset.hex);
+  // the classes go on after the drag image is taken, so the image is the plain tag
+  requestAnimationFrame(() => {
+    if (!wallDrag) return;
+    node.classList.add("dragging");
+    ui.fleetWall.classList.add("arranging");
+    ui.fleetWall.append(dropZones);
+  });
+}
+
+function startShelfDrag(event, shelf) {
+  event.stopPropagation();
+  wallDrag = { kind: "shelf", key: shelf.dataset.key };
+  event.dataTransfer.effectAllowed = "move";
+  event.dataTransfer.setData("text/plain", shelfName(shelf.dataset.key));
+  event.dataTransfer.setDragImage(shelf._title, 12, 12);
+  requestAnimationFrame(() => {
+    if (!wallDrag) return;
+    shelf.classList.add("dragging");
+    ui.fleetWall.classList.add("arranging-shelves");
+  });
+}
+
+function clearDropMarks() {
+  dropMark.remove();
+  for (const node of ui.fleetWall.querySelectorAll(".drop-before, .drop-after, .over")) {
+    node.classList.remove("drop-before", "drop-after", "over");
+  }
+}
+
+function endWallDrag() {
+  if (!wallDrag && !ui.fleetWall.querySelector(".dragging")) return;
+  wallDrag = null;
+  clearDropMarks();
+  dropZones.remove();
+  ui.fleetWall.classList.remove("arranging", "arranging-shelves");
+  for (const node of ui.fleetWall.querySelectorAll(".dragging")) node.classList.remove("dragging");
+  draw();
+}
+
+/** The slot the dragged tag would land in front of, or null for the end of the row. */
+function slotAfterPointer(row, x, y) {
+  for (const slot of row.querySelectorAll(".slot:not(.dragging)")) {
+    const box = slot.getBoundingClientRect();
+    if (y < box.top) return slot;                                  // a later wrapped line
+    if (y <= box.bottom && x < box.left + box.width / 2) return slot;
+  }
+  return null;
+}
+
+function overShelfRow(event, shelf) {
+  if (wallDrag?.kind !== "tag") return;
+  event.preventDefault();
+  event.stopPropagation();
+  event.dataTransfer.dropEffect = "move";
+  // once there are shelves, the unplaced tags are listed by ID: a drop there only
+  // takes the tag off its shelf, so the mark goes to the end
+  const unordered = shelf.dataset.key === "none" && shelfKeys().length > 0;
+  const before = unordered ? null : slotAfterPointer(shelf._row, event.clientX, event.clientY);
+  if (dropMark.parentNode !== shelf._row || dropMark.nextSibling !== before) {
+    shelf._row.insertBefore(dropMark, before);
+  }
+}
+
+function dropOnShelfRow(event, shelf) {
+  if (wallDrag?.kind !== "tag") return;
+  event.preventDefault();
+  event.stopPropagation();
+  let before = dropMark.parentNode === shelf._row ? dropMark.nextElementSibling : null;
+  if (before?.classList.contains("dragging")) before = before.nextElementSibling;
+  const hex = wallDrag.hex;
+  endWallDrag();
+  moveTag(hex, shelf.dataset.key, before?.dataset.hex || null);
+}
+
+function overShelf(event, shelf) {
+  if (!wallDrag) return;
+  if (wallDrag.kind === "tag") {
+    // anywhere on the shelf but its row (the heading, the gap): the end of that shelf
+    event.preventDefault();
+    if (dropMark.parentNode !== shelf._row || dropMark.nextSibling) shelf._row.append(dropMark);
+    return;
+  }
+  if (shelf.dataset.key === "none" || shelf.dataset.key === wallDrag.key) return;
+  event.preventDefault();
+  const box = shelf.getBoundingClientRect();
+  const after = event.clientY > box.top + box.height / 2;
+  if (shelf.classList.contains(after ? "drop-after" : "drop-before")) return;
+  clearDropMarks();
+  shelf.classList.add(after ? "drop-after" : "drop-before");
+}
+
+function dropOnShelf(event, shelf) {
+  if (!wallDrag) return;
+  event.preventDefault();
+  if (wallDrag.kind === "tag") {
+    const hex = wallDrag.hex;
+    endWallDrag();
+    moveTag(hex, shelf.dataset.key, null);
+    return;
+  }
+  const from = wallDrag.key;
+  const after = shelf.classList.contains("drop-after");
+  endWallDrag();
+  if (shelf.dataset.key === "none" || shelf.dataset.key === from) return;
+  const keys = shelfKeys().filter((key) => key !== from);
+  keys.splice(keys.indexOf(shelf.dataset.key) + (after ? 1 : 0), 0, from);
+  reorderShelves(keys);
+}
+
+/** The numbered shelves in wall order, from every tag (not only the ones shown). */
+function shelfKeys() {
+  return shelfOrder(tagRows()).filter((key) => key !== "none");
+}
+
+/** Put a tag on shelf `target` ("new", "none" or a number), in front of `beforeHex`. */
+async function moveTag(hex, target, beforeHex) {
+  const all = tagRows();
+  const moving = all.find((row) => row.hex === hex);
+  if (!moving) return;
+  let changes;
+  let where;
+  if (target === "none" && !shelfKeys().length) {
+    // No shelves yet: the wall is one row of unplaced tags, and they have no place to
+    // keep an order in. Reordering them puts the whole row on shelf 1, as shown.
+    const row = ui.fleetWall.querySelector('.shelf[data-key="none"] .shelf-row');
+    const shown = row ? [...row.querySelectorAll(".slot")].map((slot) => slot.dataset.hex) : [];
+    const rest = all.filter((tag) => !shown.includes(tag.hex)).map((tag) => tag.hex).sort();
+    const list = [...shown, ...rest].filter((tagHex) => tagHex !== hex);
+    let at = beforeHex ? list.indexOf(beforeHex) : -1;
+    if (at < 0) at = list.length;
+    list.splice(at, 0, hex);
+    changes = list.map((tagHex, index) => ({ hex: tagHex, grid_row: 1, grid_col: index + 1 }));
+    landedHex = hex;
+    if (await saveLayout({ tags: changes })) {
+      toast(`Put ${plural(list.length, "tag")} on Shelf 1 in this order. Drag one below to start another shelf.`);
+    }
+    return;
+  }
+  if (target === "none") {
+    if (moving.row === null) return;
+    changes = [{ hex, grid_row: null, grid_col: null }];
+    where = "off the shelves";
+  } else {
+    const keys = shelfKeys().map(Number);
+    const shelf = target === "new" ? (keys.length ? Math.max(...keys) + 1 : 1) : Number(target);
+    const list = all.filter((row) => row.row === shelf && row.hex !== hex).sort(bySlot);
+    let at = beforeHex ? list.findIndex((row) => row.hex === beforeHex) : -1;
+    if (at < 0) at = list.length;
+    list.splice(at, 0, moving);
+    // renumber the whole shelf 1..n, and send only the tags whose place changed
+    changes = list.map((row, index) => ({ hex: row.hex, grid_row: shelf, grid_col: index + 1 }))
+      .filter((change, index) => list[index].row !== change.grid_row
+        || list[index].col !== change.grid_col);
+    where = shelfName(String(shelf));
+  }
+  if (!changes.length) return;
+  landedHex = hex;
+  if (await saveLayout({ tags: changes })) toast(`Moved ${hex} to ${where}`);
+}
+
+/** Give the shelves in `keys` the existing shelf numbers in that order; names move along. */
+async function reorderShelves(keys) {
+  const numbers = keys.map(Number).sort((a, b) => a - b);
+  const renumber = new Map(keys.map((key, index) => [Number(key), numbers[index]]));
+  const changes = tagRows()
+    .filter((row) => row.row !== null && renumber.get(row.row) !== row.row)
+    .map((row) => ({ hex: row.hex, grid_row: renumber.get(row.row), grid_col: row.col }));
+  if (!changes.length) return;
+  const old = prefs.shelf_names || {};
+  const names = {};
+  for (const [from, to] of renumber) if (old[String(from)]) names[String(to)] = old[String(from)];
+  for (const [key, name] of Object.entries(old)) {
+    if (!renumber.has(Number(key)) && !(key in names)) names[key] = name;   // an empty shelf's name
+  }
+  if (await saveLayout({ tags: changes, shelf_names: names })) toast("Shelves reordered");
+}
+
+async function saveLayout(body) {
+  try {
+    // not postJSON: a refused layout answers 400 with the reason in the body
+    const response = await fetch("/api/tags/layout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const result = await response.json();
+    if (result.state) render(result.state);
+    if (!result.ok) {
+      toast(`Couldn't move that: ${result.error || response.statusText}`, "bad");
+      return false;
+    }
+    return true;
+  } catch (err) {
+    toast(`Couldn't move that: ${err.message}`, "bad");
+    return false;
+  }
+}
+
+/** Alt+arrows on a tag: left/right within its shelf, up/down to the shelf above/below. */
+function moveTagByKey(event, hex) {
+  if (!event.altKey || !event.key.startsWith("Arrow")) return;
+  event.preventDefault();
+  const all = tagRows();
+  const row = all.find((candidate) => candidate.hex === hex);
+  if (!row) return;
+  const key = row.row === null ? "none" : String(row.row);
+  const refocus = () => requestAnimationFrame(() => {
+    ui.fleetWall.querySelector(`.slot[data-hex="${hex}"] .tag-open`)?.focus();
+  });
+  if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+    if (key === "none" && shelfKeys().length) return;   // unplaced tags have no order
+    const list = key === "none"
+      ? [...ui.fleetWall.querySelectorAll('.shelf[data-key="none"] .slot')]
+        .map((slot) => ({ hex: slot.dataset.hex }))
+      : all.filter((candidate) => candidate.row === row.row).sort(bySlot);
+    const at = list.findIndex((candidate) => candidate.hex === hex);
+    if (event.key === "ArrowLeft" && at > 0) moveTag(hex, key, list[at - 1].hex).then(refocus);
+    if (event.key === "ArrowRight" && at < list.length - 1) {
+      moveTag(hex, key, list[at + 2]?.hex || null).then(refocus);
+    }
+    return;
+  }
+  const keys = shelfKeys();
+  const at = key === "none" ? keys.length : keys.indexOf(key);
+  if (event.key === "ArrowUp" && at > 0) moveTag(hex, keys[at - 1], null).then(refocus);
+  if (event.key === "ArrowDown" && key !== "none") {
+    moveTag(hex, at < keys.length - 1 ? keys[at + 1] : "new", null).then(refocus);
+  }
+}
+
+function moveShelfByKey(event, key) {
+  if (!event.altKey || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) return;
+  event.preventDefault();
+  const keys = shelfKeys();
+  const at = keys.indexOf(key);
+  const to = event.key === "ArrowUp" ? at - 1 : at + 1;
+  if (at < 0 || to < 0 || to >= keys.length) return;
+  [keys[at], keys[to]] = [keys[to], keys[at]];
+  // the shelf keeps focus: it now carries the number of the place it moved to
+  const target = keys[at] === key ? key : String(keys.map(Number).sort((a, b) => a - b)[to]);
+  reorderShelves(keys).then(() => requestAnimationFrame(() => {
+    ui.fleetWall.querySelector(`.shelf[data-key="${target}"] .grip`)?.focus();
+  }));
+}
+
+/** Name a shelf in place: Enter saves, Escape cancels, an empty name goes back to "Shelf N". */
+function renameShelf(shelf) {
+  const key = shelf.dataset.key;
+  if (key === "none" || shelf._renaming) return;
+  shelf._renaming = renaming = true;
+  const input = el("input", "shelf-name-input");
+  input.maxLength = 40;
+  input.value = (prefs.shelf_names || {})[key] || "";
+  input.placeholder = `Shelf ${key}`;
+  input.setAttribute("aria-label", `Name for shelf ${key}`);
+  shelf._name.replaceChildren(input);
+  shelf._rename.hidden = true;
+  input.focus();
+  input.select();
+  let done = false;
+  const finish = async (save) => {
+    if (done) return;
+    done = true;
+    shelf._renaming = renaming = false;
+    shelf._rename.hidden = false;
+    setText(shelf._name, shelfName(key));
+    const value = input.value.trim();
+    if (save && value !== ((prefs.shelf_names || {})[key] || "")) {
+      const names = { ...(prefs.shelf_names || {}) };
+      if (value) names[key] = value;
+      else delete names[key];
+      const result = await postPrefs({ shelf_names: names });
+      if (!result.ok) toast(`Couldn't rename the shelf. ${result.error}`, "bad");
+    }
+    draw();
+    shelf._rename.focus();
+  };
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") finish(true);
+    if (event.key === "Escape") finish(false);
+  });
+  input.addEventListener("blur", () => finish(true));
 }
 
 // ── fleet: the table ───────────────────────────────────────────────────────
@@ -931,6 +1403,174 @@ function closeInspector() {
   draw();
 }
 
+// ── inspector: the tag picker in the heading ────────────────────────────────
+/** Every tag in shelf-wall order, grouped by shelf: [{key, rows}]. */
+function tagsByShelf() {
+  const all = tagRows();
+  return shelfOrder(all).map((key) => ({
+    key,
+    rows: all.filter((row) => (row.row === null ? "none" : String(row.row)) === key)
+      .sort(key === "none" ? (a, b) => a.hex.localeCompare(b.hex) : bySlot),
+  }));
+}
+
+function renderTagPicker() {
+  const groups = tagsByShelf();
+  const flat = groups.flatMap((group) => group.rows);
+  const signature = JSON.stringify(groups.map((group) => [shelfName(group.key),
+    group.rows.map((row) => `${row.hex}:${row.alias || ""}:${row.status}`)]));
+  const pick = ui.inspectorPick;
+  if (pick.dataset.sig !== signature) {
+    pick.dataset.sig = signature;
+    pick.replaceChildren();
+    const grouped = groups.length > 1;
+    for (const group of groups) {
+      const parent = grouped ? el("optgroup") : pick;
+      if (grouped) {
+        parent.label = shelfName(group.key);
+        pick.append(parent);
+      }
+      for (const row of group.rows) {
+        const option = el("option", null,
+          `${row.hex}${row.alias ? `  ·  ${row.alias}` : ""}${row.status === "silent" ? "  (silent)" : ""}`);
+        option.value = row.hex;
+        parent.append(option);
+      }
+    }
+  }
+  if (pick.value !== inspected) pick.value = inspected;
+  const at = flat.findIndex((row) => row.hex === inspected);
+  ui.inspectorPrev.disabled = at <= 0;
+  ui.inspectorNext.disabled = at < 0 || at >= flat.length - 1;
+  ui.inspectorPrev.title = at > 0 ? `Previous: ${flat[at - 1].hex}` : "This is the first tag";
+  ui.inspectorNext.title = at >= 0 && at < flat.length - 1
+    ? `Next: ${flat[at + 1].hex}` : "This is the last tag";
+}
+
+/** Switch the inspector to another tag, keeping unsaved typing only if asked to. */
+function switchInspected(hex) {
+  if (!hex || hex === inspected) return;
+  if (formDirty && !confirm(`Discard the unsaved changes to ${inspected}?`)) {
+    ui.inspectorPick.value = inspected;
+    return;
+  }
+  openInspector(hex);
+}
+
+function stepInspected(delta) {
+  const flat = tagsByShelf().flatMap((group) => group.rows);
+  const at = flat.findIndex((row) => row.hex === inspected);
+  const next = flat[at + delta];
+  if (at >= 0 && next) switchInspected(next.hex);
+}
+
+ui.inspectorPick.addEventListener("change", () => switchInspected(ui.inspectorPick.value));
+ui.inspectorPrev.addEventListener("click", () => stepInspected(-1));
+ui.inspectorNext.addEventListener("click", () => stepInspected(1));
+
+// ── inspector: the order and folding of its sections ───────────────────────
+// The order is a server setting (inspector_order), so every browser shows the same
+// layout. Which sections are open is remembered per browser. The battery section keeps
+// its own key ("vhist.open"), which predates this.
+function inspectorSections() {
+  return [...ui.inspectorSections.querySelectorAll(":scope > details[data-section]")];
+}
+
+let inspectorOrderApplied = "";
+function applyInspectorOrder() {
+  const wanted = Array.isArray(prefs.inspector_order) ? prefs.inspector_order : [];
+  const signature = wanted.join(",");
+  if (signature === inspectorOrderApplied) return;
+  inspectorOrderApplied = signature;
+  const sections = inspectorSections();
+  const rank = (node) => {
+    const at = wanted.indexOf(node.dataset.section);
+    // sections the saved order does not name keep their place after the named ones
+    return at < 0 ? wanted.length + sections.indexOf(node) : at;
+  };
+  const sorted = [...sections].sort((a, b) => rank(a) - rank(b));
+  if (sorted.every((node, index) => node === sections[index])) return;
+  const focused = document.activeElement;
+  ui.inspectorSections.append(...sorted);
+  if (focused && ui.inspectorSections.contains(focused)) focused.focus();
+}
+
+async function saveInspectorOrder(sections) {
+  const order = sections.map((node) => node.dataset.section);
+  inspectorOrderApplied = order.join(",");
+  const focused = document.activeElement;
+  ui.inspectorSections.append(...sections);     // show it at once; the server confirms
+  if (focused && ui.inspectorSections.contains(focused)) focused.focus();
+  const result = await postPrefs({ inspector_order: order });
+  if (!result.ok) {
+    toast(`Couldn't save the section order. ${result.error}`, "bad");
+    inspectorOrderApplied = "";
+    applyInspectorOrder();
+  }
+}
+
+let sectionDrag = null;
+for (const section of inspectorSections()) {
+  const name = section.dataset.section;
+  const summary = section.querySelector(":scope > summary");
+  const grip = el("span", "grip");
+  grip.draggable = true;
+  grip.title = "Drag to move this section (or Alt + up/down on its heading)";
+  grip.setAttribute("aria-hidden", "true");
+  // a click on the grip must not fold the section
+  grip.addEventListener("click", (event) => event.preventDefault());
+  grip.addEventListener("dragstart", (event) => {
+    sectionDrag = section;
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", name);
+    event.dataTransfer.setDragImage(summary, 12, 12);
+    requestAnimationFrame(() => section.classList.add("dragging"));
+  });
+  grip.addEventListener("dragend", () => {
+    sectionDrag = null;
+    for (const node of inspectorSections()) {
+      node.classList.remove("dragging", "drop-before", "drop-after");
+    }
+  });
+  summary.prepend(grip);
+  summary.addEventListener("keydown", (event) => {
+    if (!event.altKey || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) return;
+    event.preventDefault();
+    const sections = inspectorSections();
+    const at = sections.indexOf(section);
+    const to = event.key === "ArrowUp" ? at - 1 : at + 1;
+    if (to < 0 || to >= sections.length) return;
+    [sections[at], sections[to]] = [sections[to], sections[at]];
+    saveInspectorOrder(sections);
+  });
+  section.addEventListener("dragover", (event) => {
+    if (!sectionDrag || sectionDrag === section) return;
+    event.preventDefault();
+    const box = section.getBoundingClientRect();
+    const after = event.clientY > box.top + box.height / 2;
+    section.classList.toggle("drop-after", after);
+    section.classList.toggle("drop-before", !after);
+  });
+  section.addEventListener("dragleave", (event) => {
+    if (section.contains(event.relatedTarget)) return;
+    section.classList.remove("drop-before", "drop-after");
+  });
+  section.addEventListener("drop", (event) => {
+    if (!sectionDrag || sectionDrag === section) return;
+    event.preventDefault();
+    const after = section.classList.contains("drop-after");
+    const moving = sectionDrag;
+    const sections = inspectorSections().filter((node) => node !== moving);
+    sections.splice(sections.indexOf(section) + (after ? 1 : 0), 0, moving);
+    saveInspectorOrder(sections);
+  });
+  if (name !== "battery") {
+    const key = `inspector.open.${name}`;
+    section.open = stored(key, section.open ? "1" : "0") === "1";
+    section.addEventListener("toggle", () => store(key, section.open ? "1" : "0"));
+  }
+}
+
 function renderInspector() {
   if (!inspected) return;
   const row = tagRows().find((candidate) => candidate.hex === inspected);
@@ -943,6 +1583,13 @@ function renderInspector() {
   setPixelText(ui.inspectorId.firstChild, row.hex, 4);
   setClass(ui.inspectorAlias, row.alias ? "inspector-alias" : "inspector-alias none");
   setText(ui.inspectorAlias, row.alias || "No alias");
+  renderTagPicker();
+  applyInspectorOrder();
+  // a drag on the wall (or another browser) moved or renamed the tag: show that,
+  // unless there is typing here that has not been saved
+  const saved = [row.alias, row.notes, row.row, row.col].join("|");
+  if (ui.inspectorForm.dataset.saved !== saved && !formDirty) loadForm(row);
+  ui.inspectorForm.dataset.saved = saved;
   paintGlass(ui.inspectorGlass, row, 4);
 
   const newest = (state?.firmware || []).find(
@@ -2620,6 +3267,7 @@ async function boot() {
     }
   }
   for (const pane of state.panes) cursorState.set(pane.key, `${pane.epoch}:0`);
+  applyPrefs(state.prefs);             // the first draw already uses the saved tag size etc.
   renderChrome();
   show(location.hash.slice(1) || "fleet");
   schedule();
@@ -2638,6 +3286,7 @@ const vui = {
   viewingBox: $("vhist-viewing"), viewingText: $("vhist-viewing-text"), back: $("vhist-back"),
   sinceText: $("vhist-since"), reason: $("vhist-reason"), note: $("vhist-note"),
   archive: $("vhist-archive-btn"), msg: $("vhist-archive-msg"), runs: $("vhist-runs"),
+  runsBox: $("vhist-runs-box"), runsCount: $("vhist-runs-count"),
 };
 
 const POWER_REASON_TEXT = { battery: "New battery", firmware: "New firmware", other: "Other" };
@@ -2734,6 +3383,7 @@ function drawVoltageStats(data) {
 
 function drawRuns() {
   vui.runs.replaceChildren();
+  vui.runsCount.textContent = vhist.runs.length ? `(${vhist.runs.length})` : "(none)";
   vui.sinceText.textContent = vhist.since
     ? `This measurement started ${fmtWhen(vhist.since)}, at the last archive.`
     : "This measurement covers every reading so far (nothing archived yet).";
@@ -2869,6 +3519,11 @@ vhistBox.open = stored("vhist.open", "1") === "1";
 vhistBox.addEventListener("toggle", () => {
   store("vhist.open", vhistBox.open ? "1" : "0");
   if (vhistBox.open) refreshVoltage();
+});
+// The archived measurements are folded away unless this browser opened them last time.
+vui.runsBox.open = stored("vhist.runs.open", "0") === "1";
+vui.runsBox.addEventListener("toggle", () => {
+  store("vhist.runs.open", vui.runsBox.open ? "1" : "0");
 });
 
 vui.archive.addEventListener("click", archiveMeasurement);

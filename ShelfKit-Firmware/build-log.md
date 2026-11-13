@@ -45,3 +45,4 @@ Appended by `Tooling/build-all.py`. `dirty` = the build had uncommitted changes,
 | 2026-11-13 01:05 | 1.1.0 | 40 | 13752fa dirty | Vusion c29a3f55c2b38d95 (121153 B); compare D-both-fixes: defaults |
 | 2026-11-13 01:05 | 1.1.0 | 41 | 13752fa dirty | Vusion a590d5e0b40e847c (119305 B); compare E-both-no-nfc: SHELF_NFC_POLL=0 SHELF_NFC_RAIL_HOLD=0 |
 | 2026-11-13 01:40 | 1.1.0 | 42 | 13752fa dirty | Vusion b0a0b6ac7ccc9aa4 (121153 B); Bootloader e2310ad4eda7e837 (24931 B); compare D-uart-test: SHELF_FIX_UART_SLEEP=1, for the wired serial test |
+| 2026-11-13 02:01 | 1.1.0 | 43 | 64aaf91 dirty | Vusion 09bc58ecf0af9334 (121172 B); Vusion-Hub 8bd03a980534d688 (89829 B); Bootloader 992d7887d3eae9c2 (24931 B) |
