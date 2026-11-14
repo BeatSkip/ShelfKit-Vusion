@@ -32,7 +32,7 @@ static uint8_t __xdata rsp[SM_RSP_LEN];
 static uint8_t __xdata delay_hint;      /* 10 s units, 0 = no request */
 /* Tags the host has data queued for: their next poll reply carries SM_CMD_DATA
  * so the tag keeps listening instead of closing its window after the grace. */
-#define PREARM_SLOTS 4
+#define PREARM_SLOTS 32     /* keep PREARM_SLOTS in the server's shelfkit/app.py equal */
 static uint16_t __xdata prearmed[PREARM_SLOTS];
 /* The poll that last consumed a pre-arm. When the tag misses our reply it sends the
  * same poll again (retry, same seq); that copy must get the same "data follows",

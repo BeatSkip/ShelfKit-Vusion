@@ -43,6 +43,7 @@
       <a href="#editor" data-screen="editor">Editor</a>
       <a href="#queue" data-screen="queue">Queue<span class="count" id="nav-queue" hidden></span></a>
       <a href="#logs" data-screen="logs">Logs</a>
+      <a href="#diagnostics" data-screen="diagnostics">Diagnostics</a>
       <a href="#hub" data-screen="hub">Hub</a>
       <a href="#flash" data-screen="flash">Flash<span class="mark s-sending" id="nav-flash" hidden></span></a>
       <a href="#apps" data-screen="apps">Apps</a>
@@ -226,7 +227,7 @@
       <div class="table-wrap" id="queue-wrap">
         <table class="grid queue-table">
           <thead>
-            <tr><th>State</th><th>Tag</th><th>Command</th><th>Detail</th><th>Queued</th></tr>
+            <tr><th>State</th><th>Tag</th><th>Command</th><th>Detail</th><th>Queued</th><th></th></tr>
           </thead>
           <tbody id="queue-rows"></tbody>
         </table>
@@ -253,6 +254,101 @@
       </div>
       <p class="empty" id="logs-empty" hidden>No events match. The server records pushes, failures,
         boots and port changes here, and keeps them across restarts.</p>
+    </section>
+
+    <!-- Diagnostics: one tag, looked at closely -->
+    <section class="screen" data-screen="diagnostics" aria-labelledby="diag-title" hidden>
+      <div class="screen-head diag-head">
+        <h1 id="diag-title">Diagnostics</h1>
+        <div class="tag-pick diag-pick">
+          <button id="diag-prev" class="tag-step" type="button" aria-label="Previous tag"
+                  title="Previous tag on the shelf"></button>
+          <label class="tag-select" title="Show another tag">
+            <span id="diag-id" class="inspector-id"></span>
+            <span id="diag-alias" class="inspector-alias"></span>
+            <span class="tag-chevron" aria-hidden="true"></span>
+            <select id="diag-pick" aria-label="Show another tag"></select>
+          </label>
+          <button id="diag-next" class="tag-step next" type="button" aria-label="Next tag"
+                  title="Next tag on the shelf"></button>
+        </div>
+        <span class="grow"></span>
+        <button id="diag-inspect" type="button"
+                title="Open the side panel for this tag: its name, firmware and commands">Tag details</button>
+      </div>
+
+      <p class="empty" id="diag-empty" hidden>No tag has checked in yet. Diagnostics appear
+        here once the hub hears one.</p>
+
+      <div class="diag" id="diag-body">
+        <div class="diag-main">
+          <section class="diag-panel" aria-labelledby="diag-batt-title">
+            <div class="diag-panel-head">
+              <h2 id="diag-batt-title">Battery voltage</h2>
+              <select id="diag-range" aria-label="Period">
+                <option value="run">This measurement</option>
+                <option value="1">Last 24 hours</option>
+                <option value="7">Last 7 days</option>
+                <option value="30">Last 30 days</option>
+                <option value="90">Last 90 days</option>
+                <option value="0">All readings</option>
+              </select>
+              <span id="diag-readout" class="diag-readout" aria-hidden="true"></span>
+              <span class="grow"></span>
+              <button id="diag-zoom" type="button" disabled>Zoom to selection</button>
+              <button id="diag-unzoom" class="quiet" type="button" hidden>Reset zoom</button>
+              <button id="diag-clear" class="quiet" type="button" disabled>Clear selection</button>
+            </div>
+            <div class="diag-plot" id="diag-plot">
+              <svg id="diag-chart" class="diag-chart" role="img"
+                   aria-label="Battery voltage over time. Drag across it to measure a stretch."></svg>
+            </div>
+            <div class="diag-grip" id="diag-plot-grip" role="separator" aria-orientation="horizontal"
+                 tabindex="0" aria-label="Height of the battery plot"
+                 aria-valuemin="200" aria-valuemax="1400"
+                 title="Drag to resize the plot. Double-click for the default height."></div>
+            <p class="hint">Drag across the plot to measure a stretch of it. Click the plot to
+              drop the selection.</p>
+            <h3 id="diag-stats-title" class="diag-stats-title">Whole period</h3>
+            <dl class="facts diag-stats" id="diag-stats"></dl>
+            <p class="hint" id="diag-stats-note" hidden></p>
+          </section>
+
+          <!-- More diagnostics go here: one <section class="diag-panel"> each. -->
+          <div class="diag-panels">
+            <section class="diag-panel" aria-labelledby="diag-facts-title">
+              <h2 id="diag-facts-title">Tag</h2>
+              <dl class="facts" id="diag-facts"></dl>
+            </section>
+            <section class="diag-panel diag-reserved" aria-label="Room for more diagnostics">
+              <p>Room for more diagnostics</p>
+            </section>
+          </div>
+        </div>
+
+        <div class="diag-split" id="diag-split" role="separator" aria-orientation="vertical"
+             tabindex="0" aria-label="Width of the log" aria-valuemin="280" aria-valuemax="1000"
+             title="Drag to resize the log. Double-click for the default width."></div>
+
+        <section class="diag-panel diag-log" aria-labelledby="diag-log-title">
+          <div class="diag-panel-head">
+            <h2 id="diag-log-title">Log</h2>
+            <span id="diag-log-count" class="dim"></span>
+            <span class="grow"></span>
+            <select id="diag-event" aria-label="Event"><option value="">All events</option></select>
+            <label class="check"><input id="diag-sync" type="checkbox"> Check-ins</label>
+          </div>
+          <div class="diag-log-wrap" id="diag-log-wrap">
+            <table class="grid logs-table diag-log-table">
+              <thead>
+                <tr><th>Time</th><th>Event</th><th>Detail</th><th></th></tr>
+              </thead>
+              <tbody id="diag-rows"></tbody>
+            </table>
+          </div>
+          <p class="empty" id="diag-log-empty" hidden></p>
+        </section>
+      </div>
     </section>
 
     <!-- Hub -->
@@ -330,6 +426,7 @@
           <label class="field">Firmware file
             <select id="flash-file"></select>
           </label>
+          <dl class="facts flash-version" id="flash-version" aria-live="polite"></dl>
 
           <label class="field" id="flash-pane-field">Serial port
             <select id="flash-pane"></select>
@@ -554,6 +651,8 @@
             <p id="inspector-interval-note" class="interval-note" hidden></p>
             <button id="inspector-service" type="button"
                     title="Draw a label with this tag's ID, alias and notes, then send it">Send service label</button>
+            <button id="inspector-diag" type="button"
+                    title="The battery plot at full size and this tag's whole log">Diagnostics</button>
           </div>
         </div>
       </div>
@@ -702,6 +801,7 @@
   <datalist id="port-options"></datalist>
   <div id="toasts" class="toasts" aria-live="polite"></div>
   <script src="/app.js"></script>
+  <script src="/diag.js"></script>
   <script src="/apps.js"></script>
 </body>
 </html>

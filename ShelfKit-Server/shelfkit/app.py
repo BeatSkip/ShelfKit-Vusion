@@ -77,17 +77,22 @@ CR2450_CURVE = ((3.0, 100), (2.9, 88), (2.8, 72), (2.7, 52), (2.6, 32),
                 (2.5, 16), (2.4, 6), (2.3, 0))
 
 
-def battery_percent(volts: float) -> int:
-    """Remaining capacity of an average CR2450, in percent, from its voltage."""
+def battery_level(volts: float) -> float:
+    """Remaining capacity of an average CR2450 in percent, unrounded (for differences)."""
     if volts >= 3.0:
-        return 100
+        return 100.0
     if volts <= 2.3:
-        return 0
+        return 0.0
     for (hi_v, hi_p), (lo_v, lo_p) in zip(CR2450_CURVE, CR2450_CURVE[1:]):
         if lo_v <= volts <= hi_v:
             frac = (hi_v - volts) / (hi_v - lo_v)
-            return round(hi_p - frac * (hi_p - lo_p))
-    return 0
+            return hi_p - frac * (hi_p - lo_p)
+    return 0.0
+
+
+def battery_percent(volts: float) -> int:
+    """Remaining capacity of an average CR2450, in percent, from its voltage."""
+    return round(battery_level(volts))
 RE_PONG = re.compile(r"^PONG\b")
 # What the board says when it comes up. Which one appears after a reset tells us
 # which BOOT-pin level the firmware needs (see App.pulse_reset).
@@ -449,6 +454,15 @@ class App:
         ua = None
         if span_h >= 1.0 and pct_first >= pct_last:
             ua = round((pct_first - pct_last) / 100.0 * 620000.0 / span_h)   # uA, 620 mAh
+        # The same estimate off the trend line's two ends instead of the first and last
+        # reading, and without rounding to whole percents (1 % is 6 mAh): a short stretch
+        # picked on the Diagnostics plot would otherwise hang on two noisy readings.
+        ua_trend = None
+        if slope is not None and span_h >= 1.0:
+            mx = sum(xs) / n
+            mv = sum(vs) / n
+            used = battery_level(mv - slope * mx) - battery_level(mv + slope * (xs[-1] - mx))
+            ua_trend = round(max(0.0, used) / 100.0 * 620000.0 / span_h, 1)
         out["stats"] = {
             "first_at": points[0][0], "last_at": points[-1][0],
             "first_v": round(vs[0], 3), "last_v": round(vs[-1], 3),
@@ -457,6 +471,7 @@ class App:
             "drain_mv_per_day": None if slope is None else round(-slope * 1000.0, 2),
             "drain_net_mv": round((vs[0] - vs[-1]) * 1000.0, 1),
             "drain_ua_estimate": ua,
+            "drain_ua_trend": ua_trend,
         }
         if n > max_points:                     # thin out evenly, keep the newest reading
             step = n / max_points
@@ -527,6 +542,13 @@ class App:
         if self.store is None:
             return []
         return self.store.events_since(since, limit)
+
+    def tag_events(self, hex_id: str, limit: int = 2000) -> dict:
+        """One tag's own event log, oldest first (the Diagnostics screen)."""
+        hex_id = hex_id.upper()
+        limit = max(1, min(int(limit), 5000))
+        rows = self.store.events_for(hex_id, limit) if self.store is not None else []
+        return {"hex_id": hex_id, "events": rows}
 
     def event_cursor(self) -> int:
         return self.store.latest_event_id() if self.store is not None else 0
@@ -2092,7 +2114,7 @@ class App:
             with self.lock:
                 self._arming.discard(addr)
 
-    PREARM_SLOTS = 4        # the hub remembers this many tags at once (PREARM_SLOTS in its main.c)
+    PREARM_SLOTS = 32       # the hub remembers this many tags at once (PREARM_SLOTS in its main.c)
 
     def _rearm_pending(self, only: int | None = None) -> None:
         """Make sure the hub still has a pre-arm for every tag with a pending command.
@@ -2138,6 +2160,34 @@ class App:
         if cancelled:
             self._event("cancel", None, f"{cancelled} queued command(s)")
         return {"ok": True, "cancelled": cancelled}
+
+    def cancel_job(self, job_id: int) -> dict:
+        """Cancel one queued command: drop it if it is waiting, stop it if it is running."""
+        with self.lock:
+            job = next((j for j in self.queue if j["id"] == job_id), None)
+            if job is None:
+                return {"ok": False, "error": f"no queued command {job_id}"}
+            hex_code = f"{job['addr']:04X}"
+            if job["state"] == "pending":
+                job["state"] = "cancelled"
+                self.status = f"cancelled the {job['kind']} command for {hex_code}"
+            elif job["state"] == "running":
+                # the same stop the "Cancel all" button gives the running command
+                stopped = False
+                if self.sending and self._cancel is not None:
+                    self._cancel.set()
+                    stopped = True
+                if self.dump.get("active") and getattr(self, "_dump_cancel", None):
+                    self._dump_cancel.set()
+                    stopped = True
+                if not stopped:
+                    return {"ok": False, "error": "it is a single frame already on its way"}
+                self.status = f"stopping the {job['kind']} command for {hex_code} ..."
+                return {"ok": True, "stopping": True}
+            else:
+                return {"ok": False, "error": "it has already finished"}
+        self._event("cancel", hex_code, f"{job['kind']} command")
+        return {"ok": True, "cancelled": 1}
 
     JOB_TRIES = 2        # attempts before a queued delivery is reported failed
     JOB_RETRY_S = 5.0    # and the pause before it is offered again

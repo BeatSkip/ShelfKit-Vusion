@@ -11,6 +11,7 @@ long-lived poll connection per browser tab. The API is small and boring:
                                "allow_partial": false}  start flashing (one at a time)
     POST /api/flash/cancel     stop it (the chip may be left half-programmed)
     GET  /api/voltage?tag=0100&since=<unix>&until=<unix>   a tag's voltage readings and drain
+    GET  /api/events?tag=0100&limit=2000   one tag's own event log, oldest first
     GET  /api/power-runs?tag=0100   a tag's archived power measurements (+ where the current starts)
     GET  /api/power-runs?id=7       one archived measurement with its readings
     POST /api/power-runs       {"tag": "0100", "reason": "battery"|"firmware"|"other", "note": ""}
@@ -48,7 +49,7 @@ long-lived poll connection per browser tab. The API is small and boring:
     POST /api/tags/<hex>/interval  {"seconds": 300}  idle check-in interval, stored on the tag
     POST /api/tags/<hex>/service   draw this tag's service label and push it
     POST /api/tags/<hex>/read      {"start": 0, "length": 12288} SPI flash read-back
-    POST /api/queue/cancel         cancel every queued command
+    POST /api/queue/cancel         cancel every queued command, or {"id": 7} for one
     GET  /api/dump.bin /api/dump.txt   the last read-back
     POST /api/tags/forget          {"addrs": [...]} or {"not_seen_for": 600}
 
@@ -81,6 +82,7 @@ ASSETS = {
     "/index.html": "index.html",
     "/app.js": "app.js",
     "/apps.js": "apps.js",               # the Apps screen
+    "/diag.js": "diag.js",               # the Diagnostics screen
     "/style.css": "style.css",
     "/inkapps.html": "inkapps.html",     # InkServices + InkLayout development page
 }
@@ -160,6 +162,15 @@ class Handler(BaseHTTPRequestHandler):
             if not tag or len(tag) > 4 or any(c not in "0123456789ABCDEF" for c in tag):
                 return self._error("tag is a hex id such as 0100")
             return self._json(self.app.voltage_history(tag, since, until))
+        if path == "/api/events":
+            tag = (query.get("tag") or [""])[0].strip().upper()
+            if not tag or len(tag) > 4 or any(c not in "0123456789ABCDEF" for c in tag):
+                return self._error("tag is a hex id such as 0100")
+            try:
+                limit = int((query.get("limit") or ["2000"])[0])
+            except ValueError:
+                return self._error("limit is a number")
+            return self._json(self.app.tag_events(tag, limit))
         if path == "/api/power-runs":
             run = (query.get("id") or [""])[0]
             if run:
@@ -293,7 +304,13 @@ class Handler(BaseHTTPRequestHandler):
                 self.app.cancel()
                 return self._json(self.app.state())
             if parts == ["api", "queue", "cancel"]:
-                result = self.app.cancel_queue()
+                if body.get("id") is not None:
+                    try:
+                        result = self.app.cancel_job(int(body["id"]))
+                    except (TypeError, ValueError):
+                        return self._error("id is a number")
+                else:
+                    result = self.app.cancel_queue()
                 return self._json({"result": result, "state": self.app.state()})
             if parts == ["api", "tags", "forget"]:
                 # batch: {"addrs": [...]} or {"not_seen_for": 600}

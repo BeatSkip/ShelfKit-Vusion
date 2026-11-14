@@ -54,6 +54,11 @@ static uint32_t __xdata panel_ticks;    /* time spent in refresh waveforms, for 
 
 static void panel_off(void)
 {
+    /* The MCU sleeps between the refresh ticks (and between polls), and Sleep resets the
+     * SPI master: without this the first byte of POF waited for a transfer-done flag that
+     * never came. The tag hung right after showing an image, at full CPU current with the
+     * panel still powered, and never polled again (1.1.0-47, every tag that got a push). */
+    spi_init();
     epd_sleep();                /* POF, then deep sleep */
     pwr_off();                  /* and cut the rail: nothing leaks into the idle panel */
     panel_up = 0;

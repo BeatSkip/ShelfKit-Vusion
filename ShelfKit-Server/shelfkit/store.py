@@ -492,6 +492,19 @@ class Store:
             for row in reversed(rows)
         ]
 
+    def events_for(self, hex_id: str, limit: int = 2000) -> list[list]:
+        """One tag's newest `limit` events, returned oldest-first (the Diagnostics log)."""
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT id, at, hex_id, event, detail FROM events WHERE hex_id = ?"
+                " ORDER BY id DESC LIMIT ?",
+                (hex_id, limit),
+            ).fetchall()
+        return [
+            [row["id"], row["at"], row["hex_id"], row["event"], row["detail"]]
+            for row in reversed(rows)
+        ]
+
     def latest_event_id(self) -> int:
         with self._lock:
             row = self._db.execute("SELECT MAX(id) AS id FROM events").fetchone()

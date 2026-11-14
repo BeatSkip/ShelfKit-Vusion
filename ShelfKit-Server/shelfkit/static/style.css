@@ -576,6 +576,10 @@ body.inspecting main { padding-right: calc(var(--inspector-w) + var(--gutter)); 
 .progress-track { flex: 1 1 auto; height: 8px; border: 1px solid var(--ink); }
 .progress-track i { display: block; height: 100%; background: var(--ink); }
 tr.finished td { color: var(--ink-2); }
+.grid td.job-actions { width: 1%; padding-block: 3px; text-align: right; white-space: nowrap; }
+.flash-version { margin-top: -6px; font-size: var(--t-body); }
+.flash-version dd.version { font-family: var(--mono); font-weight: 600; }
+.job-actions button { min-height: 28px; padding: 2px 10px; }
 tr.failed .state-word, tr.failed .detail { color: var(--red); font-weight: 500; }
 .logs-table td.detail { max-width: 460px; overflow-wrap: anywhere; color: var(--ink-2); }
 .logs-table tr.bad-event td.event { color: var(--red); font-weight: 600; }
@@ -879,6 +883,90 @@ tr.failed .state-word, tr.failed .detail { color: var(--red); font-weight: 500; 
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+
+/* diagnostics --------------------------------------------------------------- */
+.diag-pick { flex: 0 1 340px; }
+.diag {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 12px var(--diag-log-w, 440px);
+  align-items: start;
+}
+.diag[hidden] { display: none; }
+.diag-main { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.diag-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 14px 16px 16px;
+  background: var(--surface);
+  border: 1px solid var(--rule-soft);
+}
+.diag-panel-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.diag-readout { font-family: var(--mono); font-size: var(--t-small); color: var(--ink-2); white-space: pre; }
+.diag-plot { box-sizing: border-box; height: 400px; min-height: 200px; background: var(--ground); border: 1px solid var(--rule); }
+.diag-chart { display: block; width: 100%; height: 100%; cursor: crosshair; touch-action: pan-y; user-select: none; }
+.diag-chart text { fill: var(--ink-2); font-size: 11px; font-family: inherit; }
+.diag-chart text.none { font-size: var(--t-body); }
+.diag-chart .grid-line { stroke: var(--rule-soft); stroke-width: 1; shape-rendering: crispEdges; }
+.diag-chart .low-line { stroke: var(--red); stroke-width: 1; stroke-dasharray: 4 4; }
+.diag-chart .low-text { fill: var(--red); }
+.diag-chart .run-line { stroke: var(--ink-2); stroke-width: 1; stroke-dasharray: 2 4; }
+.diag-chart .series { fill: none; stroke: var(--ink); stroke-width: 1.6; stroke-linejoin: round; }
+.diag-chart .dots { fill: var(--ink); }
+.diag-chart .sel { fill: var(--ink); opacity: 0.13; }
+.diag-chart .sel-edge { stroke: var(--ink); stroke-width: 1; }
+.diag-chart .hover-line { stroke: var(--ink-2); stroke-width: 1; pointer-events: none; }
+.diag-chart .hover-dot { fill: var(--surface); stroke: var(--ink); stroke-width: 2; pointer-events: none; }
+/* the two separators: a bar under the plot and one between the plot and the log */
+.diag-grip, .diag-split { position: relative; flex: none; touch-action: none; }
+.diag-grip { height: 12px; margin-top: -8px; cursor: ns-resize; }
+.diag-split { align-self: stretch; cursor: ew-resize; }
+.diag-grip::after, .diag-split::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  border-radius: 2px;
+  background: var(--rule);
+}
+.diag-grip::after { width: 44px; height: 4px; }
+.diag-split::after { width: 4px; height: 44px; top: 120px; bottom: auto; }
+.diag-grip:hover::after, .diag-split:hover::after,
+.diag-grip.dragging::after, .diag-split.dragging::after { background: var(--ink); }
+.diag-stats-title { margin: 4px 0 0; font-size: var(--t-body); font-weight: 600; }
+.diag-stats { grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1fr); font-size: var(--t-body); gap: 4px 14px; }
+.diag-panels { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+.diag-reserved {
+  min-height: 180px;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border-style: dashed;
+  border-color: var(--rule);
+  color: var(--ink-2);
+  font-size: var(--t-small);
+}
+.diag-log {
+  position: sticky;
+  top: calc(var(--topbar-h, 51px) + 12px);
+  height: calc(100vh - var(--topbar-h, 51px) - 32px);
+  min-height: 320px;
+}
+.diag-log-wrap { flex: 1 1 auto; min-height: 0; overflow: auto; border: 1px solid var(--rule-soft); }
+.diag-log-wrap[hidden] { display: none; }
+.diag-log-table { border: 0; font-size: var(--t-small); }
+.diag-log-table th { position: sticky; top: 0; background: var(--surface); box-shadow: 0 1px 0 var(--rule); }
+.diag-log-table td { padding: 4px 8px; vertical-align: top; }
+.diag-log-table td.time { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.diag-log-table td.event { white-space: nowrap; font-weight: 500; }
+.diag-log-table td.detail { max-width: none; }
+@media (max-width: 1000px) {
+  .diag { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .diag-split { display: none; }
+  .diag-log { position: static; height: 480px; }
+  .diag-stats { grid-template-columns: auto minmax(0, 1fr); }
 }
 
 /* battery history ----------------------------------------------------------- */

@@ -633,7 +633,7 @@ A tag whose poll reply says "nothing queued" goes to sleep at once, so a push on
 hub was told beforehand (`Q<id>`, which makes the reply say "data follows"). The server arms a tag
 when a command is queued or a direct send starts, and re-arms every pending tag when the hub
 resets (banner seen), after the hub display redraws, and when a tag's second command is still
-waiting. The hub holds 4 tags at once. A push that was not armed fails once, is deferred and is
+waiting. The hub holds 32 tags at once. A push that was not armed fails once, is deferred and is
 armed again for the tag's next poll.
 
 ## Image compression

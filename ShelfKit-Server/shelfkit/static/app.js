@@ -182,6 +182,7 @@ const ui = {
   queueRows: $("queue-rows"),
   queueEmpty: $("queue-empty"),
   queueCancel: $("queue-cancel"),
+  flashVersion: $("flash-version"),
 
   logsWrap: $("logs-wrap"),
   logsTag: $("logs-tag"),
@@ -460,6 +461,7 @@ function show(name) {
   draw();
   if (name === "flash") refreshFlash();
   if (name === "apps" && window.appsShown) window.appsShown();     // apps.js
+  if (name === "diagnostics" && window.diagShown) window.diagShown();   // diag.js
   if (name === "hub") {
     // lines arrive while the screen is hidden, when a log has no height to scroll
     for (const view of panes.values()) view.log.scrollTop = view.log.scrollHeight;
@@ -1425,12 +1427,14 @@ function tagsByShelf() {
   }));
 }
 
-function renderTagPicker() {
+/** Fill a tag picker ({pick, prev, next}) and point it at `current`. The inspector's
+ *  heading and the Diagnostics screen share it. */
+function renderTagPicker(parts, current) {
   const groups = tagsByShelf();
   const flat = groups.flatMap((group) => group.rows);
   const signature = JSON.stringify(groups.map((group) => [shelfName(group.key),
     group.rows.map((row) => `${row.hex}:${row.alias || ""}:${row.status}`)]));
-  const pick = ui.inspectorPick;
+  const pick = parts.pick;
   if (pick.dataset.sig !== signature) {
     pick.dataset.sig = signature;
     pick.replaceChildren();
@@ -1449,12 +1453,12 @@ function renderTagPicker() {
       }
     }
   }
-  if (pick.value !== inspected) pick.value = inspected;
-  const at = flat.findIndex((row) => row.hex === inspected);
-  ui.inspectorPrev.disabled = at <= 0;
-  ui.inspectorNext.disabled = at < 0 || at >= flat.length - 1;
-  ui.inspectorPrev.title = at > 0 ? `Previous: ${flat[at - 1].hex}` : "This is the first tag";
-  ui.inspectorNext.title = at >= 0 && at < flat.length - 1
+  if (pick.value !== current) pick.value = current;
+  const at = flat.findIndex((row) => row.hex === current);
+  parts.prev.disabled = at <= 0;
+  parts.next.disabled = at < 0 || at >= flat.length - 1;
+  parts.prev.title = at > 0 ? `Previous: ${flat[at - 1].hex}` : "This is the first tag";
+  parts.next.title = at >= 0 && at < flat.length - 1
     ? `Next: ${flat[at + 1].hex}` : "This is the last tag";
 }
 
@@ -1594,7 +1598,8 @@ function renderInspector() {
   setPixelText(ui.inspectorId.firstChild, row.hex, 4);
   setClass(ui.inspectorAlias, row.alias ? "inspector-alias" : "inspector-alias none");
   setText(ui.inspectorAlias, row.alias || "No alias");
-  renderTagPicker();
+  renderTagPicker({ pick: ui.inspectorPick, prev: ui.inspectorPrev, next: ui.inspectorNext },
+    inspected);
   applyInspectorOrder();
   // a drag on the wall (or another browser) moved or renamed the tag: show that,
   // unless there is typing here that has not been saved
@@ -2120,13 +2125,39 @@ function createJobRow(job) {
   const command = el("td");
   const detail = el("td", "detail");
   const age = el("td", "dim");
-  tr.append(stateCell, idCell, command, detail, age);
-  tr._parts = { mark, word, command, detail, age };
+  const actions = el("td", "job-actions");
+  const cancel = el("button", null, "Cancel");
+  cancel.type = "button";
+  cancel.addEventListener("click", () => cancelJob(tr._job, cancel));
+  actions.append(cancel);
+  tr.append(stateCell, idCell, command, detail, age, actions);
+  tr._parts = { mark, word, command, detail, age, cancel };
   return tr;
+}
+
+async function cancelJob(job, button) {
+  if (!job) return;
+  button.disabled = true;
+  try {
+    const payload = await postJSON("/api/queue/cancel", { id: job.id });
+    render(payload.state);
+    const result = payload.result || {};
+    const name = `${JOB_LABEL[job.kind] || job.kind} for ${job.addr}`;
+    if (!result.ok) toast(`Couldn't cancel ${name}: ${result.error}`, "bad");
+    else toast(result.stopping ? `Stopping ${name}` : `Cancelled ${name}`);
+  } catch (err) {
+    toast(`Couldn't cancel: ${err.message}`, "bad");
+  } finally {
+    button.disabled = false;
+  }
 }
 
 function updateJobRow(tr, job) {
   const parts = tr._parts;
+  tr._job = job;
+  const live = job.state === "pending" || job.state === "running";
+  parts.cancel.hidden = !live;
+  parts.cancel.title = job.state === "running" ? "Stop this command" : "Take this command off the queue";
   const finished = job.state === "done" || job.state === "cancelled";
   setClass(tr, job.state === "failed" ? "failed" : finished ? "finished" : "");
   setClass(parts.mark, `mark ${JOB_MARK[job.state] || "s-silent"}`);
@@ -2256,6 +2287,7 @@ function addEvent(id, at, hexId, kind, detail) {
   if (id <= newestEventId) return;
   newestEventId = id;
   const hex = hexId || "";
+  if (window.diagEvent) window.diagEvent(id, at, hex, kind, detail);   // diag.js: its own log
   const previous = events[events.length - 1];
   if (previous && (detail || "") === previous.detail && previous.hex === hex && previous.event === kind) {
     previous.count += 1;
@@ -2601,9 +2633,11 @@ function renderFlash() {
   ui.flashPaneField.hidden = method !== "serial";
 
   const files = flashData?.files || [];
-  const filesSig = files.map((file) => file.path).join("|");
+  // a rebuild keeps the file names: the version and the file time are part of the list
+  const filesSig = files.map((file) => `${file.path}|${file.build}|${file.mtime}`).join("|");
   if (signatures.flashFiles !== filesSig) {
     signatures.flashFiles = filesSig;
+    const keepFile = ui.flashFile.value;
     ui.flashFile.replaceChildren();
     if (!files.length) {
       const none = el("option", null, "No .hex files in Release/");
@@ -2612,11 +2646,37 @@ function renderFlash() {
     }
     for (const file of files) {
       const option = el("option", null,
-        `${file.name} (${Math.round(file.size / 1024)} kB, ${KIND_TEXT[file.kind]})`);
+        `${file.build || "no version"}  ·  ${file.name} `
+        + `(${Math.round(file.size / 1024)} kB, ${KIND_TEXT[file.kind]})`);
       option.value = file.path;
       ui.flashFile.append(option);
     }
-    ui.flashFile.value = preferredFile(method) || "";
+    ui.flashFile.value = files.some((item) => item.path === keepFile)
+      ? keepFile : preferredFile(method) || "";
+  }
+
+  // what is about to go on the chip: the version stamped into the picked file
+  const chosen = files.find((item) => item.path === ui.flashFile.value);
+  const versionSig = chosen ? `${chosen.path}|${chosen.build}|${chosen.mtime}` : "";
+  if (signatures.flashVersion !== versionSig) {
+    signatures.flashVersion = versionSig;
+    ui.flashVersion.replaceChildren();
+    if (chosen) {
+      ui.flashVersion.append(
+        el("dt", null, "Version"),
+        el("dd", chosen.build ? "version" : "bad",
+          chosen.build || (chosen.kind === "bootloader"
+            ? "The bootloader carries no version" : "Not stamped in this file (an older build)")),
+        el("dt", null, "Built"),
+        el("dd", null, chosen.mtime
+          ? new Date(chosen.mtime * 1000).toLocaleString() : "Unknown"),
+        el("dt", null, "Contains"), el("dd", null, KIND_TEXT[chosen.kind]),
+      );
+    }
+  }
+  // not while it is armed ("Press again ..."): arm() owns the label until then
+  if (armed !== ui.flashStart) {
+    setText(ui.flashStart, chosen?.build ? `Flash ${chosen.build}` : "Start flashing");
   }
 
   const panes = state.panes || [];
@@ -2949,6 +3009,7 @@ function draw() {
   else if (screen === "hub") renderHub();
   else if (screen === "settings") renderSettings();
   else if (screen === "flash") renderFlash();
+  else if (screen === "diagnostics" && window.renderDiag) window.renderDiag();   // diag.js
   renderInspector();
 }
 

@@ -124,13 +124,15 @@ def hex_files(folder: Path) -> list[dict]:
     out = []
     for path in files:
         try:
-            size = path.stat().st_size
+            stat = path.stat()
         except OSError:
             continue
+        size = stat.st_size
         from . import firmware
         info = firmware.file_info(path)
         out.append({"name": path.name, "path": str(path), "size": size,
-                    "kind": hex_kind(path.name), "build": info["text"] if info else None})
+                    "kind": hex_kind(path.name), "build": info["text"] if info else None,
+                    "mtime": stat.st_mtime})
     return out
 
 

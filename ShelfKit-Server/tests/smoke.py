@@ -254,6 +254,16 @@ def main() -> int:
         history = get("/api/voltage?tag=0100&since=0")
         check("both readings are in the voltage history",
               history["count"] == 2 and [p[1] for p in history["points"]] == [3.0, 3.0], history)
+        # the Diagnostics screen: one tag's own log, oldest first, and its script
+        mine = get("/api/events?tag=0100&limit=50")
+        check("a tag's own log holds only its events, oldest first",
+              mine["hex_id"] == "0100" and len(mine["events"]) >= 2
+              and all(row[2] == "0100" for row in mine["events"])
+              and [row[0] for row in mine["events"]] == sorted(row[0] for row in mine["events"]),
+              mine["events"][-3:])
+        check("an unknown tag has an empty log", get("/api/events?tag=0FFF")["events"] == [])
+        with urllib.request.urlopen(base + "/diag.js") as response:
+            check("the Diagnostics script is served", b"renderDiag" in response.read())
         try:
             get("/api/voltage?tag=zz")
             refused = False
@@ -427,6 +437,15 @@ def main() -> int:
         hub.feed("*** ShelfKit hub, node 0001 net 5a dump=1 batch=1 show=1\r\n")
         check("a reset hub gets its pre-arms back",
               wait_for(lambda: "Q0200" in hub.written), hub.written)
+        # one command can be cancelled on its own, by its id
+        other = app.enqueue("interval", 0x0201, "one of two", seconds=60)
+        one = post("/api/queue/cancel", {"id": pend["queued"]})["result"]
+        states = {j["id"]: j["state"] for j in get("/api/state")["queue"]}
+        check("cancelling one command leaves the other queued",
+              one.get("ok") is True and states.get(pend["queued"]) == "cancelled"
+              and states.get(other["queued"]) == "pending", (one, states))
+        check("a finished command cannot be cancelled again",
+              post("/api/queue/cancel", {"id": pend["queued"]})["result"].get("ok") is False)
         app.cancel_queue()
         hub.written.clear()
         hub.feed("*** ShelfKit hub, node 0001 net 5a dump=1 batch=1 show=1\r\n")
@@ -447,12 +466,15 @@ def main() -> int:
         check("the panel lists tag 0100", "0100" in disp.info()["shown"], disp.info())
         check("no change, no redraw", disp.tick() is False)
         check("the hub was released afterwards", app.display_busy is False)
+        before = len(hub.panel)
         for addr in list(app.tag_seen):                  # every tag silent for > 5 minutes
             app.tag_seen[addr] = time.time() - 400
         time.sleep(1.1)
-        before = len(hub.panel)
-        check("a tag silent for 5 minutes leaves the panel", disp.tick() is True
-              and disp.info()["shown"] == [] and len(hub.panel) == before + 90, disp.info())
+        # the display's own 2 s ticker may get to this redraw before the call below does
+        disp.tick()
+        check("a tag silent for 5 minutes leaves the panel",
+              wait_for(lambda: disp.info()["shown"] == [] and not app.display_busy, 5.0)
+              and len(hub.panel) == before + 90, disp.info())
         check("an empty, unchanged panel is left alone", disp.tick() is False)
         check("the display API answers", get("/api/hub-display")["timeout_s"] == 300)
         post("/api/hub-display", {"enabled": False})
