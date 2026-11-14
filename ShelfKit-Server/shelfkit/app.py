@@ -73,6 +73,10 @@ RE_POLL_FW = re.compile(r"\bfw=(\d+)\.(\d+)\.(\d+)-(\d+) avg=(\d+)uA life=(\d+)d
 RE_POLL_VDD = re.compile(r"\bvdd=([0-9a-fA-F]{4})\b")
 # seconds since the tag's boot, as the hub prints it: up=2760s (16 bits: wraps after 18 h)
 RE_POLL_UP = re.compile(r"\bup=(\d+)s\b")
+# the tag's last panel refresh since boot (1.1.0-51+, tap polls): img=<result>/<0.1 s>,
+# result 1 = done, 0 = the panel never reacted, 2 = still busy when the wait ran out
+RE_POLL_IMG = re.compile(r"\bimg=(\d+)/(\d+)\b")
+REFRESH_RESULT = {0: "panel did not react", 1: "done", 2: "timed out"}
 
 # Average CR2450 (3 V lithium coin cell): voltage is almost flat until the cell
 # is nearly empty, so this is a monotonic estimate, not a coulomb count.
@@ -711,9 +715,16 @@ class App:
                         "uptime_s": uptime,
                     }
                     fw_store = (f"{addr:04X}", self.tag_fw[addr])
+                    img = RE_POLL_IMG.search(text)
+                    refresh = ""
+                    if img:
+                        result = int(img.group(1))
+                        refresh = (f", last refresh {REFRESH_RESULT.get(result, result)}"
+                                   f" in {int(img.group(2)) / 10:.1f} s")
                     fw_event = ("firmware", f"{addr:04X}",
                                 f"{major}.{minor}.{patch}-{build}, avg {avg} uA, ~{life} d"
-                                + (f", up {uptime_text(uptime)}" if uptime is not None else ""))
+                                + (f", up {uptime_text(uptime)}" if uptime is not None else "")
+                                + refresh)
                 vdd = RE_POLL_VDD.search(text)
                 if vdd:
                     self.tag_vdd[addr] = (int(vdd.group(1), 16), time.time())

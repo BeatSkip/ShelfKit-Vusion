@@ -105,6 +105,14 @@ static void log_rx(const struct sl_rx __xdata *rx)
                     ((uint16_t)rx->payload[SM_POLL_LIFE_D_HI] << 8));
             log_puts("d");
         }
+        if (rx->len >= SM_POLL_EXT2_LEN && rx->payload[SM_POLL_IMG_ST] != 0xFF) {
+            /* the tag's last panel refresh: result (EPD_BUSY_*) / length in 0.1 s */
+            log_puts(" img=");
+            log_dec(rx->payload[SM_POLL_IMG_ST]);
+            log_puts("/");
+            log_dec((uint16_t)rx->payload[SM_POLL_IMG_DS_LO] |
+                    ((uint16_t)rx->payload[SM_POLL_IMG_DS_HI] << 8));
+        }
     }
     log_nl();
 }

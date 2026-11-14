@@ -324,6 +324,12 @@ def main() -> int:
                                                               ("1.1.0-49", 2)], spans)
         check("the plot gets the installs with the measurements",
               len(get("/api/power-runs?tag=0100")["installs"]) == 2)
+        PORTS["SMOKE1"].feed("POLL src=0100 seq=08 rssi=-30 up=900s att=1 hubrssi=-33 vdd=0300"
+                             " fw=1.1.0-49 avg=60uA life=430d img=1/146\r\n")
+        time.sleep(0.2)
+        check("a tap report names how the last refresh went",
+              any(row[3] == "firmware" and row[4].endswith("last refresh done in 14.6 s")
+                  for row in get("/api/events?tag=0100&limit=50")["events"]))
 
         # the Editor's render path - the one that used to raise
         image = str((REPO / "Resources" / "polyform-eink.png").resolve())

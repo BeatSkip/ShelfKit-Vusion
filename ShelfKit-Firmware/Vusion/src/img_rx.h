@@ -23,6 +23,11 @@ uint8_t img_rx_refreshing(void);
  * load then, not the MCU or the radio): an input of the power estimate in main.c. */
 uint32_t img_rx_panel_ticks(void);
 
+/** How the last refresh since boot ended (EPD_BUSY_*, 0xFF = none yet) and its length in
+ *  0.1 s, for the extended poll. */
+uint8_t img_rx_last_status(void);
+uint16_t img_rx_last_ds(void);
+
 /* Called once per poll: a panel that was left powered (a refresh that never reported
  * done, a transfer that was abandoned) is put to sleep and its rail cut. */
 void img_rx_idle(void);

@@ -27,7 +27,7 @@
 #include "nfc_cfg.h"
 
 static struct wtimer_desc __xdata poll_timer;
-static uint8_t __xdata poll_payload[SM_POLL_EXT_LEN];
+static uint8_t __xdata poll_payload[SM_POLL_EXT2_LEN];
 static uint8_t __xdata poll_len;
 /* the poll for a tap carries the firmware version and the power figures; it stays set until
  * one such poll was acknowledged, so the 5 s follow-up repeats it if the first was lost */
@@ -508,7 +508,11 @@ static void poll_cb(struct wtimer_desc __xdata *desc)
             pow_total_ms = 0xFFFFUL;
         poll_payload[SM_POLL_LIFE_D_LO] = (uint8_t)pow_total_ms;
         poll_payload[SM_POLL_LIFE_D_HI] = (uint8_t)(pow_total_ms >> 8);
-        poll_len = SM_POLL_EXT_LEN;
+        /* how the last refresh went: "busy=1 14.6s" without a serial cable */
+        poll_payload[SM_POLL_IMG_ST] = img_rx_last_status();
+        poll_payload[SM_POLL_IMG_DS_LO] = (uint8_t)img_rx_last_ds();
+        poll_payload[SM_POLL_IMG_DS_HI] = (uint8_t)(img_rx_last_ds() >> 8);
+        poll_len = SM_POLL_EXT2_LEN;
     }
     if (sl_send(SL_NODE_HUB, SL_T_POLL, poll_payload, poll_len) != SL_OK) {
         log_puts("poll skipped, previous still in flight\r\n");

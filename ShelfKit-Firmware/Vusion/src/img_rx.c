@@ -17,6 +17,7 @@
 #include <libmfwtimer.h>
 #include "epd.h"
 #include "pwr.h"
+#include "shelf_config.h"
 #include "shelfhw.h"
 #include "shelfmsg.h"
 #include "spi.h"
@@ -51,6 +52,8 @@ static uint16_t __xdata r_t0;
 static uint16_t __xdata r_dt;
 static struct wtimer_desc __xdata refresh_timer;
 static uint32_t __xdata panel_ticks;    /* time spent in refresh waveforms, for the power estimate */
+static uint8_t __xdata last_st = 0xFF;  /* the last refresh, for the extended poll */
+static uint16_t __xdata last_ds;
 
 static void panel_off(void)
 {
@@ -60,7 +63,14 @@ static void panel_off(void)
      * panel still powered, and never polled again (1.1.0-47, every tag that got a push). */
     spi_init();
     epd_sleep();                /* POF, then deep sleep */
+#if !SHELF_NFC_RAIL_HOLD
     pwr_off();                  /* and cut the rail: nothing leaks into the idle panel */
+#endif
+    /* With SHELF_NFC_RAIL_HOLD the rail stays up, as it is from boot until the first image:
+     * the NFC chip and the flash share it. Cutting it here left the panel, flash and NFC chip
+     * fed through the chip selects, D/C and reset that the MCU still drives high, and that
+     * back-powered state sometimes drew milliamps until the next image switched the rail on
+     * again (C7EC, 1.1.0-50: -330 mV over 4 h, while 5F6C after the same image did not). */
     panel_up = 0;
 }
 
@@ -215,6 +225,8 @@ static void refresh_done(uint8_t st)
     log_putc('.');
     log_dec((uint16_t)(((uint16_t)(r_dt % SHELFHW_TICKS_PER_S)) * 10u / SHELFHW_TICKS_PER_S));
     log_puts("s\r\n");
+    last_st = st;
+    last_ds = (uint16_t)(r_dt / (SHELFHW_TICKS_PER_S / 10u));
     refreshing = 0;
     if (st == EPD_BUSY_DONE)
         panel_off();
@@ -321,6 +333,16 @@ uint8_t img_rx_refreshing(void)
 uint32_t img_rx_panel_ticks(void)
 {
     return panel_ticks;
+}
+
+uint8_t img_rx_last_status(void)
+{
+    return last_st;
+}
+
+uint16_t img_rx_last_ds(void)
+{
+    return last_ds;
 }
 
 void img_rx_idle(void)

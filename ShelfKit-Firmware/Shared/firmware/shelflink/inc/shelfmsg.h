@@ -7,7 +7,8 @@
  *   [2]    attempts the previous poll needed (0 = none yet)
  *   [3]    RSSI in dBm (signed) of the hub's previous answer, 0 = none yet
  *   [4..5] supply voltage, volts*256
- *   [6..14] only on a poll started by an NFC tap: firmware version, build, power stats
+ *   [6..17] only on a poll started by an NFC tap (and the first after a reset): firmware
+ *          version, build, power stats and how the last panel refresh went
  *
  * POLL_RSP (hub -> tag), SM_RSP_LEN bytes:
  *   [0]    command for the tag, SM_CMD_*
@@ -39,6 +40,12 @@
 #define SM_POLL_AVG_UA_HI   12
 #define SM_POLL_LIFE_D_LO   13      /* estimated battery life in days (CR2450), 0xFFFF = n/a */
 #define SM_POLL_LIFE_D_HI   14
+/* From 1.1.0-51 (len SM_POLL_EXT2_LEN): the last image refresh since boot. Older tags send
+ * SM_POLL_EXT_LEN bytes and the hub prints these only when they are there. */
+#define SM_POLL_EXT2_LEN    18
+#define SM_POLL_IMG_ST      15      /* EPD_BUSY_*: 0 none, 1 done, 2 timeout; 0xFF = no image yet */
+#define SM_POLL_IMG_DS_LO   16      /* how long that refresh took, in 0.1 s */
+#define SM_POLL_IMG_DS_HI   17
 
 #define SM_RSP_LEN          3
 #define SM_RSP_CMD          0
