@@ -1879,11 +1879,10 @@ class App:
             return False
         inter["sent"] += len(group)
         if inter["sent"] >= len(inter["frames"]):
-            cancel.wait(hubhost.END_SETTLE_S)
             with self.lock:
                 inter["job"]["state"] = "done"
                 inter["job"]["error"] = None
-            self.note(key, f"# {inter['addr']:04X} updated")
+            self.note(key, f"# {inter['addr']:04X} has the image, its panel is refreshing")
             self._event("ok", f"{inter['addr']:04X}", inter["job"]["label"])
             return False
         return True
@@ -2483,12 +2482,12 @@ class App:
             while inter is not None:
                 if not self._interloper_step(key, inter, step, cancel):
                     inter = None
-            cancel.wait(hubhost.END_SETTLE_S)
-            if cancel.is_set():
-                self.note(key, "# cancelled before the refresh finished")
-                return
+            # Done as far as the hub is concerned. The tag acknowledged END and now
+            # refreshes its panel on its own (about 15 s, radio parked): nothing more
+            # can be sent to it or learned from it until its next poll, so the queue
+            # moves on to the next tag instead of waiting the refresh out here.
             ok = True
-            self.note(key, f"# {addr:04X} updated")
+            self.note(key, f"# {addr:04X} has the image, its panel is refreshing")
         except Exception as exc:  # noqa: BLE001 - never leave the bar stuck on Cancel
             self.note(key, f"# send error: {exc}")
             self._event("error", f"{addr:04X}", str(exc)[:120])
