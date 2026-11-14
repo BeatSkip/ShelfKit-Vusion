@@ -14,6 +14,7 @@ long-lived poll connection per browser tab. The API is small and boring:
     GET  /api/events?tag=0100&limit=2000   one tag's own event log, oldest first
     GET  /api/power-runs?tag=0100   a tag's archived power measurements (+ where the current starts)
     GET  /api/power-runs?id=7       one archived measurement with its readings
+    GET  /api/fw-history?tag=0100   which firmware a tag ran when: installs and every report
     POST /api/power-runs       {"tag": "0100", "reason": "battery"|"firmware"|"other", "note": ""}
                                archive the current measurement and start a new one
     POST /api/power-runs/delete    {"id": 7}
@@ -171,6 +172,11 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError:
                 return self._error("limit is a number")
             return self._json(self.app.tag_events(tag, limit))
+        if path == "/api/fw-history":
+            tag = (query.get("tag") or [""])[0].strip().upper()
+            if not tag or len(tag) > 4 or any(c not in "0123456789ABCDEF" for c in tag):
+                return self._error("tag is a hex id such as 0100")
+            return self._json(self.app.fw_history(tag))
         if path == "/api/power-runs":
             run = (query.get("id") or [""])[0]
             if run:

@@ -14,12 +14,13 @@ that fine at this scale, and a lock keeps it simple enough to reason about.
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 import threading
 import time
 from pathlib import Path
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 MAX_EVENTS = 5000      # keep the newest N; the Logs screen never shows more
 MAX_BITMAPS = 64       # content store ceiling (each row ~15 KB of blobs)
 
@@ -83,9 +84,20 @@ CREATE TABLE IF NOT EXISTS voltage (    -- every supply-voltage reading a tag ha
     id     INTEGER PRIMARY KEY AUTOINCREMENT,
     hex_id TEXT NOT NULL,
     at     REAL NOT NULL,
-    raw    INTEGER NOT NULL            -- volts * 256, as the tag sends it
+    raw    INTEGER NOT NULL,           -- volts * 256, as the tag sends it
+    fw     TEXT                        -- the firmware the tag ran then, '1.1.0-49' (null: unknown)
 );
 CREATE INDEX IF NOT EXISTS voltage_tag_at ON voltage(hex_id, at);
+
+CREATE TABLE IF NOT EXISTS fw_reports ( -- every firmware report: the first poll after each reset
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,  -- (power-up, update, flashing) and each NFC tap
+    hex_id   TEXT NOT NULL,
+    at       REAL NOT NULL,
+    version  TEXT NOT NULL,            -- '1.1.0-49'
+    avg_ua   INTEGER,                  -- the tag's software ammeter: average since its boot
+    uptime_s INTEGER                   -- seconds since that boot (16 bits on the tag); null: unknown
+);
+CREATE INDEX IF NOT EXISTS fw_reports_tag_at ON fw_reports(hex_id, at);
 
 CREATE TABLE IF NOT EXISTS power_runs ( -- an archived power measurement: one battery / firmware
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -138,9 +150,36 @@ class Store:
                     self._db.execute(f"ALTER TABLE tags ADD COLUMN {column}")
             if version <= 5:
                 self._db.execute("ALTER TABLE tags ADD COLUMN poll_s INTEGER")
-            self._db.executescript(_SCHEMA)     # IF NOT EXISTS: adds voltage, power_runs
+            if version <= 6:
+                columns = {row[1] for row in self._db.execute("PRAGMA table_info(voltage)")}
+                if columns and "fw" not in columns:
+                    self._db.execute("ALTER TABLE voltage ADD COLUMN fw TEXT")
+            self._db.executescript(_SCHEMA)     # IF NOT EXISTS: adds voltage, power_runs, fw_reports
+            if version <= 6:
+                self._backfill_fw()
         self._db.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
         self._db.commit()
+
+    def _backfill_fw(self) -> None:
+        """Rebuild the firmware history from the event log, once (schema 7).
+
+        Until then only a tag's latest report was kept; the "firmware" events still hold the
+        older ones (without the uptime). Every voltage reading then gets the version the tag
+        had last reported when it was taken.
+        """
+        rows = self._db.execute(
+            "SELECT at, hex_id, detail FROM events WHERE event='firmware' AND hex_id IS NOT NULL "
+            "ORDER BY at").fetchall()
+        for row in rows:
+            match = re.match(r"(\d+\.\d+\.\d+-\d+), avg (\d+) uA", row["detail"] or "")
+            if match:
+                self._db.execute(
+                    "INSERT INTO fw_reports(hex_id, at, version, avg_ua) VALUES(?,?,?,?)",
+                    (row["hex_id"], row["at"], match.group(1), int(match.group(2))))
+        # the report and the reading of one poll arrive together: allow a second
+        self._db.execute(
+            "UPDATE voltage SET fw=(SELECT r.version FROM fw_reports r WHERE r.hex_id=voltage.hex_id "
+            "AND r.at<=voltage.at+1 ORDER BY r.at DESC LIMIT 1) WHERE fw IS NULL")
 
     def close(self) -> None:
         with self._lock:
@@ -214,15 +253,50 @@ class Store:
         return int(row["seen_count"]) if row else 0
 
     def record_fw(self, hex_id: str, version: str, build: int, avg_ua: int,
-                  life_days: int, at: float | None = None) -> None:
-        """Keep the tag's latest firmware version and power figures (newest report wins)."""
+                  life_days: int, at: float | None = None,
+                  uptime_s: int | None = None) -> str | None:
+        """Keep a firmware report: in the history, and as the tag's latest (newest wins).
+
+        Returns the version the tag reported before this one ('1.1.0-47'), or None when
+        this is its first report.
+        """
         when = time.time() if at is None else at
+        text = f"{version}-{build}"
         with self._lock:
             self._ensure_tag(hex_id, when)
+            row = self._db.execute(
+                "SELECT version FROM fw_reports WHERE hex_id=? ORDER BY at DESC LIMIT 1",
+                (hex_id,)).fetchone()
+            self._db.execute(
+                "INSERT INTO fw_reports(hex_id, at, version, avg_ua, uptime_s) VALUES(?,?,?,?,?)",
+                (hex_id, when, text, avg_ua, uptime_s))
             self._db.execute(
                 "UPDATE tags SET fw_version=?, fw_build=?, avg_ua=?, life_days=?, fw_at=? "
                 "WHERE hex_id=?", (version, build, avg_ua, life_days, when, hex_id))
             self._db.commit()
+        return row["version"] if row else None
+
+    def fw_reports(self, hex_id: str) -> list[list]:
+        """[at, version, avg_ua, uptime_s] of every firmware report, oldest first."""
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT at, version, avg_ua, uptime_s FROM fw_reports WHERE hex_id=? ORDER BY at",
+                (hex_id,)).fetchall()
+        return [[row["at"], row["version"], row["avg_ua"], row["uptime_s"]] for row in rows]
+
+    def fw_installs(self, hex_id: str) -> list[list]:
+        """[at, version, previous] for each time the tag came back with other firmware.
+
+        `at` is the first report of the new version: the first poll after the update or
+        the flashing, within seconds of it.
+        """
+        out: list[list] = []
+        previous = None
+        for at, version, _avg, _up in self.fw_reports(hex_id):
+            if version != previous:
+                out.append([at, version, previous])
+                previous = version
+        return out
 
     def update_tag(self, hex_id: str, **fields) -> dict | None:
         """Set editable tag fields: alias, notes, grid_row, grid_col, battery, last_status, poll_s."""
@@ -263,6 +337,9 @@ class Store:
             self._db.execute(
                 "UPDATE power_runs SET hex_id=? WHERE hex_id=?", (new_hex, old_hex)
             )
+            self._db.execute(
+                "UPDATE fw_reports SET hex_id=? WHERE hex_id=?", (new_hex, old_hex)
+            )
             # the tag's app moves with it; where the new id already has one, that one
             # stays (as with the tag row above). The app's own data is moved by the
             # AppHost, in the app's database.
@@ -287,6 +364,7 @@ class Store:
                 self._db.execute("DELETE FROM events WHERE hex_id=?", (hex_id,))
                 self._db.execute("DELETE FROM voltage WHERE hex_id=?", (hex_id,))
                 self._db.execute("DELETE FROM power_runs WHERE hex_id=?", (hex_id,))
+                self._db.execute("DELETE FROM fw_reports WHERE hex_id=?", (hex_id,))
                 self._db.execute("DELETE FROM app_bindings WHERE hex_id=?", (hex_id,))
             self._db.commit()
         return removed
@@ -339,23 +417,36 @@ class Store:
             self._db.commit()
 
     # ── voltage history ────────────────────────────────────────────────────
-    def add_voltage(self, hex_id: str, raw: int, at: float | None = None) -> None:
-        """Keep one supply-voltage reading (raw = volts * 256) of a tag."""
+    def add_voltage(self, hex_id: str, raw: int, at: float | None = None,
+                    fw: str | None = None) -> None:
+        """Keep one supply-voltage reading (raw = volts * 256) of a tag, with the firmware it
+        runs ('1.1.0-49'; by default the version it last reported)."""
         when = time.time() if at is None else at
         with self._lock:
+            if fw is None:
+                row = self._db.execute(
+                    "SELECT version FROM fw_reports WHERE hex_id=? ORDER BY at DESC LIMIT 1",
+                    (hex_id,)).fetchone()
+                fw = row["version"] if row else None
             self._db.execute(
-                "INSERT INTO voltage(hex_id, at, raw) VALUES(?,?,?)", (hex_id, when, int(raw))
+                "INSERT INTO voltage(hex_id, at, raw, fw) VALUES(?,?,?,?)",
+                (hex_id, when, int(raw), fw)
             )
             self._db.commit()
 
     def voltage_between(self, hex_id: str, since: float, until: float) -> list[tuple[float, float]]:
         """(time, volts) of every reading in [since, until], oldest first."""
+        return [(at, volts) for at, volts, _fw in self.voltage_fw_between(hex_id, since, until)]
+
+    def voltage_fw_between(self, hex_id: str, since: float,
+                           until: float) -> list[tuple[float, float, str | None]]:
+        """(time, volts, firmware) of every reading in [since, until], oldest first."""
         with self._lock:
             rows = self._db.execute(
-                "SELECT at, raw FROM voltage WHERE hex_id=? AND at>=? AND at<=? ORDER BY at",
+                "SELECT at, raw, fw FROM voltage WHERE hex_id=? AND at>=? AND at<=? ORDER BY at",
                 (hex_id, since, until),
             ).fetchall()
-        return [(row["at"], row["raw"] / 256.0) for row in rows]
+        return [(row["at"], row["raw"] / 256.0, row["fw"]) for row in rows]
 
     # ── archived power measurements ────────────────────────────────────────
     def add_power_run(self, hex_id: str, started_at: float, ended_at: float, reason: str,

@@ -296,6 +296,35 @@ def main() -> int:
         check("an archive can be deleted", deleted.get("ok") is True
               and deleted["runs"] == [] and deleted["current_since"] == 0, deleted)
 
+        # which firmware ran when: every report is kept, with the tag's uptime, and each
+        # change of version is an install the readings after it are tagged with
+        PORTS["SMOKE1"].feed("POLL src=0100 seq=04 rssi=-30 up=1s att=1 hubrssi=-33 vdd=0300"
+                             " fw=1.1.0-46 avg=14000uA life=1d\r\n")
+        time.sleep(0.2)
+        PORTS["SMOKE1"].feed("POLL src=0100 seq=05 rssi=-30 up=3600s att=1 hubrssi=-33 vdd=0300"
+                             " fw=1.1.0-46 avg=40uA life=645d\r\n")
+        time.sleep(0.2)
+        PORTS["SMOKE1"].feed("POLL src=0100 seq=06 rssi=-30 up=2s att=1 hubrssi=-33 vdd=0300"
+                             " fw=1.1.0-49 avg=14000uA life=1d\r\n")
+        PORTS["SMOKE1"].feed("POLL src=0100 seq=07 rssi=-30 up=130s att=1 hubrssi=-33 vdd=0300\r\n")
+        time.sleep(0.3)
+        fwh = get("/api/fw-history?tag=0100")
+        check("every firmware report is kept with its uptime",
+              [r[1:] for r in fwh["reports"]] == [["1.1.0-46", 14000, 1], ["1.1.0-46", 40, 3600],
+                                                  ["1.1.0-49", 14000, 2]], fwh)
+        check("a change of version is an install",
+              [i[1:] for i in fwh["installs"]] == [["1.1.0-46", None], ["1.1.0-49", "1.1.0-46"]],
+              fwh)
+        check("the install is in the tag's log",
+              any(row[3] == "installed" and row[4] == "1.1.0-46 -> 1.1.0-49"
+                  for row in get("/api/events?tag=0100&limit=50")["events"]))
+        spans = get("/api/voltage?tag=0100&since=0")["firmware"]
+        check("readings carry the firmware they were taken under",
+              [(s["version"], s["count"]) for s in spans] == [(None, 3), ("1.1.0-46", 2),
+                                                              ("1.1.0-49", 2)], spans)
+        check("the plot gets the installs with the measurements",
+              len(get("/api/power-runs?tag=0100")["installs"]) == 2)
+
         # the Editor's render path - the one that used to raise
         image = str((REPO / "Resources" / "polyform-eink.png").resolve())
         post("/api/image", {"path": image})

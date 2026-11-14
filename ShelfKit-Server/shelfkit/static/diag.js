@@ -21,6 +21,7 @@ const diag = {
   selSeq: 0,              // the same for the selection's figures
   since: 0,               // where the tag's current measurement starts
   runs: [],               // its archived measurements, drawn as markers
+  installs: [],           // [at, version, previous]: when it came back with other firmware
   data: null,             // last /api/voltage answer for the plot
   sel: null,              // [from, to] in unix seconds, or null
   selStats: null,         // /api/voltage answer for the selection
@@ -61,6 +62,7 @@ function setDiagTag(hex) {
   diag.zoom = null;
   diag.data = null;
   diag.runs = [];
+  diag.installs = [];
   diag.since = 0;
   diag.factsSig = "";
   drawDiagPlot();
@@ -176,6 +178,21 @@ function drawDiagPlot() {
     svg.append(svgEl("line", { class: "run-line", x1: at, x2: at, y1: T, y2: H - B }));
     svg.append(svgEl("text", { x: at + 4, y: T + 10, class: "run-text" },
       POWER_REASON_TEXT[run.reason] || run.reason));
+  }
+  // where the tag first reported other firmware: an update over the air or the programmer
+  // Versions flashed minutes apart would print on top of each other: of a close cluster
+  // only the last one (what the tag then ran) keeps its label.
+  let lastLabel = null;
+  for (const [installedAt, version] of diag.installs) {
+    if (installedAt <= t0 || installedAt >= t1) continue;
+    const at = x(installedAt);
+    svg.append(svgEl("line", { class: "fw-line", x1: at, x2: at, y1: T, y2: H - B }));
+    if (lastLabel && at - lastLabel.at < 64) lastLabel.node.remove();
+    const nearEnd = at > W - R - 64;
+    const node = svgEl("text", { x: nearEnd ? at - 4 : at + 4, y: H - B - 6, class: "fw-text",
+      "text-anchor": nearEnd ? "end" : "start" }, version);
+    svg.append(node);
+    lastLabel = { at, node };
   }
 
   diag.plot.selRect = svgEl("rect", { class: "sel", y: T, height: H - T - B, visibility: "hidden" });
@@ -297,9 +314,17 @@ function clearDiagSelection() {
 
 // ── the figures under the plot ───────────────────────────────────────────────
 /** Rows for one /api/voltage answer: what the server measured plus what follows from it. */
+/** The firmware the readings were taken under: "1.1.0-46 (140) → 1.1.0-49 (25)". */
+function diagFirmwareText(spans) {
+  if (!spans?.length) return "Not known for these readings";
+  if (spans.length === 1) return spans[0].version || "Not known";
+  return spans.map((span) => `${span.version || "unknown"} (${span.count})`).join(" → ");
+}
+
 function diagStatRows(data) {
   const s = data.stats;
   const rows = [
+    ["Firmware", diagFirmwareText(data.firmware)],
     ["Period", `${fmtWhen(s.first_at)} → ${fmtWhen(s.last_at)}`],
     ["Length", spanText(s.span_h * 3600)],
     ["Readings", String(data.count)],
@@ -382,6 +407,7 @@ async function refreshDiag() {
     const runs = await getJSON(`/api/power-runs?tag=${tag}`);
     if (mine !== diag.seq || runs.hex_id !== tag) return;
     diag.runs = runs.runs || [];
+    diag.installs = runs.installs || [];
     diag.since = runs.current_since || 0;
     const [since, until] = diagWindow();
     const data = await getJSON(`/api/voltage?tag=${tag}&since=${since}&until=${until}`);
@@ -564,6 +590,13 @@ dui.logSync.addEventListener("change", () => {
 dui.logEvent.addEventListener("change", renderDiagLog);
 
 // ── the screen ───────────────────────────────────────────────────────────────
+/** When the tag's current firmware first reported, and what it ran before. */
+function diagInstalledText() {
+  const last = diag.installs[diag.installs.length - 1];
+  if (!last) return "Not recorded";
+  return `${fmtWhen(last[0])}` + (last[2] ? `, was ${last[2]}` : "");
+}
+
 function renderDiagFacts(row) {
   const reported = row.fw ? `${row.fw.version}-${row.fw.build}` : null;
   const place = row.row == null ? "Not on a shelf"
@@ -577,6 +610,7 @@ function renderDiagFacts(row) {
       : `${minutesText(row.pollS)}${row.pollSet ? "" : " (firmware default)"}`],
     ["Battery", row.battery != null ? `${row.battery.toFixed(2)} V, ${row.batteryPct ?? 0}%` : "No reading", row.low],
     ["Firmware", reported || "Not reported"],
+    ["Installed", diagInstalledText()],
     ["Firmware's estimate", row.fw
       ? `avg ${row.fw.avg_ua} µA, about ${row.fw.life_days} days on a CR2450` : "Not reported"],
     ["Reported", row.fw ? `${ageText(row.fw.age)} ago` : "Never"],

@@ -71,6 +71,8 @@ RE_RSP = re.compile(r"^RSP ([0-9a-fA-F]{4,8}) cmd=([0-9a-fA-F]{2})\b")
 #   POLL src=15b3 ... fw=0.0.1-7 avg=50uA life=516d
 RE_POLL_FW = re.compile(r"\bfw=(\d+)\.(\d+)\.(\d+)-(\d+) avg=(\d+)uA life=(\d+)d\b")
 RE_POLL_VDD = re.compile(r"\bvdd=([0-9a-fA-F]{4})\b")
+# seconds since the tag's boot, as the hub prints it: up=2760s (16 bits: wraps after 18 h)
+RE_POLL_UP = re.compile(r"\bup=(\d+)s\b")
 
 # Average CR2450 (3 V lithium coin cell): voltage is almost flat until the cell
 # is nearly empty, so this is a monotonic estimate, not a coulomb count.
@@ -90,6 +92,26 @@ def battery_level(volts: float) -> float:
             frac = (hi_v - volts) / (hi_v - lo_v)
             return hi_p - frac * (hi_p - lo_p)
     return 0.0
+
+
+def uptime_text(seconds: int) -> str:
+    if seconds < 120:
+        return f"{seconds} s"
+    if seconds < 2 * 3600:
+        return f"{seconds // 60} min"
+    return f"{seconds / 3600:.1f} h"
+
+
+def firmware_spans(rows) -> list[dict]:
+    """Group (time, volts, firmware) readings into runs of one version, in time order."""
+    spans: list[dict] = []
+    for at, _volts, fw in rows:
+        if spans and spans[-1]["version"] == fw:
+            spans[-1]["last_at"] = at
+            spans[-1]["count"] += 1
+        else:
+            spans.append({"version": fw, "first_at": at, "last_at": at, "count": 1})
+    return spans
 
 
 def battery_percent(volts: float) -> int:
@@ -436,9 +458,10 @@ class App:
         because the voltage of a lithium coin cell is nearly flat for most of its life.
         """
         hex_id = hex_id.upper()
-        points = self.store.voltage_between(hex_id, since, until) if self.store else []
+        rows = self.store.voltage_fw_between(hex_id, since, until) if self.store else []
+        points = [(t, v) for t, v, _fw in rows]
         out = {"hex_id": hex_id, "since": since, "until": until, "count": len(points),
-               "points": [], "stats": None}
+               "points": [], "stats": None, "firmware": firmware_spans(rows)}
         if not points:
             return out
         n = len(points)
@@ -494,7 +517,20 @@ class App:
         if self.store is None:
             return {"hex_id": hex_id, "current_since": 0.0, "runs": []}
         return {"hex_id": hex_id, "current_since": self.store.last_power_run_end(hex_id),
-                "runs": self.store.power_runs(hex_id)}
+                "runs": self.store.power_runs(hex_id),
+                "installs": self.store.fw_installs(hex_id)}
+
+    def fw_history(self, hex_id: str) -> dict:
+        """Which firmware a tag ran when: its installs and every report it sent.
+
+        reports: [at, version, avg_ua, uptime_s]. avg_ua is the tag's own estimate, averaged
+        since its boot, so it only compares between reports with a similar uptime.
+        """
+        hex_id = hex_id.upper()
+        if self.store is None:
+            return {"hex_id": hex_id, "installs": [], "reports": []}
+        return {"hex_id": hex_id, "installs": self.store.fw_installs(hex_id),
+                "reports": self.store.fw_reports(hex_id)}
 
     def power_run(self, run_id: int) -> dict | None:
         return self.store.power_run(run_id) if self.store is not None else None
@@ -667,13 +703,17 @@ class App:
                 fw = RE_POLL_FW.search(text)
                 if fw:
                     major, minor, patch, build, avg, life = (int(g) for g in fw.groups())
+                    up = RE_POLL_UP.search(text)
+                    uptime = int(up.group(1)) if up else None
                     self.tag_fw[addr] = {
                         "version": f"{major}.{minor}.{patch}", "build": build,
                         "avg_ua": avg, "life_days": life, "at": time.time(),
+                        "uptime_s": uptime,
                     }
                     fw_store = (f"{addr:04X}", self.tag_fw[addr])
                     fw_event = ("firmware", f"{addr:04X}",
-                                f"{major}.{minor}.{patch}-{build}, avg {avg} uA, ~{life} d")
+                                f"{major}.{minor}.{patch}-{build}, avg {avg} uA, ~{life} d"
+                                + (f", up {uptime_text(uptime)}" if uptime is not None else ""))
                 vdd = RE_POLL_VDD.search(text)
                 if vdd:
                     self.tag_vdd[addr] = (int(vdd.group(1), 16), time.time())
@@ -698,14 +738,22 @@ class App:
             self._rearm_pending()               # a reset hub forgot every pre-arm
         if event is not None:
             self._event(*event)
+        installed = None
         if fw_store is not None and self.store is not None:
-            hex_id, info = fw_store      # the latest report per tag survives a restart
-            self.store.record_fw(hex_id, info["version"], info["build"],
-                                 info["avg_ua"], info["life_days"], info["at"])
+            hex_id, info = fw_store      # every report is kept, and the latest per tag
+            now_running = f"{info['version']}-{info['build']}"
+            before = self.store.record_fw(hex_id, info["version"], info["build"],
+                                          info["avg_ua"], info["life_days"], info["at"],
+                                          info.get("uptime_s"))
+            if before != now_running:
+                installed = ("installed", hex_id, f"{before} -> {now_running}" if before
+                             else f"first report: {now_running}")
         if volt_store is not None and self.store is not None:
             self.store.add_voltage(*volt_store)     # every reading, for the history chart
         if fw_event is not None:
             self._event(*fw_event)
+        if installed is not None:
+            self._event(*installed)
         if learn:
             self._learn_boot_state(key)
 

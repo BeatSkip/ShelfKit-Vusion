@@ -928,6 +928,8 @@ tr.failed .state-word, tr.failed .detail { color: var(--red); font-weight: 500; 
 .diag-chart .low-line { stroke: var(--red); stroke-width: 1; stroke-dasharray: 4 4; }
 .diag-chart .low-text { fill: var(--red); }
 .diag-chart .run-line { stroke: var(--ink-2); stroke-width: 1; stroke-dasharray: 2 4; }
+.diag-chart .fw-line { stroke: var(--ink); stroke-width: 1; opacity: 0.55; }
+.diag-chart .fw-text { fill: var(--ink); font-weight: 600; }
 .diag-chart .series { fill: none; stroke: var(--ink); stroke-width: 1.6; stroke-linejoin: round; }
 .diag-chart .dots { fill: var(--ink); }
 .diag-chart .sel { fill: var(--ink); opacity: 0.13; }

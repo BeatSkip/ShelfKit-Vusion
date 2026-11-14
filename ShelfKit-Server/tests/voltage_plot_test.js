@@ -45,7 +45,7 @@ function setup(saved = "") {
     window: {}, prefs: { low_battery_v: 2.5 },
     vui: { chart: sideChart },
     dui: { chart: diagChart, plot: { clientWidth: 700, clientHeight: 400 }, readout: {} },
-    diag: { tag: "0100", data: null, runs: [], plot: null },
+    diag: { tag: "0100", data: null, runs: [], installs: [[2, "1.1.0-49", "1.1.0-46"]], plot: null },
     setText() {}, drawDiagSelection() {},
     diagTimeLabel: () => "time", fmtTime: () => "time",
   });
@@ -78,6 +78,9 @@ assert.equal(storage["voltage.scale"], "2.6,3");
   assert.ok(clipped.children.some((node) => node.attrs.class === "series"));
   assert.ok(nodes.some((node) => node.name === "clipPath"));
   assert.ok(!nodes.some((node) => node.attrs.class === "low-line"));
+  // a firmware install inside the window gets a marker with its version
+  assert.ok(nodes.some((node) => node.attrs.class === "fw-line"));
+  assert.ok(nodes.some((node) => node.attrs.class === "fw-text" && node.textContent === "1.1.0-49"));
 }
 // the side panel stays on automatic scaling whatever the diagnostics range is
 vm.runInContext("drawVoltage({ points: [[1, 2.4], [2, 2.8], [3, 3.2]] })", context);
