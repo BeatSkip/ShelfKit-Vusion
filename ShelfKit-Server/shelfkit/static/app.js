@@ -3379,6 +3379,85 @@ const vui = {
 
 const POWER_REASON_TEXT = { battery: "New battery", firmware: "New firmware", other: "Other" };
 
+function validVoltageRange(lo, hi) {
+  return Number.isFinite(lo) && Number.isFinite(hi) && lo >= 0 && hi <= 10 && hi >= lo + 0.001;
+}
+
+const savedVoltageRange = stored("voltage.scale", "").split(",");
+let voltageRange = savedVoltageRange.length === 2
+  && savedVoltageRange.every((value) => value.trim() !== "")
+  && validVoltageRange(Number(savedVoltageRange[0]), Number(savedVoltageRange[1]))
+  ? savedVoltageRange.map(Number) : null;
+const voltageScaleForm = $("diag-voltage-scale");
+const voltageScaleButton = $("diag-yrange");
+
+function syncVoltageScaleForm() {
+  voltageScaleForm.elements.min.value = voltageRange ? voltageRange[0] : "";
+  voltageScaleForm.elements.max.value = voltageRange ? voltageRange[1] : "";
+  voltageScaleForm.querySelector(".voltage-error").textContent = "";
+  if (voltageScaleButton) {
+    voltageScaleButton.textContent = voltageRange
+      ? `Y range: ${voltageRange[0]}–${voltageRange[1]} V` : "Y range: auto";
+  }
+}
+
+/** The Y range button opens the min/max form under it; Escape or a click elsewhere closes it. */
+function showVoltageScale(open) {
+  voltageScaleForm.hidden = !open;
+  voltageScaleButton.setAttribute("aria-expanded", open ? "true" : "false");
+  if (open) {
+    syncVoltageScaleForm();
+    voltageScaleForm.elements.min.focus();
+  }
+}
+
+if (voltageScaleButton) {
+  voltageScaleButton.addEventListener("click", () => showVoltageScale(voltageScaleForm.hidden));
+  voltageScaleForm.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    showVoltageScale(false);
+    voltageScaleButton.focus();
+  });
+  document.addEventListener("pointerdown", (event) => {
+    if (!voltageScaleForm.hidden && !event.target.closest(".yrange")) showVoltageScale(false);
+  });
+}
+
+function setVoltageRange(range) {
+  voltageRange = range;
+  store("voltage.scale", range ? range.join(",") : "auto");
+  syncVoltageScaleForm();
+  if (window.drawDiagPlot) window.drawDiagPlot();
+}
+
+voltageScaleForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const min = voltageScaleForm.elements.min.value, max = voltageScaleForm.elements.max.value;
+  const lo = Number(min), hi = Number(max);
+  if (!min || !max || !validVoltageRange(lo, hi)) {
+    voltageScaleForm.querySelector(".voltage-error").textContent =
+      "Enter 0–10 V with max at least 0.001 V above min.";
+    return;
+  }
+  setVoltageRange([lo, hi]);
+  if (voltageScaleButton) showVoltageScale(false);
+});
+voltageScaleForm.querySelector(".voltage-auto").addEventListener("click", () => {
+  setVoltageRange(null);
+  if (voltageScaleButton) showVoltageScale(false);
+});
+syncVoltageScaleForm();
+
+function voltagePlotGroup(svg, id, L, T, width, height) {
+  const defs = svgEl("defs");
+  const clip = svgEl("clipPath", { id });
+  clip.append(svgEl("rect", { x: L, y: T, width, height }));
+  defs.append(clip);
+  const group = svgEl("g", { "clip-path": `url(#${id})` });
+  svg.append(defs, group);
+  return group;
+}
+
 function fmtWhen(sec) {
   return new Date(sec * 1000).toLocaleString(undefined, {
     day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
@@ -3441,11 +3520,14 @@ function drawVoltage(data) {
     const anchor = i === 0 ? "start" : i === 3 ? "end" : "middle";
     svg.append(svgEl("text", { x: x(t), y: H - 7, "text-anchor": anchor }, fmtTime(t, t1 - t0)));
   }
-  svg.append(svgEl("line", { class: "low-line", x1: L, x2: W - R, y1: y(low), y2: y(low) }));
-  svg.append(svgEl("polyline", { class: "series",
+  if (low >= lo && low <= hi) {
+    svg.append(svgEl("line", { class: "low-line", x1: L, x2: W - R, y1: y(low), y2: y(low) }));
+  }
+  const series = voltagePlotGroup(svg, "vhist-clip", L, T, W - L - R, H - T - B);
+  series.append(svgEl("polyline", { class: "series",
     points: pts.map((p) => `${x(p[0]).toFixed(1)},${y(p[1]).toFixed(1)}`).join(" ") }));
   if (pts.length <= 150) {
-    for (const p of pts) svg.append(svgEl("circle", { class: "dots", cx: x(p[0]), cy: y(p[1]), r: 1.4 }));
+    for (const p of pts) series.append(svgEl("circle", { class: "dots", cx: x(p[0]), cy: y(p[1]), r: 1.4 }));
   }
 }
 

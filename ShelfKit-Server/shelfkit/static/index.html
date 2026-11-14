@@ -295,6 +295,20 @@
               </select>
               <span id="diag-readout" class="diag-readout" aria-hidden="true"></span>
               <span class="grow"></span>
+              <span class="yrange">
+                <button id="diag-yrange" type="button" aria-expanded="false" aria-controls="diag-voltage-scale"
+                        title="Set the lowest and highest voltage the plot shows">Y range: auto</button>
+                <form class="voltage-scale" id="diag-voltage-scale" novalidate hidden>
+                  <span class="voltage-title">Voltage axis (V)</span>
+                  <label>Min <input name="min" type="number" min="0" max="10" step="any" inputmode="decimal" placeholder="Auto" aria-label="Minimum voltage in volts"></label>
+                  <label>Max <input name="max" type="number" min="0" max="10" step="any" inputmode="decimal" placeholder="Auto" aria-label="Maximum voltage in volts"></label>
+                  <span class="voltage-error" role="status"></span>
+                  <span class="voltage-actions">
+                    <button type="button" class="quiet voltage-auto">Auto scale</button>
+                    <button type="submit" class="primary">Apply</button>
+                  </span>
+                </form>
+              </span>
               <button id="diag-zoom" type="button" disabled>Zoom to selection</button>
               <button id="diag-unzoom" class="quiet" type="button" hidden>Reset zoom</button>
               <button id="diag-clear" class="quiet" type="button" disabled>Clear selection</button>
@@ -316,15 +330,16 @@
 
           <!-- More diagnostics go here: one <section class="diag-panel"> each. -->
           <div class="diag-panels">
-            <section class="diag-panel" aria-labelledby="diag-facts-title">
-              <h2 id="diag-facts-title">Tag</h2>
-              <dl class="facts" id="diag-facts"></dl>
-            </section>
             <section class="diag-panel diag-reserved" aria-label="Room for more diagnostics">
               <p>Room for more diagnostics</p>
             </section>
           </div>
         </div>
+
+        <section class="diag-panel diag-tag" aria-labelledby="diag-facts-title">
+          <h2 id="diag-facts-title">Tag</h2>
+          <dl class="facts" id="diag-facts"></dl>
+        </section>
 
         <div class="diag-split" id="diag-split" role="separator" aria-orientation="vertical"
              tabindex="0" aria-label="Width of the log" aria-valuemin="280" aria-valuemax="1000"

@@ -889,7 +889,7 @@ tr.failed .state-word, tr.failed .detail { color: var(--red); font-weight: 500; 
 .diag-pick { flex: 0 1 340px; }
 .diag {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 12px var(--diag-log-w, 440px);
+  grid-template-columns: minmax(0, 1fr) 296px 12px var(--diag-log-w, 440px);
   align-items: start;
 }
 .diag[hidden] { display: none; }
@@ -905,6 +905,21 @@ tr.failed .state-word, tr.failed .detail { color: var(--red); font-weight: 500; 
 }
 .diag-panel-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
 .diag-readout { font-family: var(--mono); font-size: var(--t-small); color: var(--ink-2); white-space: pre; }
+.yrange { position: relative; display: inline-flex; }
+.voltage-scale {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 20;
+  display: grid; grid-template-columns: auto auto; align-items: center; gap: 8px 10px;
+  padding: 12px; min-width: 220px;
+  background: var(--ground); border: 1px solid var(--rule); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+  font-size: var(--t-small); color: var(--ink-2);
+}
+.voltage-scale[hidden] { display: none; }
+.voltage-scale .voltage-title { grid-column: 1 / -1; font-weight: 600; color: var(--ink); }
+.voltage-scale label { display: contents; }
+.voltage-scale input { width: 100%; box-sizing: border-box; }
+.voltage-error { grid-column: 1 / -1; color: var(--red); }
+.voltage-error:empty { display: none; }
+.voltage-actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 8px; }
 .diag-plot { box-sizing: border-box; height: 400px; min-height: 200px; background: var(--ground); border: 1px solid var(--rule); }
 .diag-chart { display: block; width: 100%; height: 100%; cursor: crosshair; touch-action: pan-y; user-select: none; }
 .diag-chart text { fill: var(--ink-2); font-size: 11px; font-family: inherit; }
@@ -938,6 +953,7 @@ tr.failed .state-word, tr.failed .detail { color: var(--red); font-weight: 500; 
 .diag-stats-title { margin: 4px 0 0; font-size: var(--t-body); font-weight: 600; }
 .diag-stats { grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1fr); font-size: var(--t-body); gap: 4px 14px; }
 .diag-panels { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+.diag-tag { margin-left: 16px; }
 .diag-reserved {
   min-height: 180px;
   align-items: center;
@@ -964,6 +980,7 @@ tr.failed .state-word, tr.failed .detail { color: var(--red); font-weight: 500; 
 .diag-log-table td.detail { max-width: none; }
 @media (max-width: 1000px) {
   .diag { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .diag-tag { margin-left: 0; }
   .diag-split { display: none; }
   .diag-log { position: static; height: 480px; }
   .diag-stats { grid-template-columns: auto minmax(0, 1fr); }

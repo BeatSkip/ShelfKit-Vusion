@@ -142,13 +142,14 @@ function drawDiagPlot() {
   const pad = Math.max((hi - lo) * 0.08, 0.004);
   lo -= pad;
   hi += pad;
+  if (voltageRange) [lo, hi] = voltageRange;
   const x = (t) => L + ((t - t0) / (t1 - t0)) * (W - L - R);
   const y = (v) => T + (1 - (v - lo) / (hi - lo)) * (H - T - B);
   const tAt = (px) => t0 + ((Math.min(W - R, Math.max(L, px)) - L) / (W - L - R)) * (t1 - t0);
   diag.plot = { x, y, tAt, t0, t1, L, R, T, B, W, H, pts };
 
   const vStep = niceStep(hi - lo, Math.max(2, Math.floor((H - T - B) / 44)));
-  const digits = vStep < 0.01 ? 3 : 2;
+  const digits = vStep < 0.001 ? 4 : vStep < 0.01 ? 3 : 2;
   for (let v = Math.ceil(lo / vStep) * vStep; v <= hi + 1e-9; v += vStep) {
     svg.append(svgEl("line", { class: "grid-line", x1: L, x2: W - R, y1: y(v), y2: y(v) }));
     svg.append(svgEl("text", { x: L - 6, y: y(v) + 4, "text-anchor": "end" }, v.toFixed(digits)));
@@ -181,14 +182,16 @@ function drawDiagPlot() {
   diag.plot.selA = svgEl("line", { class: "sel-edge", y1: T, y2: H - B, visibility: "hidden" });
   diag.plot.selB = svgEl("line", { class: "sel-edge", y1: T, y2: H - B, visibility: "hidden" });
   svg.append(diag.plot.selRect);
-  svg.append(svgEl("polyline", { class: "series",
+  const series = voltagePlotGroup(svg, "diag-clip", L, T, W - L - R, H - T - B);
+  series.append(svgEl("polyline", { class: "series",
     points: pts.map((p) => `${x(p[0]).toFixed(1)},${y(p[1]).toFixed(1)}`).join(" ") }));
   if (pts.length <= 400) {
-    for (const p of pts) svg.append(svgEl("circle", { class: "dots", cx: x(p[0]), cy: y(p[1]), r: 1.8 }));
+    for (const p of pts) series.append(svgEl("circle", { class: "dots", cx: x(p[0]), cy: y(p[1]), r: 1.8 }));
   }
   diag.plot.hoverLine = svgEl("line", { class: "hover-line", y1: T, y2: H - B, visibility: "hidden" });
   diag.plot.hoverDot = svgEl("circle", { class: "hover-dot", r: 4, visibility: "hidden" });
-  svg.append(diag.plot.selA, diag.plot.selB, diag.plot.hoverLine, diag.plot.hoverDot);
+  series.append(diag.plot.hoverDot);
+  svg.append(diag.plot.selA, diag.plot.selB, diag.plot.hoverLine);
   drawDiagSelection();
 }
 
