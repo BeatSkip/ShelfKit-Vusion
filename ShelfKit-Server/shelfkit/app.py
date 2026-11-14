@@ -47,6 +47,8 @@ RE_WIPED = re.compile(r"factory reset")
 # How long the tag takes to erase its flash after BEGIN (it is busy there, so the
 # first chunk would otherwise be lost and need a retry).
 FLASH_ERASE_SETTLE_S = 0.6
+# A repeat of the poll that started the transfer can still arrive in its first moments.
+FLASH_POLL_GRACE_S = 3.0
 # How long to wait for the tag's own log line after an identity frame
 ID_CONFIRM_S = 6.0
 # A flash read-back page: the tag streams it in ~26-byte frames
@@ -1256,9 +1258,23 @@ class App:
                 self.note(key, "# hub did not answer P - right port, hub flashed?")
                 return
             self.note(key, f"# firmware {name}: {len(image)} B, {total} frames -> {addr:04X}")
+            started = time.time()
             for index, payload in enumerate(firmware.frames(image), 1):
                 if cancel.is_set():
                     self.note(key, f"# cancelled at frame {index}/{total}")
+                    return
+                # A tag that is storing an update never polls: its poll timer steps aside
+                # while the transfer runs. A poll from it now means it restarted (a weak
+                # battery resets it during the flash erase) or gave the update up, and it
+                # still acknowledges every frame at the link level while throwing the
+                # data away. Carrying on ended with "has the new firmware" for a tag
+                # that stayed on its old one.
+                with self.lock:
+                    polled = self.tag_seen.get(addr, 0.0) > started + FLASH_POLL_GRACE_S
+                if polled:
+                    self.note(key, f"# {addr:04X} polled at frame {index}/{total}: it restarted "
+                                   "or dropped the update, so the rest would be thrown away. "
+                                   "Stopped - check its battery")
                     return
                 if not self._send_frame(key, addr, payload, cancel):
                     if cancel.is_set():
