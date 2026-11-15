@@ -58,9 +58,6 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # Tag ids below this are reserved (0 and 1, the latter being the hub).
 FIRST_TAG_ID = 0x0100
 
-IMAGE_SUFFIXES = frozenset(
-    {".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp", ".tif", ".tiff"}
-)
 # A tag announces itself on the hub's UART log as "POLL src=<node id>".
 RE_POLL = re.compile(r"^POLL src=([0-9a-fA-F]{4,8})\b")
 # the hub prints the tag's supply voltage as vdd=XXXX (volts*256, 3.00 V -> 0x0300)
@@ -133,15 +130,6 @@ PORT_LIST_TTL_S = 2.0  # cache list_ports(): it is an OS enumeration, not free
 
 def _stamp() -> str:
     return datetime.now().strftime("%H:%M:%S.%f")[:-3]
-
-
-def _default_image_dir() -> Path:
-    """Where the picker opens: the repo's image folders, else the cwd."""
-    repo = Path(__file__).resolve().parent.parent.parent
-    for candidate in (Path.cwd() / "Resources", Path.cwd() / "images", repo / "Resources"):
-        if candidate.is_dir():
-            return candidate
-    return Path.cwd()
 
 
 def pane_key(name: str, index: int) -> str:
@@ -227,7 +215,6 @@ class App:
         self.lock = threading.RLock()
         self._arrivals = itertools.count(1)
         self.status = "ready"
-        self.image: Path | None = None
         self.sending = False
         # True while the hub redraws its own panel: its serial line is also the panel's
         # reset, so nothing may be written to it until the refresh is done.
@@ -235,12 +222,9 @@ class App:
         self._arming: set[int] = set()      # tags whose pre-arm is awaiting the hub's answer
         self.progress = ""
         self.tags: dict[int, int] = {}
-        # Editor: how the image is fitted and dithered, plus the last preview.
-        # The push renders through the same function, so what is shown is what is
-        # sent (spec: never allow a push without a preview).
+        # How a pushed image is fitted and dithered when its job does not say
         self.fit = "cover"
         self.dither = "threshold"
-        self.preview: dict | None = None
         # Bookkeeping the Fleet/Queue/Logs screens show: when a tag was last
         # heard, and what it was last sent. Wall-clock seconds (persisted, so a
         # restart keeps the ages meaningful); ages go over the wire.
@@ -298,20 +282,6 @@ class App:
         stored_prefs = saved.get(prefs_mod.SETTING_KEY)
         if isinstance(stored_prefs, dict):
             self.prefs, _ = prefs_mod.clean(stored_prefs)
-        try:                                   # one source of truth for the options
-            from . import preview
-            fits, dithers = preview.FIT_MODES, preview.DITHERS
-        except Exception:  # noqa: BLE001 - no Pillow: nothing to validate against
-            fits, dithers = (), ()
-        fit = saved.get("editor.fit")
-        dither = saved.get("editor.dither")
-        if fit in fits:
-            self.fit = fit
-        if dither in dithers:
-            self.dither = dither
-        image = saved.get("editor.image")
-        if image and Path(image).is_file():
-            self.image = Path(image)
         for key, pane in self.panes.items():
             port = saved.get(f"pane.{key}.port")
             baud = saved.get(f"pane.{key}.baud")
@@ -346,10 +316,6 @@ class App:
                 "poll_s": row.get("poll_s"),
                 "nfc_url": row.get("nfc_url"),
             }
-        if self.image is not None:
-            # Re-render so the preview and its thumbnails are live again.
-            threading.Thread(target=self.render_preview, name="restore-preview",
-                             daemon=True).start()
         threading.Thread(target=self._restore_label_thumbs, name="restore-thumbs",
                          daemon=True).start()
 
@@ -895,11 +861,6 @@ class App:
                 "tags": [[addr, count] for addr, count in sorted(self.tags.items())],
                 "tag_info": detail,
                 "hub": self.hub_key(),
-                "image": (
-                    {"path": str(self.image), "name": self.image.name}
-                    if self.image is not None
-                    else None
-                ),
                 "sending": self.sending,
                 "send_to": self.send_to,
                 "progress": self.progress,
@@ -913,22 +874,7 @@ class App:
                 "hub_display": self.hubdisp.info(),
                 "prefs": self._prefs_view(),
                 "flash": self.flash.info(),
-                "editor": {
-                    "fit": self.fit,
-                    "dither": self.dither,
-                    "preview": self.preview,
-                    **self._editor_options(),
-                },
             }
-
-    @staticmethod
-    def _editor_options() -> dict:
-        """The fit modes and dithers the renderer supports (empty without Pillow)."""
-        try:
-            from . import preview
-        except Exception:  # noqa: BLE001 - Pillow missing: no previews, no options
-            return {"fits": [], "dithers": [], "midtone_warn": 0.4, "panel": [152, 296]}
-        return preview.options()
 
     def poll(self, cursors: dict[str, str], event_cursor: int = 0) -> dict:
         """New log lines per pane plus new events. Cursors are "epoch:seq"."""
@@ -1154,50 +1100,6 @@ class App:
         if attribute:
             with self.lock:
                 self._reset_at = (key, time.monotonic() + RESET_ATTRIBUTION_S)
-
-    # ── image selection ────────────────────────────────────────────────────
-    def browse(self, where: str | None = None) -> dict:
-        """One folder's sub-directories and image files, for the picker."""
-        base = Path(where).expanduser() if where else _default_image_dir()
-        try:
-            base = base.resolve()
-            if not base.is_dir():
-                base = base.parent if base.parent.is_dir() else _default_image_dir()
-        except OSError:
-            base = _default_image_dir()
-
-        dirs: list[str] = []
-        files: list[dict] = []
-        try:
-            for entry in sorted(base.iterdir(), key=lambda p: p.name.lower()):
-                if entry.name.startswith("."):
-                    continue
-                try:
-                    if entry.is_dir():
-                        dirs.append(entry.name)
-                    elif entry.is_file() and entry.suffix.lower() in IMAGE_SUFFIXES:
-                        files.append({"name": entry.name, "size": entry.stat().st_size})
-                except OSError:
-                    continue
-        except OSError as exc:
-            with self.lock:
-                self.status = f"cannot read {base}: {exc}"
-        parent = str(base.parent) if base.parent != base else None
-        self._save_setting("browse.dir", str(base))
-        return {"dir": str(base), "parent": parent, "dirs": dirs, "files": files}
-
-    def set_image(self, path: str) -> bool:
-        candidate = Path(path).expanduser()
-        if not candidate.is_file():
-            with self.lock:
-                self.status = f"{path} is not a file"
-            return False
-        with self.lock:
-            self.image = candidate
-            self.preview = None        # a new image needs a new preview
-            self.status = str(candidate)
-        self._save_setting("editor.image", str(candidate))
-        return True
 
     # ── identity ────────────────────────────────────────────────────────────
     def next_tag_id(self) -> int:
@@ -1932,67 +1834,6 @@ class App:
                 "battery": vdd["volts"] if vdd else None,
                 "display": None}     # every tag is the default preset until tags report theirs
 
-    # ── editor: fit/dither + the preview ───────────────────────────────────
-    def set_options(self, fit: str | None = None, dither: str | None = None) -> None:
-        """Choose how the image is fitted and dithered (preview and push alike)."""
-        with self.lock:
-            changed = False
-            if fit and fit != self.fit:
-                self.fit, changed = fit, True
-            if dither and dither != self.dither:
-                self.dither, changed = dither, True
-            if changed:
-                self.preview = None    # the old preview no longer matches
-                self.status = f"render: {self.fit}, {self.dither}"
-        if changed:
-            self._save_setting("editor.fit", self.fit)
-            self._save_setting("editor.dither", self.dither)
-
-    def render_preview(self) -> dict:
-        """Render the picked image for the panel and remember it for the page."""
-        with self.lock:
-            image = self.image
-            fit, dither = self.fit, self.dither
-        if image is None:
-            return {"ok": False, "error": "pick an image first"}
-        try:
-            from . import preview
-        except Exception as exc:  # noqa: BLE001
-            return {"ok": False, "error": f"previews need Pillow ({exc})"}
-        try:
-            rendered = preview.render(image, fit, dither)
-        except Exception as exc:  # noqa: BLE001 - a bad file must not 500 the page
-            with self.lock:
-                self.preview = None
-                self.status = f"cannot render {image.name}: {exc}"
-            return {"ok": False, "error": str(exc)}
-
-        if self.store is not None:
-            # Keep the frame: thumbnails and previews must survive a restart.
-            try:
-                self.store.put_bitmap(rendered, name=image.name)
-            except Exception as exc:  # noqa: BLE001 - storage is not worth a 500
-                self.status = f"could not store the render: {exc}"
-
-        summary = {
-            "key": rendered.key,
-            "angle": rendered.angle,
-            "source": list(rendered.source),
-            "fitted": list(rendered.fitted),
-            "midtone": rendered.midtone,
-            "fit": fit,
-            "dither": dither,
-            "original": f"/api/preview.png?t={rendered.key}&kind=original",
-            "device": f"/api/preview.png?t={rendered.key}&kind=device",
-        }
-        with self.lock:
-            self.preview = summary
-            self.status = (
-                f"preview ready: {rendered.fitted[0]}x{rendered.fitted[1]}"
-                f"{f', rotation {rendered.angle} deg' if rendered.angle else ''}, {fit}, {dither}"
-            )
-        return {"ok": True, **summary}
-
     # ── the image push ─────────────────────────────────────────────────────
     def _wait_line(self, key: str, pattern, start: int, timeout: float):
         """Wait for a log line that arrived after `start` and matches `pattern`.
@@ -2550,10 +2391,10 @@ class App:
             if self.display_busy:
                 self.status = "the hub is redrawing its display, try again in a moment"
                 return False
-            image = Path(image_path) if image_path else self.image
-            if image is None:
-                self.status = "pick an image first"
+            if not image_path:
+                self.status = "no image to send"
                 return False
+            image = Path(image_path)
             key = self.hub_key()
             pane = self.panes[key]
             port = pane.spec.port

@@ -92,8 +92,8 @@ The **layout playground** (`/inkapps.html`) renders InkLayout as you type, and
 
 | | |
 |---|---|
-| ![Editor](Documentation/screenshots/editor.png) | ![Inspector](Documentation/screenshots/inspector.png) |
-| **Editor**: pick an image, choose fit and dither, preview the real render with a 4× zoom, and push it to one or many tags. | **Inspector**: a tag's frame, alias, notes, shelf slot, battery history, and (folded away) ID, firmware update, flash read-back and reset. |
+| ![Inspector](Documentation/screenshots/inspector.png) | |
+| **Inspector**: a tag's frame, alias, notes, shelf slot, battery history, and (folded away) ID, firmware update, flash read-back and reset. | |
 | ![Queue](Documentation/screenshots/queue.png) | ![Hub](Documentation/screenshots/hub.png) |
 | **Queue**: every command waits for its tag's next check-in, with live progress and **Cancel all**. | **Hub**: both serial ports live, handshake lines, a reset button, and the hub's own e-paper panel. |
 | ![Flash](Documentation/screenshots/flash.png) | ![Settings](Documentation/screenshots/settings.png) |
@@ -130,7 +130,7 @@ Every screen comes in light and dark. `?theme=light` or `?theme=dark` forces one
 | Tag firmware | Adaptive polling with back-off, images (raw or ECO-compressed) straight to the panel, identity in SPI flash, OTA updates, NFC field wake, deep sleep between polls |
 | Hub firmware | Relays polls, images and batches, serial command channel at 115200, flash read-back relay, draws on its own panel |
 | OTA updates | **Working on hardware.** CRC-checked image in SPI flash, real chip reset, programmed by the bootloader ([design](Documentation/ota-update.md)) |
-| Server | Fleet, Editor, Queue, Logs, Hub, Flash, Apps and Settings screens; a tag inspector reachable from anywhere |
+| Server | Fleet, Queue, Logs, Diagnostics, Hub, Flash, Apps and Settings screens; a tag inspector reachable from anywhere |
 | InkServices | App SDK, per-app SQLite stores, timers, NFC-tap hooks, phone pages at `/tag/<ID>`, duplicate-push suppression; pill, weather and hello apps |
 | InkLayout | Layout language, renderer with overflow warnings, playground, model skill file, CLI (`python -m shelfkit.inklayout render`) |
 | Storage | One SQLite file: tags, aliases, shelf positions, last frames, battery history, power measurements, settings and the event log |
@@ -163,7 +163,7 @@ pip install -r ShelfKit-Server/requirements.txt        # pyserial, pillow
 python ShelfKit-Server/shelfkit-server.py hub=COM4
 ```
 
-It opens the page in your browser. **Fleet** shows tags as they check in, **Editor** pushes an image,
+It opens the page in your browser. **Fleet** shows tags as they check in
 and **Apps** puts an app on a tag. State lives in `ShelfKit-Server/data/shelfkit.db`; `--db PATH`
 puts it elsewhere.
 

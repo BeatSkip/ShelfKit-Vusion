@@ -2,7 +2,7 @@
 
 /* ShelfKit-Server front end. Plain JS, no build step.
  *
- * Screens: Fleet (home), Editor, Queue, Logs, Hub, plus a tag inspector that docks
+ * Screens: Fleet (home), Queue, Logs, Hub, Apps and more, plus a tag inspector that docks
  * over any of them. Everything the server knows arrives from /api/poll several
  * times a second and the screens are views over that. Lists update in place by key
  * (syncKeyed), so a poll never steals keyboard focus, closes a menu or reloads a
@@ -46,17 +46,6 @@ const JOB_MARK = {
   pending: "s-waiting", running: "s-sending", done: "s-online", failed: "s-alert",
   cancelled: "s-silent",
 };
-const FIT_TEXT = {
-  cover: ["Cover", "Fills the panel and crops what overflows."],
-  contain: ["Contain", "Shows the whole image, with paper around it."],
-  stretch: ["Stretch", "Fills the panel and distorts the image."],
-};
-const DITHER_TEXT = {
-  threshold: ["None", "Each pixel snaps to black, white or red. Best for text and logos."],
-  "floyd-steinberg": ["Floyd-Steinberg", "Scatters pixels to suggest grey. Best for photos."],
-  bayer4: ["Bayer 4×4", "A regular pattern that suggests grey. Best for gradients."],
-};
-
 const $ = (id) => document.getElementById(id);
 
 // ── the panel's own lettering ──────────────────────────────────────────────
@@ -153,34 +142,12 @@ const ui = {
   fleetEmpty: $("fleet-empty"),
   fleetNoMatch: $("fleet-nomatch"),
   fleetForgetStale: $("fleet-forget-stale"),
-  bulkPush: $("bulk-push"),
   bulkService: $("bulk-service"),
   bulkNfc: $("bulk-nfc"),
   bulkFw: $("bulk-fw"),
   bulkFlash: $("bulk-flash"),
   bulkForget: $("bulk-forget"),
   bulkClear: $("bulk-clear"),
-
-  editorImage: $("editor-image"),
-  editorBrowse: $("editor-browse"),
-  editorRender: $("editor-render"),
-  editorFit: $("editor-fit"),
-  editorFitHint: $("editor-fit-hint"),
-  editorDither: $("editor-dither"),
-  editorDitherHint: $("editor-dither-hint"),
-  editorTargets: $("editor-targets"),
-  targetsOnline: $("targets-online"),
-  targetsNone: $("targets-none"),
-  editorEmpty: $("editor-empty"),
-  editorWarn: $("editor-warn"),
-  editorInfo: $("editor-preview-info"),
-  editorPush: $("editor-push"),
-  editorPushNote: $("editor-push-note"),
-  previewOriginal: $("preview-original"),
-  previewDevice: $("preview-device"),
-  previewGlass: $("preview-glass"),
-  previewSel: $("preview-sel"),
-  previewZoom: $("preview-zoom"),
 
   queueWrap: $("queue-wrap"),
   queueRows: $("queue-rows"),
@@ -282,12 +249,6 @@ const ui = {
   flashError: $("flash-error"),
   flashLog: $("flash-log"),
 
-  picker: $("picker"),
-  pickerUp: $("picker-up"),
-  pickerDir: $("picker-dir"),
-  pickerList: $("picker-list"),
-  pickerCancel: $("picker-cancel"),
-
   portOptions: $("port-options"),
   toasts: $("toasts"),
 };
@@ -304,7 +265,6 @@ const lastSeq = new Map();        // key -> highest sequence number already show
 const events = [];                // {id, at, hex, event, detail, count} from the server
 const picked = new Set();         // fleet selection, hex strings
 let pickAnchor = null;            // the last tag clicked: where a Shift+click range starts
-const targets = new Set();        // editor targets, hex strings
 const cursorState = new Map();    // key -> "epoch:seq" for /api/poll
 const replayed = new Set();       // panes whose retained history we have announced
 const lastThumb = new Map();      // hex -> frame last seen on the wall (for the refresh)
@@ -1867,17 +1827,7 @@ async function forget(path, body) {
   }
 }
 
-// ── editor ─────────────────────────────────────────────────────────────────
-function openEditorFor(hexes) {
-  if (hexes.length) {
-    targets.clear();
-    for (const hex of hexes) targets.add(hex);
-  }
-  closeInspector();
-  location.hash = "#editor";
-  show("editor");
-}
-
+// ── segmented radio groups (Flash, Settings) ─────────────────────────────
 function buildRadios(host, name, values, text, onChange) {
   if (host.dataset.built === values.join(",")) return;
   host.dataset.built = values.join(",");
@@ -1901,274 +1851,6 @@ function radioValue(host) {
 function setRadio(host, value) {
   const input = [...host.querySelectorAll("input")].find((item) => item.value === value);
   if (input && !input.checked) input.checked = true;
-}
-
-function renderEditor() {
-  const editor = state?.editor;
-  if (editor) {
-    buildRadios(ui.editorFit, "fit", editor.fits || [], FIT_TEXT, setEditorOptions);
-    buildRadios(ui.editorDither, "dither", editor.dithers || [], DITHER_TEXT, setEditorOptions);
-    setRadio(ui.editorFit, editor.fit);
-    setRadio(ui.editorDither, editor.dither);
-    setText(ui.editorFitHint, FIT_TEXT[editor.fit]?.[1] || "");
-    setText(ui.editorDitherHint, DITHER_TEXT[editor.dither]?.[1] || "");
-    const preview = editor.preview || null;
-    const key = preview ? preview.key : "";
-    if (key !== lastPreviewKey) {          // only redraw when the frame changed
-      lastPreviewKey = key;
-      showPreview(preview);
-    }
-  }
-
-  setClass(ui.editorImage, state?.image ? "filename" : "filename none");
-  setText(ui.editorImage, state?.image ? state.image.name : "No image picked");
-  ui.editorImage.title = state?.image ? state.image.path : "";
-  ui.editorRender.hidden = !state?.image;
-
-  const rows = tagRows();
-  for (const hex of [...targets]) {
-    if (!rows.some((row) => row.hex === hex)) targets.delete(hex);
-  }
-  if (rows.length === 1 && !signatures.autoTarget) {  // the only tag is the obvious target
-    signatures.autoTarget = true;
-    targets.add(rows[0].hex);
-  }
-  renderTargets(rows);
-
-  const count = targets.size;
-  const missing = !state?.image
-    ? "Pick an image first."
-    : !currentPreview
-      ? "Waiting for the render."
-      : !count
-        ? (rows.length ? "Choose at least one tag." : "No tags to send to yet.")
-        : "";
-  ui.editorPush.disabled = !!missing || pushing;
-  setText(ui.editorPush, count > 1 ? `Push to ${count} tags` : "Push image");
-  setText(ui.editorPushNote, missing || (count === 1
-    ? `Goes to ${[...targets][0]} when it next checks in.`
-    : "Each tag receives it when it next checks in."));
-}
-
-function renderTargets(rows) {
-  ui.targetsOnline.hidden = ui.targetsNone.hidden = !rows.length;
-  const items = rows.length ? rows : [null];
-  syncKeyed(ui.editorTargets, items, (row) => (row ? row.hex : "none"), (row) => {
-    if (!row) return el("div", "none", "Tags appear here once the hub hears them.");
-    const label = el("label", "target");
-    const box = el("input");
-    box.type = "checkbox";
-    box.addEventListener("change", () => {
-      if (box.checked) targets.add(row.hex);
-      else targets.delete(row.hex);
-      draw();
-    });
-    const alias = el("span", "alias");
-    const mark = el("span");
-    label.append(box, pixelText(row.hex, 2), alias, mark);
-    label._parts = { box, alias, mark };
-    return label;
-  }, (label, row) => {
-    if (!row) return;
-    const parts = label._parts;
-    parts.box.checked = targets.has(row.hex);
-    setClass(parts.alias, row.alias ? "alias" : "alias none");
-    setText(parts.alias, row.alias || "No alias");
-    setClass(parts.mark, `mark ${row.failed ? "s-alert" : `s-${row.status}`}`);
-    parts.mark.title = row.reason || statusWord(row);
-  });
-}
-
-let pushing = false;
-
-async function pushImage() {
-  const hexes = [...targets];
-  if (!hexes.length) return;
-  pushing = true;
-  ui.editorPush.disabled = true;
-  let queued = 0;
-  try {
-    for (const hex of hexes) {
-      const payload = await postJSON("/api/send", { addr: parseInt(hex, 16) });
-      if (payload.result?.ok) queued += 1;
-      else toast(`${hex}: ${payload.result?.error || "not queued"}`, "bad");
-      render(payload.state);
-    }
-    if (queued) {
-      toast(queued === 1
-        ? `Queued for ${hexes[0]}. It goes out when the tag next checks in.`
-        : `Queued for ${queued} tags. Each goes out when its tag next checks in.`);
-    }
-  } catch (err) {
-    toast(`Couldn't queue the image: ${err.message}`, "bad");
-  } finally {
-    pushing = false;
-    draw();
-  }
-}
-
-// The server renders; the page only displays PNGs. The device pane is the frame
-// exactly as the panel will show it, and the loupe is a 4x view of the same PNG:
-// same pixels, no re-dithering in the browser.
-const ZOOM = 4;
-const PANEL_W = 152;
-const PANEL_H = 296;
-let loupeCentre = { x: PANEL_W / 2, y: PANEL_H / 2 };
-let currentPreview = null;
-let lastPreviewKey = null;
-
-function showPreview(preview) {
-  const has = !!preview;
-  currentPreview = preview || null;
-  for (const [img, url] of [
-    [ui.previewOriginal, has ? preview.original : ""],
-    [ui.previewDevice, has ? preview.device : ""],
-  ]) {
-    if (has) img.src = url;
-    else img.removeAttribute("src");
-    img.hidden = !has;
-  }
-  ui.editorEmpty.hidden = has;
-  ui.previewSel.hidden = !has;
-  if (has) {
-    drawLoupe(loupeCentre);
-  } else {
-    ui.previewZoom.style.backgroundImage = "";
-  }
-
-  const warn = Number(state?.editor?.midtone_warn || 0.4);
-  const muddy = has && preview.midtone > warn;
-  ui.editorWarn.hidden = !muddy;
-  setText(ui.editorWarn, muddy
-    ? `${Math.round(preview.midtone * 100)}% of this image is midtone, so it will look muddy on `
-      + "this panel. A flatter source with more contrast reads better."
-    : "");
-  setText(ui.editorInfo, has
-    ? `Source ${preview.source[0]}×${preview.source[1]}`
-      + `${preview.angle ? `, turned ${preview.angle}°` : ""}`
-      + `, placed at ${preview.fitted[0]}×${preview.fitted[1]} on the panel.`
-    : "");
-}
-
-async function renderPreview() {
-  if (!state?.image) {
-    showPreview(null);
-    return;
-  }
-  setText(ui.editorInfo, "Rendering…");
-  try {
-    const result = await postJSON("/api/preview");
-    if (!result.ok) {
-      showPreview(null);
-      lastPreviewKey = "";
-      toast(result.error || "The image couldn't be rendered", "bad");
-      return;
-    }
-    if (state) state.editor.preview = result;
-    lastPreviewKey = result.key;
-    showPreview(result);
-  } catch (err) {
-    showPreview(null);
-    toast(`The image couldn't be rendered: ${err.message}`, "bad");
-  }
-}
-
-async function setEditorOptions() {
-  try {
-    render(await postJSON("/api/editor", {
-      fit: radioValue(ui.editorFit),
-      dither: radioValue(ui.editorDither),
-    }));
-  } catch (err) {
-    toast(`Couldn't change the render options: ${err.message}`, "bad");
-    return;
-  }
-  await renderPreview();
-}
-
-function panelPoint(event) {
-  const rect = ui.previewDevice.getBoundingClientRect();
-  if (!rect.width || !rect.height) return null;
-  return {
-    x: ((event.clientX - rect.left) / rect.width) * PANEL_W,
-    y: ((event.clientY - rect.top) / rect.height) * PANEL_H,
-  };
-}
-
-function drawLoupe(centre) {
-  if (!currentPreview) return;
-  const viewW = PANEL_W / ZOOM;
-  const viewH = PANEL_H / ZOOM;
-  const left = Math.min(PANEL_W - viewW, Math.max(0, centre.x - viewW / 2));
-  const top = Math.min(PANEL_H - viewH, Math.max(0, centre.y - viewH / 2));
-  loupeCentre = { x: left + viewW / 2, y: top + viewH / 2 };
-  ui.previewZoom.style.backgroundImage = `url("${currentPreview.device}")`;
-  ui.previewZoom.style.backgroundSize = `${PANEL_W * ZOOM}px ${PANEL_H * ZOOM}px`;
-  ui.previewZoom.style.backgroundPosition = `${-left * ZOOM}px ${-top * ZOOM}px`;
-  ui.previewSel.style.left = `${left}px`;
-  ui.previewSel.style.top = `${top}px`;
-  ui.previewSel.style.width = `${viewW}px`;
-  ui.previewSel.style.height = `${viewH}px`;
-}
-
-// ── image picker ───────────────────────────────────────────────────────────
-let pickerDir = "";
-let pickerParent = null;
-
-function joinPath(dir, name) {
-  const separator = dir.includes("\\") && !dir.includes("/") ? "\\" : "/";
-  return dir.endsWith(separator) ? dir + name : dir + separator + name;
-}
-
-function sizeText(bytes) {
-  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-  if (bytes >= 1024) return `${Math.round(bytes / 1024)} kB`;
-  return `${bytes} B`;
-}
-
-function pickerItem(name, size, folder, onClick) {
-  const row = el("button", `picker-item${folder ? " folder" : ""}`);
-  row.type = "button";
-  row.append(el("span", null, name));
-  if (size) row.append(el("span", "size", size));
-  row.addEventListener("click", onClick);
-  return row;
-}
-
-async function loadDir(dir) {
-  let data;
-  try {
-    data = await getJSON(`/api/files?dir=${encodeURIComponent(dir || "")}`);
-  } catch (err) {
-    toast(`Couldn't open ${dir || "the image folder"}: ${err.message}`, "bad");
-    return;
-  }
-  pickerDir = data.dir;
-  pickerParent = data.parent;
-  ui.pickerDir.textContent = data.dir;
-  ui.pickerUp.disabled = !data.parent;
-  ui.pickerList.replaceChildren();
-  if (!data.dirs.length && !data.files.length) {
-    ui.pickerList.append(el("p", "picker-none", "No images or folders here. Go up a folder to keep looking."));
-  }
-  for (const name of data.dirs) {
-    ui.pickerList.append(pickerItem(name, "Folder", true, () => loadDir(joinPath(pickerDir, name))));
-  }
-  for (const file of data.files) {
-    ui.pickerList.append(pickerItem(file.name, sizeText(file.size), false,
-      () => chooseImage(joinPath(pickerDir, file.name))));
-  }
-  ui.pickerList.scrollTop = 0;
-}
-
-async function chooseImage(path) {
-  try {
-    render(await postJSON("/api/image", { path }));
-    ui.picker.close();
-    await renderPreview();          // never a push without a preview on screen
-  } catch (err) {
-    toast(`Couldn't use that image: ${err.message}`, "bad");
-  }
 }
 
 // ── queue ──────────────────────────────────────────────────────────────────
@@ -3068,7 +2750,6 @@ function render(next) {
 function draw() {
   if (!state) return;
   if (screen === "fleet") renderFleet();
-  else if (screen === "editor") renderEditor();
   else if (screen === "queue") renderQueue();
   else if (screen === "logs") renderLogs();
   else if (screen === "hub") renderHub();
@@ -3220,7 +2901,6 @@ ui.fleetForgetStale.addEventListener("click", () => {
   });
 });
 
-ui.bulkPush.addEventListener("click", () => openEditorFor([...picked]));
 ui.bulkClear.addEventListener("click", () => {
   picked.clear();
   draw();
@@ -3298,39 +2978,6 @@ ui.bulkForget.addEventListener("click", () => {
       draw();
     }
   });
-});
-
-ui.editorBrowse.addEventListener("click", () => {
-  ui.picker.showModal();
-  loadDir("");
-});
-ui.editorRender.addEventListener("click", renderPreview);
-ui.editorPush.addEventListener("click", pushImage);
-ui.targetsOnline.addEventListener("click", () => {
-  targets.clear();
-  for (const row of tagRows()) {
-    if (!row.quiet) targets.add(row.hex);
-  }
-  draw();
-});
-ui.targetsNone.addEventListener("click", () => {
-  targets.clear();
-  draw();
-});
-
-ui.previewGlass.addEventListener("pointermove", (event) => {
-  const point = panelPoint(event);
-  if (point) drawLoupe(point);
-});
-ui.previewGlass.addEventListener("pointerdown", (event) => {
-  const point = panelPoint(event);
-  if (point) drawLoupe(point);
-});
-ui.previewGlass.addEventListener("keydown", (event) => {
-  const step = { ArrowLeft: [-8, 0], ArrowRight: [8, 0], ArrowUp: [0, -8], ArrowDown: [0, 8] }[event.key];
-  if (!step) return;
-  event.preventDefault();
-  drawLoupe({ x: loupeCentre.x + step[0], y: loupeCentre.y + step[1] });
 });
 
 ui.queueCancel.addEventListener("click", async () => {
@@ -3447,16 +3094,8 @@ ui.inspectorWipe.addEventListener("click", () => {
   });
 });
 
-ui.pickerUp.addEventListener("click", () => {
-  if (pickerParent) loadDir(pickerParent);
-});
-ui.pickerCancel.addEventListener("click", () => ui.picker.close());
-ui.picker.addEventListener("click", (event) => {
-  if (event.target === ui.picker) ui.picker.close();   // a click on the backdrop
-});
-
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && !ui.picker.open && inspected) closeInspector();
+  if (event.key === "Escape" && inspected) closeInspector();
 });
 
 async function boot() {

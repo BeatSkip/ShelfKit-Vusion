@@ -8,11 +8,9 @@ with `PONG` and every `S` frame with `SENT … ok`, so an image push, a service
 label and a firmware transfer all run their real code. It covers what broke
 before and would break silently otherwise:
 
-* the Editor's render path (`POST /api/preview`, and the restore-on-start thread
-  that calls the same function),
 * a service label being drawn, rendered and pushed as an image,
 * an ordinary image push,
-* the stored preview coming back after a restart.
+* settings coming back after a restart.
 
 Exit code 0 = everything passed.
 """
@@ -331,16 +329,7 @@ def main() -> int:
               any(row[3] == "firmware" and row[4].endswith("last refresh done in 14.6 s")
                   for row in get("/api/events?tag=0100&limit=50")["events"]))
 
-        # the Editor's render path - the one that used to raise
         image = str((REPO / "Resources" / "polyform-eink.png").resolve())
-        post("/api/image", {"path": image})
-        preview = post("/api/preview")
-        check("render_preview works", preview.get("ok") is True, preview)
-        check("preview publishes both PNGs",
-              str(preview.get("device", "")).startswith("/api/preview.png?t="), preview)
-        post("/api/editor", {"fit": "contain", "dither": "bayer4"})
-        check("render options apply", get("/api/state")["editor"]["fit"] == "contain")
-        check("re-render after the options", post("/api/preview").get("ok") is True)
 
         # a service label: drawn, rendered, pushed wirelessly
         post("/api/tags/0100", {"alias": "S03-P4", "notes": "dev note"})
@@ -379,11 +368,11 @@ def main() -> int:
               raw[0] == 0x34 and raw[1] == 0x12 and raw[2] == 2)
         check("batch line length byte", raw[3] == 1 and raw[4] == 1 and raw[5] == 31)
 
-        check("send accepted", app.send(0x100) is True)
+        check("send accepted",
+              app.send(0x100, fit="contain", dither="bayer4", image_path=image) is True)
         check("the push finished", wait_idle())
         sent = PORTS["SMOKE1"].frames[before:]
-        st = app.state()["editor"]
-        img = _pv.render(str(app.image), st["fit"], st["dither"])
+        img = _pv.render(image, "contain", "bayer4")
         check("the push decodes to the rendered image",
               planes_from(sent) == (bytes(img.bw), bytes(img.red)), len(sent))
 
@@ -391,9 +380,9 @@ def main() -> int:
         # raw planes (as a dithered photo goes out): a compressed push is ~30 frames
         # and over before the second tag has even polled.
         eco_max, hubhost.ECO_MAX = hubhost.ECO_MAX, 0
-        first = app.enqueue("image", 0x0100, "alt-first", path=str(app.image),
+        first = app.enqueue("image", 0x0100, "alt-first", path=image,
                             fit="stretch", dither="threshold")
-        second = app.enqueue("image", 0x0101, "alt-second", path=str(app.image),
+        second = app.enqueue("image", 0x0101, "alt-second", path=image,
                              fit="stretch", dither="threshold")
         check("both transfers queued", first.get("ok") is True and second.get("ok") is True,
               [first, second])
@@ -463,7 +452,7 @@ def main() -> int:
             return False
 
         hub.written.clear()
-        pend = app.enqueue("image", 0x0200, "prearm", path=str(app.image),
+        pend = app.enqueue("image", 0x0200, "prearm", path=image,
                            fit="stretch", dither="threshold")
         check("queueing a command pre-arms its tag", "Q0200" in hub.written, hub.written)
         check("a pre-arm the hub never answers is sent again",
@@ -736,7 +725,7 @@ def main() -> int:
                                           if x["key"] == tag_pane][0]["open"])
         post("/api/prefs", {"show_tag_port": True})
 
-        # a restart restores the editor and re-renders its preview
+        # a restart brings the settings back
         for pane in app.panes.values():
             pane.worker.close()
         server.shutdown()
@@ -745,11 +734,6 @@ def main() -> int:
         app2, store2, server2, base2 = boot(db, auto_open=False)
         time.sleep(0.8)
         state = json.loads(urllib.request.urlopen(base2 + "/api/state", timeout=20).read())
-        check("the preview comes back after a restart", bool(state["editor"]["preview"]),
-              state["editor"]["preview"])
-        check("the image comes back too",
-              bool(state["image"]) and state["image"]["name"] == "polyform-eink.png",
-              state["image"])
         check("prefs come back after a restart",
               state["prefs"]["late_after_s"] == 400 and state["prefs"]["fleet_view"] == "table",
               state["prefs"])

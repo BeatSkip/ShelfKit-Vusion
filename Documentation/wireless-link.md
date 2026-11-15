@@ -184,7 +184,7 @@ POLL src=0100 seq=09 rssi=-36 up=6s att=1 hubrssi=-35
 
 | Tool | Use |
 |---|---|
-| `ShelfKit-Server/shelfkit-server.py hub=COM4 tag=COM3 [--baud N]` | Local web UI: Fleet, Editor, Queue, Logs, Hub (a pane per port with its own log, baud rate, Open/Close, DTR and Reset), Flash and Settings. |
+| `ShelfKit-Server/shelfkit-server.py hub=COM4 tag=COM3 [--baud N]` | Local web UI: Fleet, Queue, Logs, Diagnostics, Hub (a pane per port with its own log, baud rate, Open/Close, DTR and Reset), Flash and Settings. |
 | `ShelfKit-Server/shelfkit/hubhost.py COM4 serve\|send\|ping ...` | The same image push without a UI, plus `ping` for the hub's command channel. |
 | `ShelfKit-Firmware/Tooling/axsem-flasher.py <hex> -p COMx` | Flash over the AX8052 serial bootloader (works). |
 | `Data/flashdump.py COMx` | Capture the parked dump firmware's hexdump of the SPI flash. |

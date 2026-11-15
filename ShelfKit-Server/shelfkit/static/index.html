@@ -40,7 +40,6 @@
 
     <nav class="nav" id="nav" aria-label="Screens">
       <a href="#fleet" data-screen="fleet">Fleet</a>
-      <a href="#editor" data-screen="editor">Editor</a>
       <a href="#queue" data-screen="queue">Queue<span class="count" id="nav-queue" hidden></span></a>
       <a href="#logs" data-screen="logs">Logs</a>
       <a href="#diagnostics" data-screen="diagnostics">Diagnostics</a>
@@ -127,7 +126,6 @@
 
       <div class="bulkbar" id="fleet-bulk" hidden>
         <span id="fleet-selected"></span>
-        <button id="bulk-push" class="primary" type="button">Push image</button>
         <button id="bulk-service" type="button">Send service labels</button>
         <button id="bulk-nfc" type="button"
                 title="Make each tag's NFC chip open its own page: the address in Settings > Tag pages for phones, then /tag/ and the tag's ID">Write NFC links</button>
@@ -139,86 +137,6 @@
         <button id="bulk-forget" class="danger" type="button">Forget</button>
         <span class="grow"></span>
         <button id="bulk-clear" class="quiet" type="button">Clear selection</button>
-      </div>
-    </section>
-
-    <!-- Editor -->
-    <section class="screen" data-screen="editor" aria-labelledby="editor-title" hidden>
-      <div class="screen-head">
-        <h1 id="editor-title">Editor</h1>
-      </div>
-
-      <div class="editor">
-        <div class="editor-controls">
-          <div class="field">
-            <h2>Image</h2>
-            <p id="editor-image" class="filename">No image picked</p>
-            <div class="row">
-              <button id="editor-browse" type="button">Browse this computer</button>
-              <button id="editor-render" class="quiet" type="button"
-                      title="Render again, for example after editing the file">Render again</button>
-            </div>
-          </div>
-
-          <fieldset class="field">
-            <legend>Fit</legend>
-            <div class="segmented radios" id="editor-fit"></div>
-            <p class="hint" id="editor-fit-hint"></p>
-          </fieldset>
-
-          <fieldset class="field">
-            <legend>Dither</legend>
-            <div class="segmented radios" id="editor-dither"></div>
-            <p class="hint" id="editor-dither-hint"></p>
-          </fieldset>
-
-          <fieldset class="field targets-field">
-            <legend>Send to</legend>
-            <div class="row">
-              <button id="targets-online" class="quiet" type="button">Select online</button>
-              <button id="targets-none" class="quiet" type="button">Clear</button>
-            </div>
-            <div id="editor-targets" class="targets"></div>
-          </fieldset>
-        </div>
-
-        <div class="editor-stage">
-          <div class="previews">
-            <figure class="preview">
-              <div class="pv-frame">
-                <div class="glass pv-source">
-                  <img id="preview-original" alt="The source image fitted to the panel, in colour" hidden>
-                </div>
-              </div>
-              <figcaption>Source, fitted</figcaption>
-            </figure>
-            <figure class="preview preview-device">
-              <div class="pv-frame tag-case">
-                <div class="glass" id="preview-glass" tabindex="0"
-                     aria-label="The frame as the tag shows it. Move the pointer or use the arrow keys to move the loupe.">
-                  <img id="preview-device" alt="The frame in black, white and red" draggable="false" hidden>
-                  <div id="preview-sel" class="loupe-mark" hidden></div>
-                </div>
-              </div>
-              <figcaption>On the tag, 152&times;296</figcaption>
-            </figure>
-            <figure class="preview">
-              <div class="pv-frame">
-                <div class="glass pv-loupe" id="preview-zoom"></div>
-              </div>
-              <figcaption>Loupe, 4&times;</figcaption>
-            </figure>
-          </div>
-
-          <p id="editor-empty" class="stage-empty">Pick an image to see exactly what the panel will show.</p>
-          <p id="editor-warn" class="warning" hidden></p>
-          <p id="editor-preview-info" class="hint"></p>
-
-          <div class="push-bar">
-            <button id="editor-push" class="primary" type="button" disabled>Push image</button>
-            <span id="editor-push-note" class="hint"></span>
-          </div>
-        </div>
       </div>
     </section>
 
@@ -844,19 +762,6 @@
         on its heading.</p>
     </div>
   </aside>
-
-  <!-- Image picker -->
-  <dialog id="picker" class="picker" aria-labelledby="picker-title">
-    <div class="picker-head">
-      <h2 id="picker-title">Pick an image</h2>
-      <button id="picker-cancel" class="quiet" type="button">Cancel</button>
-    </div>
-    <div class="picker-path">
-      <button id="picker-up" type="button">Up one folder</button>
-      <span id="picker-dir" class="path"></span>
-    </div>
-    <div id="picker-list" class="picker-list"></div>
-  </dialog>
 
   <datalist id="port-options"></datalist>
   <div id="toasts" class="toasts" aria-live="polite"></div>

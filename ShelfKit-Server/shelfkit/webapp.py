@@ -25,7 +25,6 @@ long-lived poll connection per browser tab. The API is small and boring:
     POST /api/hub-display      {"enabled": true, "timeout_s": 300, "min_interval_s": 60,
                                "title": "...", "show_alias": true, "refresh": true}
     GET  /api/poll?c=a:1:12&e=0  new log lines per pane, new events, and the state
-    GET  /api/files?dir=...    one folder's sub-directories and image files
     GET  /api/log              both logs merged, as plain text (copy/download)
     GET  /api/preview.png?t=<key>&kind=original|device   a rendered frame
     POST /api/pane/<key>/open      {"port": "...", "baud": 115200}
@@ -36,10 +35,6 @@ long-lived poll connection per browser tab. The API is small and boring:
     POST /api/pane/<key>/reset     one 100 ms RTS pulse
     POST /api/pane/<key>/send      {"text": "P", "hex": false, "eol": "lf"|"cr"|"crlf"|"none"}
                                    debug: write those bytes to the port, echoed in the log
-    POST /api/editor               {"fit": "cover", "dither": "threshold"}
-    POST /api/image                {"path": "/abs/or/relative.png"}
-    POST /api/preview              render the picked image (does not send)
-    POST /api/send                 {"addr": 256}
     POST /api/cancel
     POST /api/tags/<hex>           {"alias": "...", "notes": "...", "grid_row": 1, "grid_col": 3}
     POST /api/tags/layout          {"tags": [{"hex", "grid_row", "grid_col"}], "shelf_names": {}}
@@ -202,8 +197,6 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError:
                 event_cursor = 0
             return self._json(self.app.poll(cursors, event_cursor))
-        if path == "/api/files":
-            return self._json(self.app.browse((query.get("dir") or [None])[0]))
         if path == "/api/preview.png":
             return self._serve_preview(
                 (query.get("t") or [""])[0], (query.get("kind") or ["device"])[0]
@@ -248,29 +241,6 @@ class Handler(BaseHTTPRequestHandler):
             return self._error(f"no such path {path}", HTTPStatus.NOT_FOUND)
 
         try:
-            if parts == ["api", "editor"]:
-                self.app.set_options(body.get("fit"), body.get("dither"))
-                return self._json(self.app.state())
-            if parts == ["api", "preview"]:
-                # Rendered server-side and cached under a content key; the page
-                # only ever displays the PNGs (spec: the browser does no dithering).
-                return self._json(self.app.render_preview())
-            if parts == ["api", "image"]:
-                if not self.app.set_image(str(body.get("path") or "")):
-                    return self._json(self.app.state(), HTTPStatus.CONFLICT)
-                return self._json(self.app.state())
-            if parts == ["api", "send"]:
-                try:
-                    addr = int(body.get("addr"))
-                except (TypeError, ValueError):
-                    return self._error("addr must be a node id")
-                image = self.app.image
-                if image is None:
-                    return self._json(self.app.state(), HTTPStatus.CONFLICT)
-                result = self.app.enqueue(
-                    "image", addr, image.name, path=str(image),
-                    fit=self.app.fit, dither=self.app.dither)
-                return self._json({"result": result, "state": self.app.state()})
             if parts == ["api", "flash"]:
                 result = self.app.flash.start(
                     str(body.get("method") or ""), str(body.get("path") or ""),

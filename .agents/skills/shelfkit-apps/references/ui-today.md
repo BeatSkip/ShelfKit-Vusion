@@ -8,7 +8,7 @@ The screenshots in `../screenshots/` were taken 2026-11-15 from a copy of the us
 - `layout-playground.png`
 - `phone-page.png`: a phone-width tag page.
 
-The main page is one HTML file (`shelfkit/static/index.html`) with a top nav: Fleet, Editor, Queue, Logs, Diagnostics, Hub, Flash, **Apps**, Settings. Each screen is a `<section data-screen>`. Plain JS (`app.js`, plus `apps.js` for the Apps screen) and one `style.css` with light and dark tokens.
+The main page is one HTML file (`shelfkit/static/index.html`) with a top nav: Fleet, Queue, Logs, Diagnostics, Hub, Flash, **Apps**, Settings. (The image Editor was removed on 2026-11-16 to focus on apps.) Each screen is a `<section data-screen>`. Plain JS (`app.js`, plus `apps.js` for the Apps screen) and one `style.css` with light and dark tokens.
 
 ## 1. Apps tab (`#apps`, `static/apps.js`)
 

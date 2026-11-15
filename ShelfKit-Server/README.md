@@ -1,12 +1,12 @@
 # ShelfKit-Server — browser UI and image push for the ShelfKit hub and tags
 
-A local web app over the hub's serial port, with eight screens: **Fleet** (home), **Editor**, **Queue**,
-**Logs**, **Hub**, **Flash**, **Apps** and **Settings**. Clicking a tag anywhere opens its inspector. Every control on the page does
+A local web app over the hub's serial port, with these screens: **Fleet** (home), **Queue**,
+**Logs**, **Diagnostics**, **Hub**, **Flash**, **Apps** and **Settings**. Clicking a tag anywhere opens its inspector. Every control on the page does
 something real; screens that were only placeholders are gone.
 
 ![Fleet](../Documentation/screenshots/fleet.png)
 
-More captures (Editor, Queue, Hub, Flash, Apps, Settings, the inspector, a tag's phone page) are in the
+More captures (Queue, Hub, Flash, Apps, Settings, the inspector, a tag's phone page) are in the
 [top-level README](../README.md); all of them are the running app against simulated serial data.
 
 ```
@@ -114,9 +114,8 @@ small bitmap font, and tags stay paper-coloured in both themes because they are 
 
 | Screen | What it does |
 |---|---|
-| **Fleet** | A headline saying how many tags are checking in and what needs you. **Shelf** view: each tag at true panel size (or half) with the frame last pushed to it, on rails grouped by the shelf and slot you set in the inspector. A tag's panel plays a refresh when a new frame lands. **Table** view: sortable, for larger fleets. Search covers IDs, aliases and notes. Filter by status, select tags (on the shelf: Ctrl+click adds or removes one, Shift+click selects a run, Ctrl+Shift+click adds a run; a plain click opens the tag), then push an image, send service labels, write their NFC links, update their firmware (one file for all, tags already on that build are skipped, press twice to confirm) or forget them |
+| **Fleet** | A headline saying how many tags are checking in and what needs you. **Shelf** view: each tag at true panel size (or half) with the frame last pushed to it, on rails grouped by the shelf and slot you set in the inspector. A tag's panel plays a refresh when a new frame lands. **Table** view: sortable, for larger fleets. Search covers IDs, aliases and notes. Filter by status, select tags (on the shelf: Ctrl+click adds or removes one, Shift+click selects a run, Ctrl+Shift+click adds a run; a plain click opens the tag), then send service labels, write their NFC links, update their firmware (one file for all, tags already on that build are skipped, press twice to confirm) or forget them |
 | **Inspector** | Opens from any tag, on any screen. The tag's frame and facts; alias, notes, shelf and slot; push and service label; then wireless ID, firmware update, flash read-back, forget and factory reset, folded away until wanted |
-| **Editor** | Browse this machine's folders, then choose **fit** and **dither**. Three previews from the server's render: source, the frame as the tag shows it, and a 4× loupe that follows the pointer or arrow keys. A midtone warning. Push to **one tag or several**; Push stays disabled until a preview is rendered |
 | **Queue** | Every outbound command (image, firmware, ID, factory reset, service label, flash read) waits here until its tag checks in. Live state and frame progress per command, and **Cancel all** |
 | **Logs** | Events recorded by the server (`push`, `ok`, `fail`, `error`, `boot`, `bootloader`, `open`, ...), identical neighbours collapsed into `×N`, filtered by tag or event, **kept across restarts**. Check-ins (`sync`) are hidden unless you ask for them, because every poll makes one |
 | **Hub** | Both serial panes (port, baud, Open/Close, DTR, Reset, Clear log, live log, and a **send box** to write text or hex bytes to the port with a chosen line ending), Copy logs and Save log, the features the hub's firmware reports, and the settings for the hub's own panel. The port and baud you used come back next run. `#console` links land here |
@@ -350,11 +349,9 @@ Text is drawn with anti-aliasing off, in hinted fonts (Tahoma, Consolas) at whol
 sizes, because thresholded anti-aliased text comes out ragged on a 1-bit panel.
 
 It is drawn at 152×296 and rendered with `fit=stretch, dither=threshold` — dithering
-text makes it illegible — through the same pipeline as every other image, so what
-you see in the Editor when you reload is what the tag got. A one-off note does not
+text makes it illegible — through the same pipeline as every other image. A one-off note does not
 change the stored one: `POST /api/tags/<hex>/service {"note": "cable 12"}` labels a
-single push. The editor's own image is not replaced by this (`send()` takes the path
-explicitly).
+single push.
 
 ### The command queue
 
@@ -463,11 +460,9 @@ The same thing from a shell, without the UI:
 
 ### Pushing an image
 
-In the **Editor**: **Browse this computer** opens a picker over this machine's folders (it starts in
-`Resources/`) and lists only folders and image files; click a folder to go in, click an image to use
-it. Tick one or more tags under **Send to**, then **Push**: each tag gets its own queued command, sent
-when it next checks in. **Cancel all** on the Queue screen drops what is waiting and stops the running
-transfer after the frame in flight.
+Images reach tags from apps (the **Apps** screen) and as service labels. Each push is its own queued
+command, sent when its tag next checks in. **Cancel all** on the Queue screen drops what is waiting and
+stops the running transfer after the frame in flight.
 
 The push goes over the serial port the hub pane already has open — it sends the hub's `S`/`P`
 commands and reads the `SENT`/`PONG` answers out of that pane's own log. That is deliberate: closing
@@ -517,7 +512,7 @@ one. It is created on first run (folder included) and is the only file the serve
 
 | table | what it holds |
 |---|---|
-| `settings` | the editor's image, fit and dither; the port and baud each pane last used |
+| `settings` | page settings; the port and baud each pane last used |
 | `tags` | alias, notes, map position, last seen, announcement count, last content and its bitmap |
 | `bitmaps` | the rendered frames themselves (transport planes + both PNGs), newest 64 |
 | `events` | the log above, newest 5000 |
@@ -546,15 +541,13 @@ python ShelfKit-Server/tests/smoke.py
 ```
 
 No hardware and no test framework: the two ports are fakes that answer `P` with `PONG`
-and every `S` frame with `SENT … ok`, so the real code paths run end to end — the
-Editor's render/preview (including the restore-on-start re-render), a service label
-being drawn and pushed, an ordinary image push (404 frames), and the preview coming
+and every `S` frame with `SENT … ok`, so the real code paths run end to end — a service label
+being drawn and pushed, an ordinary image push (404 frames), and the settings coming
 back after a restart. Exit code 0 means everything passed.
 
 It exists because two regressions in this code were only found on hardware or by
-hand: a broad text edit once silently hit both `send()` and `render_preview()`, which
-left the Editor's render path raising `UnboundLocalError` while every other screen
-looked fine.
+hand: a broad text edit once silently hit the render path, which then raised
+`UnboundLocalError` while every other screen looked fine.
 
 ## The same thing from a shell
 
@@ -580,7 +573,7 @@ python ShelfKit-Server/shelfkit/png2epd.py photo.png --out-dir out/   # photo_bw
 ```
 
 Nothing in the firmware links a converted image any more — the tag's `src/` has no
-boot logo since the boot demo was replaced, and the Editor renders on the fly. The
+boot logo since the boot demo was replaced, and the server renders on the fly. The
 converter is kept for generating C arrays when something does need one.
 
 ## How it is put together
