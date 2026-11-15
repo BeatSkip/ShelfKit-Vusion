@@ -1453,6 +1453,7 @@ function openInspector(hex) {
     vhist.tag = wanted;
     vhist.viewing = null;               // a different tag: back to its live measurement
     vhist.since = null;
+    vhist.installs = [];
     vui.msg.textContent = "";
     refreshVoltage();
   }
@@ -3488,7 +3489,7 @@ boot();
 // ── battery voltage history (inspector) ───────────────────────────────────────
 // since: where the current measurement starts (the newest archive, 0 = first reading);
 // viewing: the archived measurement on the chart instead of live readings, or null
-const vhist = { tag: null, seq: 0, since: null, viewing: null, runs: [] };
+const vhist = { tag: null, seq: 0, since: null, viewing: null, runs: [], installs: [] };
 const vui = {
   range: $("vhist-range"), custom: $("vhist-custom"), from: $("vhist-from"),
   to: $("vhist-to"), chart: $("vhist-chart"), stats: $("vhist-stats"),
@@ -3584,9 +3585,22 @@ function fmtWhen(sec) {
     day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 }
 
+// After an update the cell sags (0.15-0.3 V after the flash writes) and takes 10-20 min to
+// recover; a period that starts right at the install would show a rising voltage.
+const FW_SETTLE_S = 1800;
+
+/** Start of "This firmware": 30 min after the current firmware first reported (installs:
+ * [at, version, previous] from /api/power-runs), or the install itself while it is newer. */
+function firmwareSince(installs, now) {
+  const last = installs?.[installs.length - 1];
+  if (!last) return 0;
+  return now - last[0] > FW_SETTLE_S ? last[0] + FW_SETTLE_S : last[0];
+}
+
 function vhistWindow() {
   const now = Date.now() / 1000;
   if (vui.range.value === "run") return [vhist.since || 0, now];
+  if (vui.range.value === "fw") return [firmwareSince(vhist.installs, now), now];
   if (vui.range.value === "custom") {
     const since = vui.from.value ? new Date(vui.from.value).getTime() / 1000 : now - 7 * 86400;
     const until = vui.to.value ? new Date(vui.to.value).getTime() / 1000 : now;
@@ -3790,6 +3804,7 @@ async function refreshVoltage() {
     if (mine !== vhist.seq || runs.error || runs.hex_id !== inspected) return;
     vhist.runs = runs.runs || [];
     vhist.since = runs.current_since || 0;
+    vhist.installs = runs.installs || [];
     drawRuns();
     if (vhist.viewing != null) return;  // an archived measurement is on the chart
     const [since, until] = vhistWindow();

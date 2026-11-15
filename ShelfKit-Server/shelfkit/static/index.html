@@ -294,6 +294,7 @@
               <h2 id="diag-batt-title">Battery voltage</h2>
               <select id="diag-range" aria-label="Period">
                 <option value="run">This measurement</option>
+                <option value="fw" title="From 30 minutes after the tag's current firmware first reported: the cell recovers from the update meanwhile">This firmware</option>
                 <option value="1">Last 24 hours</option>
                 <option value="7">Last 7 days</option>
                 <option value="30">Last 30 days</option>
@@ -724,6 +725,7 @@
         <div class="vhist-range">
           <select id="vhist-range" aria-label="Period">
             <option value="run" selected>This measurement</option>
+            <option value="fw" title="From 30 minutes after the tag's current firmware first reported: the cell recovers from the update meanwhile">This firmware</option>
             <option value="1">Last 24 hours</option>
             <option value="7">Last 7 days</option>
             <option value="30">Last 30 days</option>

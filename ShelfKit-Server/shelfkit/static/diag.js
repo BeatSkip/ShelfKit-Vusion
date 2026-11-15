@@ -89,6 +89,7 @@ function diagWindow() {
   const now = Date.now() / 1000;
   if (diag.zoom) return diag.zoom;
   if (dui.range.value === "run") return [diag.since || 0, now];
+  if (dui.range.value === "fw") return [firmwareSince(diag.installs, now), now];
   const days = Number(dui.range.value);
   return [days ? now - days * 86400 : 0, now];
 }
