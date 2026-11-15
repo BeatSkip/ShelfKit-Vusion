@@ -298,6 +298,7 @@ const logs = new Map();           // key -> [{stamp, text}] retained lines
 const lastSeq = new Map();        // key -> highest sequence number already shown
 const events = [];                // {id, at, hex, event, detail, count} from the server
 const picked = new Set();         // fleet selection, hex strings
+let pickAnchor = null;            // the last tag clicked: where a Shift+click range starts
 const targets = new Set();        // editor targets, hex strings
 const cursorState = new Map();    // key -> "epoch:seq" for /api/poll
 const replayed = new Set();       // panes whose retained history we have announced
@@ -619,6 +620,46 @@ function playRefresh(glass) {
 function togglePicked(hex, on) {
   if (on) picked.add(hex);
   else picked.delete(hex);
+  pickAnchor = hex;
+  draw();
+}
+
+/** The tags in the order the shelf shows them, for a Shift range. */
+function wallOrder() {
+  return [...ui.fleetWall.querySelectorAll(".slot")].map((node) => node.dataset.hex);
+}
+
+/**
+ * A click on a tag on the shelf, the way file managers do it: a plain click opens the
+ * tag and drops the selection, Ctrl (Cmd) adds or removes one tag, Shift selects the run
+ * from the last clicked tag, Ctrl+Shift adds that run to what is already selected.
+ */
+function clickSlot(event, hex) {
+  const toggle = event.ctrlKey || event.metaKey;
+  if (!toggle && !event.shiftKey) {
+    picked.clear();
+    pickAnchor = hex;
+    openInspector(hex);
+    draw();
+    return;
+  }
+  const order = wallOrder();
+  // the tag a plain click opened counts as selected, so click A, Ctrl+click B picks both
+  const anchor = order.includes(pickAnchor) ? pickAnchor
+    : order.includes(inspected) ? inspected : null;
+  if (!picked.size && anchor && anchor !== hex) picked.add(anchor);
+  if (event.shiftKey && anchor) {
+    const from = order.indexOf(anchor);
+    const to = order.indexOf(hex);
+    if (!toggle) picked.clear();
+    for (const one of order.slice(Math.min(from, to), Math.max(from, to) + 1)) picked.add(one);
+  } else if (picked.has(hex)) {
+    picked.delete(hex);
+    pickAnchor = hex;
+  } else {
+    picked.add(hex);
+    pickAnchor = hex;
+  }
   draw();
 }
 
@@ -632,16 +673,11 @@ function createSlot(row) {
   const glass = el("span", "glass");
   tagCase.append(glass);
   open.append(tagCase);
-  open.addEventListener("click", () => openInspector(row.hex));
   stage.append(open);
 
   const caption = el("div", "caption");
   const top = el("div", "caption-top");
-  const box = el("input");
-  box.type = "checkbox";
-  box.setAttribute("aria-label", `Select tag ${row.hex}`);
-  box.addEventListener("change", () => togglePicked(row.hex, box.checked));
-  top.append(box, pixelText(row.hex, captionIdScale()));
+  top.append(pixelText(row.hex, captionIdScale()));
   const alias = el("div", "alias");
   const stateLine = el("div", "state-line");
   const mark = el("span");
@@ -650,8 +686,17 @@ function createSlot(row) {
   const battery = el("div", "batt");
   caption.append(top, alias, stateLine, battery);
   node.append(stage, caption);
-  node._parts = { open, glass, box, id: top.querySelector("svg"), alias, mark, word, battery };
+  node._parts = { open, glass, id: top.querySelector("svg"), alias, mark, word, battery };
   node.dataset.hex = row.hex;
+  // The whole slot takes the click, caption included; Ctrl and Shift select (clickSlot).
+  node.addEventListener("click", (event) => {
+    if (event.target.closest("input, a")) return;
+    clickSlot(event, node.dataset.hex);
+  });
+  // Shift+click would otherwise also select the caption text between the two tags
+  node.addEventListener("mousedown", (event) => {
+    if (event.shiftKey) event.preventDefault();
+  });
   // Drag a tag to another place or shelf. The article is the draggable, not the button
   // inside it, because Firefox does not start a drag on a <button>.
   node.draggable = true;
@@ -690,7 +735,7 @@ function updateSlot(node, row) {
     inspected === row.hex ? "open" : "",
     (landedUntil.get(row.hex) || 0) > Date.now() ? "landed" : "",
   ].filter(Boolean).join(" "));
-  parts.box.checked = picked.has(row.hex);
+  parts.open.setAttribute("aria-pressed", String(picked.has(row.hex)));
   setPixelText(parts.id, row.hex, captionIdScale());
   paintGlass(parts.glass, row, glassIdScale());
 

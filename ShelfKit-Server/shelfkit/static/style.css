@@ -395,7 +395,8 @@ body.inspecting main { padding-right: calc(var(--inspector-w) + var(--gutter)); 
 
 .slot.silent .tag-case { filter: saturate(0.6) brightness(0.86); }
 .slot.picked .slot-stage::after { background: var(--ink); border-top-color: var(--ink); border-bottom-color: var(--ink); }
-#fleet-rows tr.picked td:first-child { box-shadow: inset 4px 0 0 var(--ink); }
+/* selected (Ctrl/Shift+click): a dashed ring, so it reads apart from the open tag's solid one */
+.slot.picked .tag-case { outline: 3px dashed var(--ink); outline-offset: 4px; }#fleet-rows tr.picked td:first-child { box-shadow: inset 4px 0 0 var(--ink); }
 .slot.open .tag-case { box-shadow: 0 0 0 3px var(--ink), 0 7px 10px -5px var(--case-shadow); }
 
 .glass {

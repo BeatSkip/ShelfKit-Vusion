@@ -349,6 +349,38 @@ class App:
             # Re-render so the preview and its thumbnails are live again.
             threading.Thread(target=self.render_preview, name="restore-preview",
                              daemon=True).start()
+        threading.Thread(target=self._restore_label_thumbs, name="restore-thumbs",
+                         daemon=True).start()
+
+    def _restore_label_thumbs(self) -> None:
+        """Give back the Fleet thumbnail of a service label whose frame was never stored.
+
+        Before the fix in enqueue(), a queued push kept its render only in the in-memory
+        cache, so after a restart the thumbnail was gone. The label file is still on disk:
+        render it again and point the tag at that frame. (Its text is what the label says
+        now; for a service label that is the same tag id, alias and note.)
+        """
+        try:
+            from . import preview
+        except Exception:  # noqa: BLE001 - no Pillow, no thumbnails anyway
+            return
+        with self.lock:
+            pushes = dict(self.tag_push)
+        for addr, (name, at, key) in pushes.items():
+            label = REPO_ROOT / "ShelfKit-Server" / "data" / "service" / name
+            if not name.startswith("service-") or not label.is_file():
+                continue
+            try:
+                if key and self.store.bitmap_png(key) is not None:
+                    continue
+                rendered = preview.render(label, "stretch", "threshold")
+                self.store.put_bitmap(rendered, name=name)
+                self.store.record_push(f"{addr:04X}", name, rendered.key, at=at)
+            except Exception:  # noqa: BLE001 - a thumbnail is not worth a failed start
+                continue
+            with self.lock:
+                if self.tag_push.get(addr) == (name, at, key):
+                    self.tag_push[addr] = (name, at, rendered.key)
 
     def _save_setting(self, key: str, value) -> None:
         if self.store is not None:
@@ -2060,6 +2092,14 @@ class App:
                         dither = params.get("dither") or self.dither
                     frames, rendered = self._stage(params.get("path"), fit, dither)
                     params["staged"] = (frames, rendered.key)
+                    if self.store is not None:
+                        # The sender only gets the key and the frames, so keep the frame
+                        # now: the Fleet thumbnail must outlive the in-memory render cache
+                        # (16 entries) and a restart.
+                        try:
+                            self.store.put_bitmap(rendered, name=Path(params["path"]).name)
+                        except Exception:  # noqa: BLE001 - storage must not block a push
+                            pass
                     params["staged_note"] = (
                         f"{rendered.source[0]}x{rendered.source[1]}"
                         f"{f', rotation {rendered.angle} deg' if rendered.angle else ''}"
