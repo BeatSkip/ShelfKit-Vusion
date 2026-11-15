@@ -12,6 +12,10 @@ All on the server's one port. The admin routes are meant for `127.0.0.1` only. A
 | `GET /api/inkapps/log?app=` | | `{log: [[unix_time, line], ...]}`, up to 200 lines, in memory only |
 | `GET /api/inkapps/layout?app=` | | The app's `layout.xml` as text (404 if it has none) |
 | `POST /api/inkapps/reload` | `{}` | Re-imports every app. Returns `{ok, apps}`. |
+| `POST /api/inkapps/grid` | `{grid}` | Saves the Apps grid: `["app_id", {id, name, apps: [...]}, ...]` (order and groups). Returned as `grid` by `GET /api/inkapps`. |
+| `POST /api/inkapps/disable` | `{app}` | Stops the app on every tag and stops importing it; files and data stay. Returns `{ok, stopped}`. |
+| `POST /api/inkapps/enable` | `{app}` | Imports it again. Returns `{ok, error}` (error: it did not load). |
+| `POST /api/inkapps/create` | `{id, title, description, icon, draw, timer_minutes, on_open, fields, buttons, dry_run?}` | The New app wizard (`inkservices/scaffold.py`): writes `inkapps/<id>/app.py` (+ `layout.xml`) and loads it. With `dry_run`: only returns `{files}`. |
 | `POST /api/inkapps/bind` | `{tag, app, config?}` | Puts the app on the tag: runs its timers, renders, pushes. Returns `{ok, pushed, skipped}` or `{ok:false, error}`. |
 | `POST /api/inkapps/unbind` | `{tag}` | Stops the app on that tag (its data is kept) |
 | `POST /api/inkapps/config` | `{tag, config}` | Saves the tag's settings, then refreshes |
@@ -19,6 +23,7 @@ All on the server's one port. The admin routes are meant for `127.0.0.1` only. A
 | `POST /api/inkapps/open` | `{tag}` | Simulates an NFC tap (`on_open`) |
 | `POST /api/inkapps/refresh` | `{tag, force?}` | Runs the timers, redraws and sends if changed. With `force`: redraws and sends, without timers. |
 | `POST /api/layout/render` | `{layout, data?, tag?, display?}` | `{ok, png (base64), diagnostics, boxes, layout, display, size}`. Needs no app or AI. |
+| `GET /api/layout/icons` | | `{size: 12, icons: {name: [12 rows of '#'/'.']}}`, the pixel icons, also used as app icons |
 | `GET /api/layout/displays` | | `{displays:[{id,name,width,height,colors}], default}` |
 | `GET /api/layout/skill?display=&orientation=` | | The InkLayout skill file (Markdown) |
 
@@ -29,6 +34,7 @@ What one entry of `GET /api/inkapps` `apps[]` looks like (from `InkApp.describe(
  "controls": [{"id": "press-me", "kind": "button", "label": "Press me", "placeholder": ""},
               {"id": "message", "kind": "text", "label": "Message", "placeholder": "…"}],
  "config_fields": [{"key": "greeting", "label": "Greeting", "default": "Hello!"}],
+ "icon": "message", "disabled": false, "installed_at": 1794409966.5,
  "has_render": true, "layout": "layout.xml", "has_on_open": false,
  "timers": [{"id": "update", "minutes": 30}],
  "error": null, "tags": ["F466"]}
@@ -62,10 +68,8 @@ The pages enforce a same-site check (Host / X-Forwarded-Host) and cap form bodie
 ## Not there yet (no route exists)
 
 None of these exist yet:
-- creating an app
 - editing or saving code or a layout from the UI
-- installing from git, updating or removing an app
-- enabling or disabling an app
+- installing from git, updating or deleting an app
 - versions
 - statistics (renders, pushes, skipped duplicates, errors)
 - a persisted log

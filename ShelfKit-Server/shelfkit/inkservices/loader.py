@@ -29,6 +29,7 @@ class LoadedApp:
     path: Path                 # the app's folder
     app: InkApp | None
     error: str | None
+    disabled: bool = False     # turned off on the Apps tab: not imported at all
 
 
 def _where(exc: BaseException, source: Path) -> str:
@@ -69,14 +70,18 @@ def load_app(folder: Path) -> LoadedApp:
     return LoadedApp(app_id, folder, app, None)
 
 
-def load_apps(root: Path = INKAPPS_DIR) -> dict[str, LoadedApp]:
+def load_apps(root: Path = INKAPPS_DIR, disabled=()) -> dict[str, LoadedApp]:
+    """Every app in root. The ids in `disabled` are listed but not imported: their code
+    does not run at all, which is the point of disabling an app."""
     root = Path(root)
     if not root.is_dir():
         return {}
+    disabled = set(disabled)
     apps = {}
     for folder in sorted(root.iterdir()):
         if (not folder.is_dir() or folder.name[:1] in "_."
                 or not (folder / "app.py").is_file()):
             continue
-        apps[folder.name] = load_app(folder)
+        apps[folder.name] = (LoadedApp(folder.name, folder, None, None, True)
+                             if folder.name in disabled else load_app(folder))
     return apps

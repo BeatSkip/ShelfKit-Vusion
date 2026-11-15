@@ -7,7 +7,7 @@ says what data it shows and what the phone's buttons do.
 from shelfkit.inkservices import InkApp
 
 app = InkApp("hello", title="Hello", description="A counter and a message, set from your phone",
-             layout="layout.xml")
+             layout="layout.xml", icon="message")
 app.config_field("greeting", label="Greeting", default="Hello!")
 
 

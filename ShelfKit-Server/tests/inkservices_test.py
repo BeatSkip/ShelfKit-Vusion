@@ -1013,13 +1013,92 @@ def test_phone(tmp: Path) -> None:
         s.close()
 
 
+def test_manage(tmp: Path) -> None:
+    print("managing apps (disable, enable, grid, New app wizard)")
+    from shelfkit.inkservices import scaffold
+    from shelfkit.inkservices.host import AppHost
+    root = tmp / "manage-apps"
+    write_app(root, "ctr", HOST_APPS["ctr"])
+    s = store_mod.Store(tmp / "manage.db")
+    calls = []
+    h = AppHost(s, enqueue=lambda *a, **k: calls.append(a) or {"ok": True},
+                tag_info=lambda hx: {"alias": "A1", "notes": None, "battery": 3.0, "display": None},
+                root=root, image_dir=tmp / "manage-img")
+    entry = {a["id"]: a for a in h.apps()}["ctr"]
+    check("an app has an install date", isinstance(entry.get("installed_at"), (int, float)))
+    check("an app is enabled at first", entry.get("disabled") is False)
+
+    h.bind("0101", "ctr")
+    r = h.disable("ctr")
+    check("disable stops it on its tags", r.get("stopped") == ["0101"]
+          and s.app_binding("0101") is None, r)
+    entry = {a["id"]: a for a in h.apps()}["ctr"]
+    check("a disabled app is listed, with its title", entry["disabled"]
+          and entry["title"] == h.store.setting("inkapps.disabled")["ctr"]["title"], entry)
+    check("a disabled app cannot be bound", not h.bind("0101", "ctr").get("ok"))
+    h.reload()
+    check("a disabled app stays disabled after reload", h.loaded["ctr"].disabled
+          and h.loaded["ctr"].app is None)
+    r = h.enable("ctr")
+    check("enable loads it again", r.get("ok") and h.loaded["ctr"].app is not None, r)
+    check("an enabled app can be bound", h.bind("0101", "ctr").get("ok"))
+
+    r = h.set_layout(["ctr", {"id": "g1", "name": "  Daily ", "apps": ["a", "ctr", "b"]}, 5])
+    check("grid saved, a duplicate id and junk dropped",
+          r.get("layout") == ["ctr", {"id": "g1", "name": "Daily", "apps": ["a", "b"]}], r)
+    check("grid read back", h.layout() == r["layout"])
+    check("grid must be a list", not h.set_layout({"x": 1}).get("ok"))
+
+    spec = {"id": "bins", "title": 'Bin "day"', "description": "Which bin goes out",
+            "icon": "calendar", "draw": "layout", "timer_minutes": 60, "on_open": True,
+            "fields": ["Postcode", "Postcode", "1st street"], "buttons": ["Mark done", "class"]}
+    files = scaffold.files(spec)
+    check("scaffold writes app.py and layout.xml", sorted(files) == ["app.py", "layout.xml"])
+    compile(files["app.py"], "app.py", "exec")
+    check("generated app.py compiles", True)
+    check("duplicate setting labels get distinct keys",
+          '"postcode"' in files["app.py"] and '"postcode_2"' in files["app.py"])
+    check("a keyword label becomes a valid name", "def button_class(tag)" in files["app.py"])
+    for bad, why in (({**spec, "id": "Bad Id"}, "id"), ({**spec, "title": " "}, "title"),
+                     ({**spec, "icon": "nope"}, "icon"), ({**spec, "draw": "x"}, "draw"),
+                     ({**spec, "timer_minutes": "x"}, "timer")):
+        try:
+            scaffold.files(bad)
+            check(f"scaffold rejects a bad {why}", False)
+        except scaffold.SpecError:
+            check(f"scaffold rejects a bad {why}", True)
+
+    r = h.create(spec, dry_run=True)
+    check("dry run returns files, writes nothing", r.get("ok") and "app.py" in r["files"]
+          and not (root / "bins").exists(), r)
+    r = h.create(spec)
+    check("create writes the folder and loads the app", r.get("ok") and r.get("error") is None
+          and (root / "bins" / "app.py").is_file() and h.loaded["bins"].app is not None, r)
+    check("created app keeps its icon", {a["id"]: a for a in h.apps()}["bins"]["icon"] == "calendar")
+    check("create refuses an existing folder", not h.create(spec).get("ok"))
+    png = h.preview_png("bins", "0202")
+    check("the new layout app draws", png[:4] == b"\x89PNG")
+    r = h.bind("0202", "bins")
+    check("the new app runs on a tag", r.get("ok"), r)
+    check("its button works", h.run_action("0202", "mark-done").get("ok"),
+          [c["id"] for c in h.loaded["bins"].app.describe()["controls"]])
+    check("its tap works", h.opened("0202").get("ok"))
+
+    r = h.create({"id": "drawn", "title": "Drawn", "draw": "python", "on_open": True,
+                  "fields": ["Name"], "buttons": ["Go"]})
+    check("a Python-drawn app is created and draws", r.get("ok") and r.get("error") is None
+          and h.preview_png("drawn", "0303")[:4] == b"\x89PNG", r)
+    h.close()
+    s.close()
+
+
 def main() -> int:
     # a failed test can leave a database open, which Windows will not delete
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
         tmp = Path(d)
         for test in (test_store, test_appstore, test_displays, test_sdk, test_loader,
                      test_host, test_timers, test_pill_app, test_weather_app, test_layout_apps,
-                     test_wiring, test_web,
+                     test_wiring, test_web, test_manage,
                      test_phone):
             try:
                 test(tmp)

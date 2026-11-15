@@ -42,11 +42,15 @@ from PIL import Image
 
 from .. import displays
 from .appstore import AppStore, app_db_path
-from .loader import INKAPPS_DIR, LoadedApp, load_apps
+from . import scaffold
+from .loader import INKAPPS_DIR, LoadedApp, load_app, load_apps
 from .screen import AppError, LayoutError, draw_screen
 from .sdk import InkApp, TagContext, http_json
 
 LOG_LINES = 200
+DISABLED_KEY = "inkapps.disabled"     # main store settings: {app_id: {title, description, icon, at}}
+INSTALLED_KEY = "inkapps.installed"   # {app_id: unix time first seen}
+LAYOUT_KEY = "inkapps.layout"         # the Apps grid: order and groups (see set_layout)
 DEFAULT_IMAGE_DIR = Path(__file__).resolve().parents[2] / "data" / "apps"
 
 __all__ = ["AppError", "AppHost", "LayoutError"]
@@ -76,10 +80,12 @@ class AppHost:
 
     # ── apps ───────────────────────────────────────────────────────────────
     def reload(self) -> dict[str, LoadedApp]:
-        """Import every app afresh (picks up edits). Stores stay open."""
-        loaded = load_apps(self.root)
+        """Import every app afresh (picks up edits). Stores stay open. Disabled apps
+        are listed but not imported."""
+        loaded = load_apps(self.root, disabled=self._disabled())
         with self._lock:
             self.loaded = loaded
+        self._note_installed(loaded)
         for item in loaded.values():
             if item.error:
                 self._log(item.id, f"load failed: {item.error}")
@@ -89,20 +95,147 @@ class AppHost:
         bound: dict[str, list[str]] = {}
         for b in self.store.app_bindings():
             bound.setdefault(b["app_id"], []).append(b["hex_id"])
+        off = self._disabled()
+        installed = self.store.setting(INSTALLED_KEY, {}) or {}
         out = []
         for item in self.loaded.values():
             entry = (item.app.describe() if item.app else
-                     {"id": item.id, "title": item.id, "description": "", "controls": [],
-                      "config_fields": [], "has_render": False, "has_on_open": False,
-                      "timers": []})
-            entry.update(error=item.error, tags=bound.get(item.id, []))
+                     {"id": item.id, "title": item.id, "description": "", "icon": None,
+                      "controls": [], "config_fields": [], "has_render": False,
+                      "has_on_open": False, "timers": []})
+            if item.disabled:                    # not imported: what it was when disabled
+                entry.update({k: v for k, v in (off.get(item.id) or {}).items()
+                              if k in ("title", "description", "icon")})
+            entry.update(error=item.error, tags=bound.get(item.id, []),
+                         disabled=item.disabled, installed_at=installed.get(item.id))
             out.append(entry)
         return out
+
+    # ── the Apps tab's own state: disabled apps, install dates, the grid ──────
+    def _disabled(self) -> dict:
+        return self.store.setting(DISABLED_KEY, {}) or {}
+
+    def _note_installed(self, loaded: dict[str, LoadedApp]) -> None:
+        """Remember when each app was first seen: its folder's creation time (on
+        Windows; the last metadata change elsewhere), so a new server learns the
+        real dates of apps that were already there."""
+        seen = dict(self.store.setting(INSTALLED_KEY, {}) or {})
+        new = {}
+        for item in loaded.values():
+            if item.id not in seen:
+                try:
+                    st = item.path.stat()
+                    new[item.id] = getattr(st, "st_birthtime", None) or st.st_ctime
+                except OSError:
+                    new[item.id] = time.time()
+        if new:
+            seen.update(new)
+            self.store.set_setting(INSTALLED_KEY, seen)
+
+    def disable(self, app_id: str) -> dict:
+        """Stop the app on every tag and stop importing it. Its folder, settings and
+        stored data stay, so enable() brings it back as it was."""
+        item = self.loaded.get(app_id)
+        if item is None:
+            return {"ok": False, "error": f"no app {app_id!r}"}
+        if item.disabled:
+            return {"ok": True, "stopped": []}
+        stopped = [b["hex_id"] for b in self.store.app_bindings() if b["app_id"] == app_id]
+        for hex_id in stopped:
+            self.unbind(hex_id)
+        snap = {"title": item.app.title if item.app else app_id,
+                "description": item.app.description if item.app else "",
+                "icon": item.app.icon if item.app else None, "at": time.time()}
+        off = dict(self._disabled())
+        off[app_id] = snap
+        self.store.set_setting(DISABLED_KEY, off)
+        with self._lock:
+            self.loaded = {**self.loaded, app_id: LoadedApp(app_id, item.path, None, None, True)}
+        self._log(app_id, "disabled" + (f", stopped on {', '.join(stopped)}" if stopped else ""))
+        return {"ok": True, "stopped": stopped}
+
+    def enable(self, app_id: str) -> dict:
+        off = dict(self._disabled())
+        item = self.loaded.get(app_id)
+        if item is None and app_id not in off:
+            return {"ok": False, "error": f"no app {app_id!r}"}
+        off.pop(app_id, None)
+        self.store.set_setting(DISABLED_KEY, off)
+        if item is None:
+            self.reload()
+        else:
+            fresh = load_app(item.path)
+            with self._lock:
+                self.loaded = {**self.loaded, app_id: fresh}
+            if fresh.error:
+                self._log(app_id, f"load failed: {fresh.error}")
+        self._log(app_id, "enabled")
+        loaded = self.loaded.get(app_id)
+        return {"ok": True, "error": loaded.error if loaded else None}
+
+    def layout(self) -> list:
+        return self.store.setting(LAYOUT_KEY, []) or []
+
+    def set_layout(self, layout) -> dict:
+        """The Apps grid: its order and groups, as
+        ["app_id", {"id": "g1", "name": "Daily", "apps": ["pill", ...]}, ...].
+        Ids the server does not know are kept: an app may be back after a reload."""
+        if not isinstance(layout, list) or len(layout) > 500:
+            return {"ok": False, "error": "layout is a list of app ids and groups"}
+        clean, seen = [], set()
+
+        def app_id(x) -> str | None:
+            x = str(x)
+            if not x or len(x) > 64 or x in seen:
+                return None
+            seen.add(x)
+            return x
+
+        for entry in layout:
+            if isinstance(entry, dict):
+                apps = [a for a in map(app_id, entry.get("apps") or []) if a]
+                if apps:
+                    clean.append({"id": str(entry.get("id") or "")[:32] or f"g{len(clean)}",
+                                  "name": str(entry.get("name") or "Group").strip()[:40] or "Group",
+                                  "apps": apps})
+            elif isinstance(entry, str):
+                a = app_id(entry)
+                if a:
+                    clean.append(a)
+        self.store.set_setting(LAYOUT_KEY, clean)
+        return {"ok": True, "layout": clean}
+
+    def create(self, spec: dict, dry_run: bool = False) -> dict:
+        """The New app wizard: write inkapps/<id>/ and load it. With dry_run, only
+        return the files it would write (the wizard's review step)."""
+        try:
+            files = scaffold.files(spec)
+        except scaffold.SpecError as exc:
+            return {"ok": False, "error": str(exc)}
+        app_id = scaffold.check(spec)["id"]
+        folder = self.root / app_id
+        if folder.exists() or app_id in self.loaded:
+            return {"ok": False, "error": f"inkapps/{app_id}/ already exists"}
+        if dry_run:
+            return {"ok": True, "id": app_id, "files": files}
+        folder.mkdir(parents=True)
+        for name, text in files.items():
+            (folder / name).write_text(text, encoding="utf-8", newline="\n")
+        installed = dict(self.store.setting(INSTALLED_KEY, {}) or {})
+        installed[app_id] = time.time()
+        self.store.set_setting(INSTALLED_KEY, installed)
+        fresh = load_app(folder)
+        with self._lock:
+            self.loaded = {**self.loaded, app_id: fresh}
+        self._log(app_id, "created" + (f"; load failed: {fresh.error}" if fresh.error else ""))
+        return {"ok": True, "id": app_id, "files": files, "error": fresh.error}
 
     def _app(self, app_id: str) -> InkApp:
         item = self.loaded.get(app_id)
         if item is None:
             raise AppError(f"no app {app_id!r} in {self.root}")
+        if item.disabled:
+            raise AppError(f"app {app_id!r} is disabled")
         if item.app is None:
             raise AppError(f"app {app_id!r} did not load: {item.error}")
         return item.app

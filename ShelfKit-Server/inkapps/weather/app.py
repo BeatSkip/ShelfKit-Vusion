@@ -19,7 +19,7 @@ from shelfkit.inkservices import InkApp
 
 app = InkApp("weather", title="Weather and moon",
              description="The weather here today and the next two days, and the moon.",
-             layout="layout.xml")
+             layout="layout.xml", icon="sun")
 app.config_field("place", label="Place name, as shown on the tag", default="")
 app.config_field("latitude", label="Latitude (e.g. 52.09)", default="")
 app.config_field("longitude", label="Longitude (e.g. 5.12)", default="")

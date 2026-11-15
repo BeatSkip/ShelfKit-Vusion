@@ -20,7 +20,7 @@ from shelfkit.inkservices import InkApp
 
 app = InkApp("pill", title="Pill tracker",
              description="Tap the tag with your phone when you take your pill.",
-             layout="layout.xml")
+             layout="layout.xml", icon="pill")
 app.config_field("remind_at", label="Remind after (HH:MM)", default="20:00")
 app.config_field("pack_start", label="First day of the current pack (YYYY-MM-DD)", default="")
 app.config_field("break_days", label="Pill-free days per 28-day pack (0 or 7)", default="0")

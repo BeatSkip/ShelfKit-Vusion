@@ -137,16 +137,20 @@ class InkApp:
     layout="layout.xml"  an InkLayout file in the app's folder (Documentation/InkLayout.md),
                          filled with what @app.data returns (default: tag.data)
     @app.render          a Python function drawing on a Canvas; wins over a layout
+
+    icon="pill" picks the app's icon on the Apps tab from InkLayout's pixel icons
+    (the same ones <icon name="..."> draws); without one the tab shows its initial.
     """
 
     def __init__(self, app_id: str, title: str = "", description: str = "",
-                 layout: str | None = None) -> None:
+                 layout: str | None = None, icon: str | None = None) -> None:
         if not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", app_id):
             raise ValueError(f"app id {app_id!r}: use lower-case letters, digits, - and _")
         self.id = app_id
         self.title = title or app_id
         self.description = description
         self.layout = layout
+        self.icon = icon or None
         self.folder = None                      # set by the loader: the app's own folder
         self.render_fn: Callable | None = None
         self.data_fn: Callable | None = None
@@ -228,6 +232,7 @@ class InkApp:
 
     def describe(self) -> dict:
         return {"id": self.id, "title": self.title, "description": self.description,
+                "icon": self.icon,
                 "controls": [c.as_dict() for c in self.controls],
                 "config_fields": [f.as_dict() for f in self.config_fields],
                 "has_render": self.render_fn is not None or bool(self.layout),

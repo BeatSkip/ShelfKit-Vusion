@@ -1,11 +1,16 @@
 """HTTP routes for InkServices and InkLayout (admin side, 127.0.0.1 only).
 
-    GET  /api/inkapps                         apps, bindings, known tags
+    GET  /api/inkapps                         apps, bindings, known tags, the grid
     GET  /api/inkapps/preview.png?app=&tag=   an app's screen for a tag (nothing pushed)
     GET  /api/inkapps/log?app=                the app's log
     GET  /api/inkapps/data?app=               what the app has stored (settings, data, tables)
     GET  /api/inkapps/layout?app=             the app's layout file, as text
     POST /api/inkapps/reload                  re-import every app (picks up edits)
+    POST /api/inkapps/grid     {grid}         save the Apps grid: order and groups
+    POST /api/inkapps/disable  {app}          stop it everywhere and stop importing it
+    POST /api/inkapps/enable   {app}
+    POST /api/inkapps/create   {id, title, ..., dry_run?}   the New app wizard
+    GET  /api/layout/icons                    InkLayout's pixel icons, as rows of '#' and '.'
     POST /api/inkapps/bind     {tag, app, config?}
     POST /api/inkapps/unbind   {tag}
     POST /api/inkapps/config   {tag, config}
@@ -65,6 +70,10 @@ def handle_get(handler, path: str, query: dict) -> bool:
         md = skill.skill_markdown(q.get("display") or None, orientation)
         handler._send(HTTPStatus.OK, md.encode("utf-8"), "text/markdown; charset=utf-8")
         return True
+    if path == "/api/layout/icons":
+        from ..inklayout import icons
+        handler._json({"size": icons.BASE, "icons": dict(icons.ICONS)})
+        return True
     if not path.startswith("/api/inkapps"):
         return False
     host = _host(handler)
@@ -74,7 +83,7 @@ def handle_get(handler, path: str, query: dict) -> bool:
     if path == "/api/inkapps":
         base, local = handler.app.tag_page_base()
         handler._json({"apps": host.apps(), "bindings": host.store.app_bindings(),
-                       "tags": _tags(handler.app),
+                       "tags": _tags(handler.app), "grid": host.layout(),
                        "phone_base": base, "phone_base_local": local})
     elif path == "/api/inkapps/preview.png":
         tag = _hex(q.get("tag") or "0000")
@@ -128,6 +137,16 @@ def handle_post(handler, path: str, body: dict) -> bool:
     if path == "/api/inkapps/reload":
         host.reload()
         handler._json({"ok": True, "apps": host.apps()})
+        return True
+    if path == "/api/inkapps/grid":
+        handler._json(host.set_layout(body.get("grid")))
+        return True
+    if path in ("/api/inkapps/disable", "/api/inkapps/enable"):
+        app_id = str(body.get("app") or "")
+        handler._json(host.disable(app_id) if path.endswith("disable") else host.enable(app_id))
+        return True
+    if path == "/api/inkapps/create":
+        handler._json(host.create(body, dry_run=bool(body.get("dry_run"))))
         return True
 
     tag = _hex(body.get("tag"))

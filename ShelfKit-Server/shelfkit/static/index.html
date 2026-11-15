@@ -474,24 +474,58 @@
     </section>
 
     <!-- Apps (drawn by apps.js) -->
-    <section class="screen" data-screen="apps" aria-labelledby="apps-title" hidden>
-      <div class="screen-head">
-        <h1 id="apps-title">Apps</h1>
-        <p class="screen-note">Small programs on this server that draw a tag's screen and answer
-          its NFC link. A tag runs one app at a time, and every change reaches it at its next
-          check-in.</p>
-        <span class="grow"></span>
-        <a class="button quiet" href="/inkapps.html">Layout playground</a>
-        <button id="apps-reload" type="button"
-                title="Import every app in inkapps/ again, to pick up changes to their files">Reload apps</button>
+    <section class="screen" data-screen="apps" id="apps" aria-labelledby="apps-title" hidden>
+      <div id="apps-home">
+        <div class="screen-head">
+          <h1 id="apps-title">Apps</h1>
+          <span class="apps-legend" aria-hidden="true">
+            <span><i class="key is-run"></i>Running</span>
+            <span><i class="key is-idle"></i>Not running</span>
+          </span>
+          <span class="grow"></span>
+          <a class="button quiet" href="/inkapps.html">Layout playground</a>
+          <button id="apps-reload" type="button"
+                  title="Import every app in inkapps/ again, to pick up changes to their files">Reload apps</button>
+          <button id="apps-new" type="button" class="primary">New app</button>
+        </div>
+        <p class="screen-note">Small programs that draw a tag's screen and answer its NFC link. A tag
+          runs one app at a time, and every change reaches it at its next check-in. Drag to
+          rearrange, drop an app on another to group them, and right-click or hold an app for options.</p>
+        <p id="apps-problem" class="warning" hidden></p>
+        <div class="apps-grid" id="apps-grid" aria-label="Apps"></div>
+        <section class="apps-disabled" id="apps-disabled" aria-labelledby="apps-dis-title">
+          <div class="apps-dis-head">
+            <h2 id="apps-dis-title">Disabled</h2>
+            <span class="hint" id="apps-dis-count"></span>
+            <span class="grow"></span>
+            <span class="hint" id="apps-sort-label">Sort by</span>
+            <span class="apps-seg" role="group" aria-labelledby="apps-sort-label">
+              <button type="button" id="apps-sort-name" aria-pressed="true">Name</button>
+              <button type="button" id="apps-sort-date" aria-pressed="false">Install date</button>
+            </span>
+            <button type="button" id="apps-sort-dir" class="quiet" title="Reverse the order">A to Z</button>
+          </div>
+          <div class="apps-grid" id="apps-dis-grid"></div>
+        </section>
       </div>
-      <p id="apps-problem" class="warning" hidden></p>
-      <div class="apps" id="apps-body">
-        <nav class="apps-list" id="apps-list" aria-label="Installed apps"></nav>
-        <div class="apps-detail" id="apps-detail"></div>
+      <div class="apps-page" id="apps-page" hidden></div>
+
+      <div class="apps-scrim" id="apps-group" hidden>
+        <div class="apps-panel" id="apps-group-panel" role="dialog" aria-label="Group">
+          <input type="text" id="apps-group-name" class="apps-group-name" maxlength="40" aria-label="Group name">
+          <div class="apps-grid" id="apps-group-grid"></div>
+          <p class="hint">Drag an app out of the box to take it out of the group.</p>
+        </div>
       </div>
-      <p class="empty" id="apps-empty" hidden>No apps yet. An app is a folder with an
-        <code>app.py</code> in <code>ShelfKit-Server/inkapps/</code>. Add one and press Reload apps.</p>
+      <div class="apps-scrim" id="apps-wizard" hidden>
+        <div class="apps-panel apps-wizard" id="apps-wizard-panel" role="dialog" aria-modal="true"
+             aria-labelledby="wiz-heading"></div>
+      </div>
+      <div class="apps-scrim apps-sheet" id="apps-sheet" hidden>
+        <div class="apps-sheet-body" role="dialog" aria-modal="true"></div>
+      </div>
+      <div class="apps-menu" id="apps-menu" role="menu" hidden></div>
+      <div class="apps-toast" id="apps-toast" role="status" hidden></div>
     </section>
 
     <!-- Settings -->

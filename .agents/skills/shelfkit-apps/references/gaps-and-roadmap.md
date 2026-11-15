@@ -19,8 +19,8 @@ InkLayout leftovers: `<image>`, bundled fonts, and L4 (the model adapter plus ch
 ## Gaps observed in today's UI and backend
 
 App management:
-- **There is no install, update, remove, enable or disable.** An app exists because a folder exists. The only lifecycle control is **Reload apps**, which re-imports everything at once.
-- **There is no app metadata** beyond title and description: no version, author, source URL, icon, permissions (for example "fetches from api.open-meteo.com"), or changelog. Nothing in the UI shows where an app came from or what it may do.
+- **There is no install, update or delete.** An app exists because a folder exists. Disable/enable exists (2026-11-15): a disabled app is not imported and sits in the Apps tab's Disabled section.
+- **There is no app metadata** beyond title and description: no version, author, source URL, permissions (there is an `icon=`, one of InkLayout's pixel icons) (for example "fetches from api.open-meteo.com"), or changelog. Nothing in the UI shows where an app came from or what it may do.
 - **There are no fleet-level views.** Which app runs on which tag is visible only per app; the Fleet screen doesn't show it. You can't bind one app to several tags at once, even though Fleet has multi-select with Ctrl/Shift.
 - **The settings form is typeless.** Every field is a text input: there are no time, date, number, select or location pickers, no validation and no help text. The pill and weather apps ask for "HH:MM", "YYYY-MM-DD" and latitude/longitude as free text.
 - **Timers are opaque.** There is no last run, next run, last error or "run now" for a single timer. *Refresh now* runs all of them.
@@ -29,7 +29,7 @@ App management:
 - **Stored data is read-only JSON.** The app's own tables are row counts only. There is no editing, export, reset, or "forget this tag's data".
 
 App development:
-- **There is no in-UI way to create an app.** You make a folder and `app.py` in an editor, then press Reload.
+- **Creating an app is a wizard only.** New app (Apps tab) scaffolds `app.py`/`layout.xml` from a template; there is no editing in the UI after that.
 - **The playground is detached from apps.** It can load an app's layout but can't save it. Its data is hand-typed JSON, not the app's `@app.data` output or a real tag's data. It doesn't show the app's controls.
 - **There is no virtual tag.** Previewing works for any tag id, but actions, settings and Simulate NFC tap need the app *bound to a real tag*, which pushes to real hardware and costs battery.
 - **There is no code editing, versioning, diff or revert** in the UI. git exists in the repo, but there is nothing per app.

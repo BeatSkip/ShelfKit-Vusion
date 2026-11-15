@@ -1,5 +1,7 @@
 # The apps UI as it is today
 
+> **Changed 2026-11-15:** the Apps tab is now a home-screen grid (pixel-icon tiles; running = filled with a green tag-count badge, idle = dashed, failed = red), with drag-to-reorder, groups (drop an app on another), a context menu (start, stop, remove from group, disable), a sortable Disabled section, a New app wizard, and an app page with tag cards. The screenshots and the Apps tab section below show the old list layout.
+
 The screenshots in `../screenshots/` were taken 2026-11-15 from a copy of the user's data:
 - `apps-tab-hello-bound.png`: an app running on a tag, with stored data open.
 - `apps-tab-pill.png` and `apps-tab-weather.png`: apps not running on any tag, shown as a preview.
