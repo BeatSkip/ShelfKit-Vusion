@@ -36,6 +36,7 @@ const FILTERS = [
 const JOB_LABEL = {
   image: "Image", service: "Service label", firmware: "Firmware", id: "New ID",
   wipe: "Factory reset", read: "Flash read", interval: "Ping interval",
+  nfc: "NFC link",
 };
 const JOB_STATE = {
   pending: "Waiting for the tag", running: "Running", done: "Done", failed: "Failed",
@@ -154,6 +155,7 @@ const ui = {
   fleetForgetStale: $("fleet-forget-stale"),
   bulkPush: $("bulk-push"),
   bulkService: $("bulk-service"),
+  bulkNfc: $("bulk-nfc"),
   bulkForget: $("bulk-forget"),
   bulkClear: $("bulk-clear"),
 
@@ -219,6 +221,7 @@ const ui = {
   inspectorInterval: $("inspector-interval"),
   inspectorIntervalNote: $("inspector-interval-note"),
   inspectorService: $("inspector-service"),
+  inspectorNfc: $("inspector-nfc"),
   inspectorForm: $("inspector-form"),
   inspectorAliasInput: $("inspector-alias-input"),
   inspectorNotes: $("inspector-notes"),
@@ -526,6 +529,8 @@ function tagRows() {
       pollS,                                        // seconds between idle check-ins
       pollSet: detail.poll_s != null,               // false = firmware default, never set
       pollPending: detail.poll_pending_s ?? null,   // a change still waiting for the tag
+      nfcUrl: detail.nfc_url || null,               // what its NFC chip opens, as read back
+      nfcPending: !!detail.nfc_pending,
       silentAfter,
     };
   });
@@ -1669,6 +1674,8 @@ function renderInspector() {
     ["Reported", row.fw ? `${ageText(row.fw.age)} ago` : "Never"],
     ["Last push", row.push ? `${ageText(row.push.age)} ago` : "None"],
     ["Image", row.push ? row.push.name : "None"],
+    ["NFC link", row.nfcPending ? "Queued for its next check-in"
+      : row.nfcUrl || "Not written from here"],
   ];
   const signature = JSON.stringify(facts);
   if (signatures.facts !== signature) {
@@ -3220,6 +3227,21 @@ ui.bulkService.addEventListener("click", async () => {
   }
   if (queued) toast(`Queued service labels for ${plural(queued, "tag")}`);
 });
+ui.bulkNfc.addEventListener("click", async () => {
+  const hexes = [...picked];
+  let queued = 0;
+  for (const hex of hexes) {
+    try {
+      const payload = await postJSON(`/api/tags/${hex}/nfc`, {});
+      if (payload.result?.ok) queued += 1;
+      else toast(`${hex}: ${payload.result?.error || "not queued"}`, "bad");
+      render(payload.state);
+    } catch (err) {
+      toast(`${hex}: ${err.message}`, "bad");
+    }
+  }
+  if (queued) toast(`Queued NFC links for ${plural(queued, "tag")}`);
+});
 ui.bulkForget.addEventListener("click", () => {
   arm(ui.bulkForget, `Press again to forget ${plural(picked.size, "tag")}`, async () => {
     const addrs = [...picked];
@@ -3332,6 +3354,13 @@ ui.inspectorInterval.addEventListener("change", () => {
   queueCommand(inspected, "interval", { seconds },
     `Ping interval for ${inspected} queued: ${minutesText(seconds)}, from its next check-in`,
     ui.inspectorInterval);
+});
+ui.inspectorNfc.addEventListener("click", () => {
+  if (inspected) {
+    queueCommand(inspected, "nfc", {},
+      `NFC link queued for ${inspected}: written at its next check-in, then read back`,
+      ui.inspectorNfc);
+  }
 });
 ui.inspectorService.addEventListener("click", () => {
   if (inspected) {

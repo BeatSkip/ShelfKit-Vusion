@@ -64,7 +64,7 @@ def test_store(tmp: Path) -> None:
     db.close()
     s = store_mod.Store(old)
     version = s._db.execute("PRAGMA user_version").fetchone()[0]
-    check("migrates to 5", version == 5, version)
+    check("migrates to the current schema", version == store_mod.SCHEMA_VERSION, version)
     s.bind_app("0301", "hello")
     check("migrated db takes bindings", s.app_binding("0301") is not None)
     s.close()

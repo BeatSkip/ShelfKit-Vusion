@@ -51,6 +51,7 @@ Results of actions use `{ok, pushed, skipped: null | "identical" | "no on_open",
 Related server APIs a UI may want:
 - `GET /api/poll`: the whole fleet state, including each tag's status, battery, last push and the queue. The main page draws from it.
 - `POST /api/prefs`: settings, including `public_url`.
+- `POST /api/tags/<hex>/nfc`: queues writing `<public_url>/tag/<ID>` to the tag's NFC chip at its next check-in (read back afterwards). Answers `{result, state}`. The tag's state carries `nfc_url` (as read back) and `nfc_pending`.
 - The queue screen's APIs: the queue shows app pushes as `kind=image, source=app`.
 
 ## Phone pages (no JavaScript, strict CSP, relative links)

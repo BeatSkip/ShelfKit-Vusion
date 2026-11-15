@@ -394,7 +394,9 @@
             <div class="row">${controls}
               ${a.has_on_open ? '<button type="button" data-open title="Runs what an NFC tap runs">Simulate NFC tap</button>' : ""}
             </div></div>` : ""}
-          <p class="hint">${phone}</p>
+          <p class="hint">${phone}${A.list.phone_base_local ? "" : `
+            <button type="button" data-nfc="${tag}"
+              title="Write this link to the tag's NFC chip over the radio, at its next check-in. It is read back afterwards.">Write to the tag</button>`}</p>
         </div>
       </section>`;
   }
@@ -532,7 +534,14 @@
   async function act(button, path, body, after) {
     if (button) button.disabled = true;
     try {
-      A.msg = outcome(await api(path, body));
+      const r = await api(path, body);
+      if (r.result && r.state) {          // /api/tags/<hex>/...: the queue's answer
+        A.msg = r.result.ok
+          ? { text: "Queued. The tag's NFC chip gets this link at its next check-in, then it is read back.", bad: false }
+          : { text: r.result.error || "Not queued.", bad: true };
+      } else {
+        A.msg = outcome(r);
+      }
     } catch (err) {
       A.msg = { text: err.message, bad: true };
     }
@@ -1184,6 +1193,7 @@
       const input = b.parentElement.querySelector("[data-text]");
       act(b, "/api/inkapps/action", { tag, action: b.dataset.send, value: input.value });
     } else if (b.matches("[data-open]")) act(b, "/api/inkapps/open", { tag });
+    else if (b.dataset.nfc) act(b, `/api/tags/${b.dataset.nfc}/nfc`, {});
   });
 
   $("apps-reload").addEventListener("click", async () => {

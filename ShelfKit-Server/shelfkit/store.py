@@ -20,7 +20,7 @@ import threading
 import time
 from pathlib import Path
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 MAX_EVENTS = 5000      # keep the newest N; the Logs screen never shows more
 MAX_BITMAPS = 64       # content store ceiling (each row ~15 KB of blobs)
 
@@ -50,6 +50,8 @@ CREATE TABLE IF NOT EXISTS tags (
     life_days   INTEGER,               -- estimated battery life from that
     fw_at       REAL,                  -- when that report arrived
     poll_s      INTEGER,               -- idle check-in interval the tag acknowledged (SM_OP_SET_POLL)
+    nfc_url     TEXT,                  -- the link its NFC chip holds, as read back after writing it
+    nfc_at      REAL,
     created_at  REAL NOT NULL
 );
 
@@ -144,12 +146,19 @@ class Store:
         if version == 0:
             self._db.executescript(_SCHEMA)
         else:
+            # columns that are already there are skipped: a half-migrated file must open
+            have = {row[1] for row in self._db.execute("PRAGMA table_info(tags)")}
+            added = []
             if version == 1:
-                for column in ("fw_version TEXT", "fw_build INTEGER", "avg_ua INTEGER",
-                               "life_days INTEGER", "fw_at REAL"):
-                    self._db.execute(f"ALTER TABLE tags ADD COLUMN {column}")
+                added += ["fw_version TEXT", "fw_build INTEGER", "avg_ua INTEGER",
+                          "life_days INTEGER", "fw_at REAL"]
             if version <= 5:
-                self._db.execute("ALTER TABLE tags ADD COLUMN poll_s INTEGER")
+                added.append("poll_s INTEGER")
+            if version <= 7:
+                added += ["nfc_url TEXT", "nfc_at REAL"]
+            for column in added:
+                if column.split()[0] not in have:
+                    self._db.execute(f"ALTER TABLE tags ADD COLUMN {column}")
             if version <= 6:
                 columns = {row[1] for row in self._db.execute("PRAGMA table_info(voltage)")}
                 if columns and "fw" not in columns:
@@ -299,8 +308,10 @@ class Store:
         return out
 
     def update_tag(self, hex_id: str, **fields) -> dict | None:
-        """Set editable tag fields: alias, notes, grid_row, grid_col, battery, last_status, poll_s."""
-        allowed = {"alias", "notes", "grid_row", "grid_col", "battery", "last_status", "poll_s"}
+        """Set editable tag fields: alias, notes, grid_row, grid_col, battery, last_status, poll_s,
+        nfc_url, nfc_at."""
+        allowed = {"alias", "notes", "grid_row", "grid_col", "battery", "last_status", "poll_s",
+                   "nfc_url", "nfc_at"}
         sets = {k: v for k, v in fields.items() if k in allowed}
         with self._lock:
             self._ensure_tag(hex_id, time.time())

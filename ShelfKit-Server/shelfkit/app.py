@@ -344,6 +344,7 @@ class App:
                 "row": row["grid_row"],
                 "col": row["grid_col"],
                 "poll_s": row.get("poll_s"),
+                "nfc_url": row.get("nfc_url"),
             }
         if self.image is not None:
             # Re-render so the preview and its thumbnails are live again.
@@ -864,6 +865,12 @@ class App:
                     # never set, it runs on the firmware default) and what is still queued
                     "poll_s": meta.get("poll_s"),
                     "poll_default_s": POLL_DEFAULT_S,
+                    # the link a phone opens, as last read back from the tag's NFC chip,
+                    # and whether a write is still queued
+                    "nfc_url": meta.get("nfc_url"),
+                    "nfc_pending": any(
+                        j["addr"] == addr and j["kind"] == "nfc"
+                        and j["state"] in ("pending", "running") for j in self.queue),
                     "poll_pending_s": next(
                         (j["params"].get("seconds") for j in reversed(self.queue)
                          if j["addr"] == addr and j["kind"] == "interval"
@@ -1269,7 +1276,11 @@ class App:
         self._rename_tag(addr, new)
         with self.lock:
             self.status = f"{addr:04X} is now {new:04X}"
+            had_link = bool((self.tag_meta.get(new) or {}).get("nfc_url"))
         self._event("assign", f"{new:04X}", f"was {addr:04X}")
+        if had_link:
+            # its NFC link still ends in the old id: point it at the new one
+            self.queue_nfc_link(new)
         return {"ok": True, "old": f"{addr:04X}", "id": f"{new:04X}"}
 
     # ── wireless firmware update ────────────────────────────────────────────
@@ -1736,6 +1747,122 @@ class App:
             return {"ok": False, "error": f"{seconds} s is not one of the offered intervals"}
         return self.enqueue("interval", addr, f"check in every {seconds} s", seconds=seconds)
 
+    # ── the NFC link (SM_OP_NFC_WRITE) ──────────────────────────────────────
+    def nfc_link_for(self, addr: int) -> tuple[str | None, str | None]:
+        """(the link this tag's NFC chip should hold, or None and why not)."""
+        from . import nfclink
+
+        base, local = self.tag_page_base()
+        if not base:
+            return None, "the server does not know its own address yet"
+        if local:
+            return None, ("only this computer can open the tag pages: set Settings > "
+                          "Tag pages for phones > Address phones use first")
+        return nfclink.tag_url(base, f"{addr:04X}"), None
+
+    def queue_nfc_link(self, addr: int) -> dict:
+        """Queue writing the tag's NFC link for its next check-in."""
+        url, problem = self.nfc_link_for(addr)
+        if url is None:
+            return {"ok": False, "error": problem}
+        return self.enqueue("nfc", addr, f"NFC link {url}")
+
+    def _read_nfc(self, key: str, addr: int, length: int, cancel) -> bytes | None:
+        """Read `length` bytes of the tag's NFC chip from the CC on, over the radio.
+
+        Same path as a flash read-back (SM_OP_FLASH_DUMP), with SM_DUMP_NFC in the
+        address: the tag answers with DATA frames the hub prints as flash=...
+        """
+        from . import flashdump, nfclink
+
+        pane = self.panes[key]
+        start = nfclink.SM_DUMP_NFC | nfclink.CC_ADDR
+        with self.lock:
+            from_seq = pane.seq
+        if not self._send_frame(key, addr, flashdump.request_payload(start, length), cancel):
+            return None
+        have: dict[int, bytes] = {}
+        deadline = time.monotonic() + DUMP_PAGE_TIMEOUT_S
+        while time.monotonic() < deadline and not cancel.is_set():
+            with self.lock:
+                fresh = [entry for entry in pane.log if entry[0] > from_seq]
+            for _seq, _arrival, _stamp, line in fresh:
+                parsed = flashdump.parse_line(line)
+                if (parsed and int(parsed[0], 16) == addr
+                        and start <= parsed[1] < start + length):
+                    have[parsed[1] - start] = parsed[2]
+            if fresh:
+                from_seq = fresh[-1][0]
+            data = bytearray(length)
+            got = 0
+            for off, chunk in have.items():
+                part = chunk[:length - off]
+                data[off:off + len(part)] = part
+                got += len(part)
+            if got >= length:
+                return bytes(data)
+            time.sleep(0.05)
+        return None
+
+    def write_nfc_link(self, addr: int) -> dict:
+        """Make the tag's NFC chip open <phone address>/tag/<ID>.
+
+        Reads the chip, writes only the pages that differ (the CC first, the start of the
+        message last), then reads it back: the link-layer ACK only says a frame arrived,
+        and a tag without SM_OP_NFC_WRITE (firmware before 1.1.0-54) ignores it.
+        """
+        from . import nfclink
+
+        url, problem = self.nfc_link_for(addr)
+        if url is None:
+            return {"ok": False, "error": problem}
+        try:
+            want = nfclink.image(url)
+        except ValueError as exc:
+            return {"ok": False, "error": str(exc)}
+        key = self.hub_key()
+        pane = self.panes.get(key)
+        if pane is None:
+            return {"ok": False, "error": "no hub pane"}
+        if not pane.worker.is_open:
+            return {"ok": False, "error": f"open the {pane.spec.name} port first"}
+        cancel = threading.Event()
+        if not self._ping_hub(key, cancel):
+            return {"ok": False, "error": "the hub did not answer P"}
+        hex_code = f"{addr:04X}"
+        with self.lock:
+            self.status = f"writing the NFC link of {hex_code} ..."
+        have = self._read_nfc(key, addr, len(want), cancel)
+        frames = nfclink.write_frames(want, have)
+        for frame in frames:
+            if not self._send_frame(key, addr, frame, cancel):
+                return {"ok": False, "error": "the tag did not acknowledge the NFC write"}
+            # the tag writes up to 7 EEPROM pages (~20 ms each) before it listens again
+            time.sleep(0.25)
+        back = self._read_nfc(key, addr, len(want), cancel) if frames else have
+        if back is None:
+            return {"ok": False, "error": "the tag did not send its NFC chip back"}
+        if back != want:
+            if back[:4] != want[:4] and back[4:] == want[4:]:
+                why = (f"the chip kept its capability container ({back[:4].hex(' ')}): "
+                       "phones may still see it as read-only")
+            else:
+                why = ("the chip does not hold the link - does the tag run firmware "
+                       "1.1.0-54 or newer?")
+            with self.lock:
+                self.status = f"{hex_code}: NFC link not written"
+            return {"ok": False, "error": why}
+        now = time.time()
+        with self.lock:
+            meta = self.tag_meta.setdefault(addr, {"alias": None, "notes": None,
+                                                   "row": None, "col": None})
+            meta["nfc_url"] = url
+            self.status = f"{hex_code} now opens {url}"
+        if self.store is not None:
+            self.store.update_tag(hex_code, nfc_url=url, nfc_at=now)
+        self._event("nfc", hex_code, url if frames else f"{url} (already there)")
+        return {"ok": True, "id": hex_code, "url": url, "written": len(frames)}
+
     def _fw_of(self, addr: int, now: float) -> dict | None:
         """Firmware version and power figures from the tag's last tapped poll, if any."""
         info = self.tag_fw.get(addr)
@@ -2107,11 +2234,11 @@ class App:
                     )
                 except Exception as exc:  # noqa: BLE001 - report at click time
                     return {"ok": False, "error": f"cannot prepare the image: {exc}"}
-            if kind == "interval":
+            if kind in ("interval", "nfc"):
                 # only the newest choice matters: drop one that is still waiting
                 self.queue = [j for j in self.queue
                               if not (j["addr"] == addr and j["state"] == "pending"
-                                      and j["kind"] == "interval")]
+                                      and j["kind"] == kind)]
             source = params.get("source")
             if source:
                 # One pending image per tag from the same source (an InkService app):
@@ -2382,6 +2509,9 @@ class App:
                 ok, error = bool(finished.get("ok")), finished.get("error")
             elif kind == "interval":
                 finished = self.set_poll_interval(addr, params.get("seconds"))
+                ok, error = bool(finished.get("ok")), finished.get("error")
+            elif kind == "nfc":
+                finished = self.write_nfc_link(addr)
                 ok, error = bool(finished.get("ok")), finished.get("error")
             else:
                 error = f"unknown queued command {kind!r}"

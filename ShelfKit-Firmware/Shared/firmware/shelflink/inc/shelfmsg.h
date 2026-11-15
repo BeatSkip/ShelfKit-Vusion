@@ -168,4 +168,26 @@
 #define SM_OP_SET_POLL      13
 #define SM_POLL_S_MIN       30
 
+/*
+ * NFC chip write (hub -> tag), one DATA frame:
+ *   [0]  SM_OP_NFC_WRITE, [1..2] EEPROM address (LE), [3..] 4..SM_NFC_CHUNK bytes
+ *
+ * Writes whole 4-byte pages of the NFC chip (FM11NT081D, an NFC Forum Type 2 tag) over
+ * its wired SPI side, then reads them back (logged as "nfc wr <addr> ok|FAILED"). The
+ * address and the length must be multiples of 4 and stay inside SM_NFC_LO..SM_NFC_HI:
+ * the capability container and the user area. The UID, the one-time lock bytes and the
+ * configuration pages cannot be reached. This is how the server writes the link a
+ * phone opens: a CC that says "writable, 888 bytes" (E1 10 6F 00 at 0x00C) and the
+ * NDEF message from 0x010.
+ *
+ * Reading the chip back goes through SM_OP_FLASH_DUMP with SM_DUMP_NFC set in the top
+ * address byte: the replies carry that address, flag included.
+ */
+#define SM_OP_NFC_WRITE     14
+#define SM_NFC_HDR          3
+#define SM_NFC_CHUNK        28      /* SL_MAX_PAYLOAD - SM_NFC_HDR, rounded down to pages */
+#define SM_NFC_LO           0x00C   /* capability container */
+#define SM_NFC_HI           0x388   /* end of the user area (dynamic lock bytes follow) */
+#define SM_DUMP_NFC         0x80    /* in request byte [3]: read the NFC chip, not the flash */
+
 #endif /* SHELFMSG_H */

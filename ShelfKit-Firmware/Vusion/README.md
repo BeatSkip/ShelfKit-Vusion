@@ -52,7 +52,7 @@ Everything tag-specific is in one header:
 | `SHELF_STATS_EVERY` | Print the `pow …` link/power summary every N polls (2) |
 | `SHELF_RADIO_SLEEP`, `SHELF_RADIO_DEEPSLEEP`, `SHELF_MCU_SLEEP`, `SHELF_XTAL_OFF` | The low-power switches (all but `SHELF_XTAL_OFF` are on), see [Power](#power) |
 | `SHELF_NFC_POLL`, `SHELF_NFC_RAIL_HOLD`, `SHELF_NFC_PROBE` | NFC wake-on-field (1, 1, 0): a falling edge on PB3 wakes the tag and polls; the rail is held on because with it off PB3 floats and re-triggers every cycle (seen on hardware: a poll every 1.8 s). A storm guard suspends the feature for ~30 poll cycles after 4 consecutive NFC-triggered cycles |
-| `SHELF_NFC_URL`, `SHELF_NFC_NDEF_SYNC` | What a phone reads from the tag ("", 1): empty = the phone detects the tag and opens nothing. At boot the tag compares the NFC chip's NDEF area (Type 2, from 0x010) with this and rewrites it only if it differs. A URL (max 48 chars) adds ~100 B of code, which the OTA window cannot take right now (see Documentation/power-audit.md for the size budget) |
+| `SHELF_NFC_URL`, `SHELF_NFC_NDEF_SYNC` | ("", 0) The tag leaves its NFC chip alone at boot: the server writes the link over the radio (`SM_OP_NFC_WRITE`, from 1.1.0-54; see "The NFC link" below). With `SHELF_NFC_NDEF_SYNC 1` the tag instead compares the chip's NDEF area (Type 2, from 0x010) with `SHELF_NFC_URL` at every boot and rewrites it if it differs, which overwrites the server's link |
 | `SHELF_FLASH_POWER_ON`, `SHELF_WIPE_FIRST_BOOT` | Switch the flash rail around every flash access; wipe the owned flash sectors on a first boot |
 | `SHELF_POWER_LINES` | Hold the panel supply (U4, PA5) on from boot. Not a radio setting; leave off — the image path powers the panel around each image. PA2 (U5) is always parked low |
 
@@ -110,6 +110,27 @@ also park tags itself — `L<hh>` on its console makes every reply carry a delay
 
 Counters reset on the first answered poll, and the day-based steps use uptime, so a
 tag that comes back into range returns to the base interval immediately.
+
+## The NFC link
+
+What a phone opens when it touches the tag is set from the server: Fleet > a tag's
+inspector > **Write NFC link** (or **Write NFC links** for a selection), or **Write to the
+tag** under an app's NFC link. The link is Settings > Tag pages for phones > *Address phones
+use*, then `/tag/<ID>`. It is queued for the tag's next check-in.
+
+- `SM_OP_NFC_WRITE` (`shelfmsg.h`) carries an EEPROM address and up to 28 bytes (7 pages).
+  `fw_rx.c` checks that both are page aligned and inside the CC + user area
+  (`0x00C`..`0x387`): the UID, the one-time lock bytes and the configuration pages can't be
+  reached. `nfc_write()` (`nfc_cfg.c`) writes over the bit-banged SPI side and reads back.
+- Reading the chip back: `SM_OP_FLASH_DUMP` with `SM_DUMP_NFC` (0x80) in the top address byte.
+- The server (`shelfkit/nfclink.py`, `App.write_nfc_link`) reads the chip, writes only the
+  chunks that differ (the one with the start of the message last), reads it back and
+  compares. A tag on older firmware ignores the op, and the read-back says so.
+- SES ships the chip with a capability container a phone reads as "0 bytes, not writable"
+  (`E1 10 00 0F`-like). Over NFC its bits can only be set, so a phone can't fix it. The
+  server writes `E1 10 6F 00` (NDEF 1.0, 888 bytes, open) through the wired side. If the
+  chip kept its old CC, the read-back reports exactly that.
+- An id change (`SM_OP_SET_ID`) re-queues the link of a tag that had one, with the new id.
 
 ## Polling on an NFC field
 

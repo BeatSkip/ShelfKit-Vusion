@@ -92,12 +92,13 @@
 #ifndef SHELF_NFC_RAIL_HOLD
 #define SHELF_NFC_RAIL_HOLD     1
 #endif
-/* What a phone gets from the tag. "" = an empty NDEF message: the phone detects the tag and
- * opens nothing. To open a page later, put it here in full, e.g. "https://example.com/t"
- * (at most 48 characters). With SHELF_NFC_NDEF_SYNC 1 the tag compares the chip's NDEF area
- * with this at every boot and rewrites it only when it differs (a few EEPROM pages, once). */
+/* What a phone gets from the tag. The server writes it over the radio (SM_OP_NFC_WRITE:
+ * Settings > "Address phones use" + /tag/<ID>), so by default the tag leaves the chip alone.
+ * SHELF_NFC_NDEF_SYNC 1 instead makes the tag compare the chip's NDEF area with SHELF_NFC_URL
+ * at every boot and rewrite it when it differs - which also overwrites the server's link, so
+ * the two do not mix. "" = an empty NDEF message (the phone detects the tag, opens nothing). */
 #define SHELF_NFC_URL           ""
-#define SHELF_NFC_NDEF_SYNC     1
+#define SHELF_NFC_NDEF_SYNC     0
 /* 1 = read the NFC chip's UID and dump its configuration area at boot. Read-only. */
 #define SHELF_NFC_PROBE         0
 

@@ -24,6 +24,7 @@
 
 #include "flash.h"
 #include "fw_rx.h"
+#include "nfc_cfg.h"
 #include "shelfhw.h"
 #include "shelf_id.h"
 #include "shelflink.h"
@@ -223,9 +224,11 @@ uint8_t fw_rx_data(const uint8_t __xdata *payload, uint8_t len)
             log_puts("dump bad len\r\n");
             break;
         }
-        extflash_power_up();
-        spi_init();
-        extflash_release_powerdown();
+        if (!(msg[3] & SM_DUMP_NFC)) {  /* nfc_read() takes the NFC chip itself */
+            extflash_power_up();
+            spi_init();
+            extflash_release_powerdown();
+        }
         dump_fail = 0;
         dump_active = 1;
         log_puts("dump ");
@@ -261,6 +264,22 @@ uint8_t fw_rx_data(const uint8_t __xdata *payload, uint8_t len)
         log_dec(id);
         log_nl();
         break;
+    case SM_OP_NFC_WRITE:
+        /* whole pages inside the CC + user area only: a stray write to the one-time
+         * lock bytes would make the chip read-only for good */
+        id = (uint16_t)msg[1] | ((uint16_t)msg[2] << 8);
+        nfc_len = (uint8_t)(len - SM_NFC_HDR);
+        if (len <= SM_NFC_HDR || (nfc_len & 3) || (id & 3)
+            || id < SM_NFC_LO || id + nfc_len > SM_NFC_HI) {
+            log_puts("nfc wr bad\r\n");
+            break;
+        }
+        nfc_addr = id;
+        nfc_wsrc = msg + SM_NFC_HDR;
+        log_puts("nfc wr ");
+        log_hex16(id);
+        log_puts(nfc_write() ? " ok\r\n" : " FAILED\r\n");
+        break;
     default:
         return 0;
     }
@@ -275,7 +294,7 @@ uint8_t fw_dump_active(void)
 
 void fw_dump_step(void)
 {
-    uint8_t n;
+    uint8_t n, i;
 
     if (dump_active != 1 || sl_busy())
         return;
@@ -285,7 +304,15 @@ void fw_dump_step(void)
     dump_frame[2] = (uint8_t)(dump_addr >> 8);
     dump_frame[3] = (uint8_t)(dump_addr >> 16);
     dump_frame[4] = n;
-    extflash_read(dump_addr, dump_frame + SM_DUMP_HDR, n);
+    if ((uint8_t)(dump_addr >> 16) & SM_DUMP_NFC) {
+        nfc_addr = (uint16_t)dump_addr;
+        nfc_len = n;
+        nfc_read();
+        for (i = 0; i < n; i++)
+            dump_frame[SM_DUMP_HDR + i] = nfc_buf[i];
+    } else {
+        extflash_read(dump_addr, dump_frame + SM_DUMP_HDR, n);
+    }
 
     dump_active = 2;
     if (sl_send(SL_NODE_HUB, SL_T_DATA, dump_frame, (uint8_t)(SM_DUMP_HDR + n)) != SL_OK) {

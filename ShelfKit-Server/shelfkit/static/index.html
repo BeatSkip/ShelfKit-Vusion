@@ -129,6 +129,8 @@
         <span id="fleet-selected"></span>
         <button id="bulk-push" class="primary" type="button">Push image</button>
         <button id="bulk-service" type="button">Send service labels</button>
+        <button id="bulk-nfc" type="button"
+                title="Make each tag's NFC chip open its own page: the address in Settings > Tag pages for phones, then /tag/ and the tag's ID">Write NFC links</button>
         <button id="bulk-forget" class="danger" type="button">Forget</button>
         <span class="grow"></span>
         <button id="bulk-clear" class="quiet" type="button">Clear selection</button>
@@ -700,6 +702,8 @@
             <p id="inspector-interval-note" class="interval-note" hidden></p>
             <button id="inspector-service" type="button"
                     title="Draw a label with this tag's ID, alias and notes, then send it">Send service label</button>
+            <button id="inspector-nfc" type="button"
+                    title="Make the tag's NFC chip open this tag's page: the address in Settings > Tag pages for phones, then /tag/ and its ID. Sent at its next check-in, then read back.">Write NFC link</button>
             <button id="inspector-diag" type="button"
                     title="The battery plot at full size and this tag's whole log">Diagnostics</button>
           </div>

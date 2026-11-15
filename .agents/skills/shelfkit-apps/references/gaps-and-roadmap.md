@@ -7,7 +7,7 @@
 | 1 | SDK and host core (InkApp, AppHost, per-app DB, duplicate and burst suppression, render CLI) | done |
 | 2 | Apps tab (list, bind/unbind, config form, preview, Refresh now, data viewer, log) | done |
 | 3 | Phone pages `/tag/<ID>` (forms, on_open, reverse-proxy friendly) | done |
-| 4 | Firmware: the tag keeps a phone-written NFC URL and appends its own id after `/tag/` | planned (firmware) |
+| 4 | NFC link on the tag: the server writes `<address>/tag/<ID>` over the radio (Fleet inspector "Write NFC link", the bulk bar, the app page's "Write to the tag"); firmware 1.1.0-54 | done (differently: server-written, not phone-written) |
 | 5 | Timers (`@app.every`) and the reference apps pill and weather | done |
 | 6 | **Development mode**: a setting that shows a Dev tab. New app from a template, code editor, virtual tag (preview plus the phone page in a frame), reload, exceptions and log, stats (renders, pushes, skipped duplicates, errors), version history via `git` in the app folder. Tabs: Design / Description & versions / Backend / Debug & stats | not started |
 | 7 | **Install from git and isolation**: "Install from GitHub URL" (`git clone --depth 1` into `inkapps/`), manifest check, installed **disabled**. One subprocess per app (JSON lines over stdin/stdout). Update and remove | not started |

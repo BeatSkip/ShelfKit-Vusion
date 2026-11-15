@@ -113,9 +113,10 @@ static uint8_t __xdata nfc_uid[9];  /* SN0..2, BCC0, SN3..6, BCC1 */
 /* One read command reaches 256 bytes (A9:A8 are in the command byte), so a block is
  * read in one go into this buffer; the addresses are file scope because the tag has no
  * internal RAM for a parameter block. */
-static uint16_t __xdata nfc_addr;
-static uint8_t __xdata nfc_len;
-static uint8_t __xdata nfc_buf[64];
+uint16_t __xdata nfc_addr;
+uint8_t __xdata nfc_len;
+uint8_t __xdata nfc_buf[64];
+const uint8_t __xdata * __xdata nfc_wsrc;
 
 /* Read nfc_len bytes at nfc_addr into nfc_buf. No arguments: see above. */
 static void nfc_read_block(void)
@@ -249,13 +250,59 @@ static void nfc_ee_write_page(uint16_t addr, uint8_t off)
  * boot this is one read. Pages are 4 bytes; file-scope variables because there is no spare
  * internal RAM. */
 #define NFC_EE_USER     0x010
+static uint8_t __xdata nfc_i;
+static uint8_t __xdata nfc_page;
+
+/* ── reads and writes the server asks for (SM_OP_NFC_WRITE, SM_OP_FLASH_DUMP with
+ * SM_DUMP_NFC) ──────────────────────────────────────────────────────────────────────
+ * The bit-banged pads are taken and given back around each call, so the panel and the
+ * flash find the hardware SPI as they left it. With SHELF_NFC_RAIL_HOLD the rail is
+ * already up; powering it up again would glitch it (pwr_init() drives it off first). */
+static void nfc_take(void)
+{
+#if !SHELF_NFC_RAIL_HOLD
+    extflash_power_up();
+#endif
+    nfc_bb_init();
+}
+
+static void nfc_give(void)
+{
+    nfc_bb_release();
+#if !SHELF_NFC_RAIL_HOLD
+    extflash_power_down();
+#endif
+}
+
+void nfc_read(void)
+{
+    nfc_take();
+    nfc_read_block();
+    nfc_give();
+}
+
+uint8_t nfc_write(void)
+{
+    nfc_take();
+    for (nfc_page = 0; nfc_page < nfc_len; nfc_page += 4) {
+        for (nfc_i = 0; nfc_i < 4; nfc_i++)
+            nfc_ee[nfc_i] = nfc_wsrc[nfc_page + nfc_i];
+        nfc_ee_write_page(nfc_addr + nfc_page, 0);
+    }
+    nfc_read_block();
+    nfc_give();
+    for (nfc_i = 0; nfc_i < nfc_len; nfc_i++)
+        if (nfc_buf[nfc_i] != nfc_wsrc[nfc_i])
+            return 0;
+    return 1;
+}
+
+#if SHELF_NFC_NDEF_SYNC
 #define NFC_URL_LEN     (sizeof(SHELF_NFC_URL) - 1)
 #define NFC_NDEF_LEN    (NFC_URL_LEN ? NFC_URL_LEN + 8 : 3)
 typedef char nfc_url_fits[(NFC_URL_LEN <= 48) ? 1 : -1];
 
 static const char __code nfc_url[] = SHELF_NFC_URL;
-static uint8_t __xdata nfc_i;
-static uint8_t __xdata nfc_page;
 static uint8_t __xdata nfc_state;   /* 0 ok, 1 written, 2 failed, 3 no Type 2 header */
 
 /* wanted byte nfc_i of the NDEF TLV (bytes past its end: the old content is kept) */
@@ -315,6 +362,7 @@ static void nfc_ndef_sync(void)
     if (nfc_ndef_differs())
         nfc_state = 2;
 }
+#endif /* SHELF_NFC_NDEF_SYNC */
 
 void nfc_cfg_fd(void)
 {
