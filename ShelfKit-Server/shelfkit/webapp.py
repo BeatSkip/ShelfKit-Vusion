@@ -67,6 +67,7 @@ from __future__ import annotations
 
 import json
 import mimetypes
+import sys
 import threading
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -505,9 +506,19 @@ def lan_address() -> str:
         return "127.0.0.1"
 
 
+class QuietServer(ThreadingHTTPServer):
+    """A browser or proxy that drops a keep-alive connection (reload, closed tab, a
+    phone going to sleep) is normal: don't print a traceback for it."""
+
+    def handle_error(self, request, client_address):
+        if isinstance(sys.exc_info()[1], (ConnectionResetError, ConnectionAbortedError, BrokenPipeError)):
+            return
+        super().handle_error(request, client_address)
+
+
 def make_server(app: App, host: str = "127.0.0.1", port: int = 8765) -> ThreadingHTTPServer:
     handler = type("ShelfKitHandler", (Handler,), {"app": app})
-    server = ThreadingHTTPServer((host, port), handler)
+    server = QuietServer((host, port), handler)
     server.daemon_threads = True
     # where the tag pages are, unless Settings names the address phones use (a proxy)
     bound, real_port = server.server_address[:2]
