@@ -77,9 +77,10 @@ Ctrl+C to stop
 
 Ports named on the command line are opened at startup; ports that only come from the auto-detected
 list are pre-filled but left closed. `--baud` sets the initial rate for both panes (default 115200,
-the firmware's UART0 rate). The page listens on **127.0.0.1** by default — it can drive a serial port
-and read image files on this machine, so it is not meant to be reachable from elsewhere;
-`--host 0.0.0.0` is there deliberately if you want it on your LAN.
+the firmware's UART0 rate). The page listens on **0.0.0.0** (every interface) by default, so other
+machines on your LAN can open it at `http://<this PC's IP>:8765/`; the startup line prints that
+address. It can drive serial ports and flash tags, so keep it off untrusted networks, or pass
+`--host 127.0.0.1` to allow only this machine. Windows may ask to let Python through the firewall.
 
 ### Opening the ports
 
@@ -189,7 +190,7 @@ POST /api/flash/cancel   stop it
 debugger flash of an image without the bootloader). The code is in `shelfkit/flasher.py`.
 
 Every POST is refused with 403 when its `Origin` is another site: a page you happen to have open can
-send a form to `127.0.0.1`, and this server drives serial ports and runs the flasher.
+send a form to this server's address, and this server drives serial ports and runs the flasher.
 
 ## The working parts, in detail
 

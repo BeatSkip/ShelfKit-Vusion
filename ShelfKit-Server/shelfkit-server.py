@@ -13,9 +13,10 @@ tag picked from the ones that announced themselves:
 
 Ports named on the command line are opened at startup; ports only picked up from
 the auto-detected list are pre-filled but left closed, so nothing is grabbed
-without asking. The page is served on 127.0.0.1 by default - it can drive a
-serial port and read image files on this machine, so it is not meant to be
-reachable from anywhere else.
+without asking. The page listens on every interface (0.0.0.0) by default, so
+other machines on the LAN can open it. It can drive serial ports and flash tags,
+so keep it off untrusted networks, or pass --host 127.0.0.1 to allow only this
+machine.
 
 Both handshake lines start RELEASED (DTR low, RTS low). On this tag DTR is the
 BOOT pin and RTS is the RESET line, so that is the state which neither resets the
@@ -70,7 +71,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument(
         "--baud", type=int, default=DEFAULT_BAUD, help=f"initial baud rate (default {DEFAULT_BAUD})"
     )
-    ap.add_argument("--host", default="127.0.0.1", help="bind address (default 127.0.0.1)")
+    ap.add_argument("--host", default="0.0.0.0",
+                    help="bind address (default 0.0.0.0, every interface; "
+                         "127.0.0.1 = this machine only)")
     ap.add_argument(
         "--port", type=int, default=8765, help="HTTP port, 0 picks a free one (default 8765)"
     )
@@ -137,7 +140,8 @@ def main(argv: list[str] | None = None) -> int:
     # mention what it is actually bound to.
     shown = "127.0.0.1" if host in ("0.0.0.0", "::") else host
     url = f"http://{shown}:{port}/"
-    bind = "" if shown == host else f"  (listening on {host}:{port})"
+    bind = "" if shown == host else (
+        f"  (listening on {host}:{port}, from other machines http://{webapp.lan_address()}:{port}/)")
     # flush=True so the URL is visible when the output is piped, not just on a
     # terminal (python block-buffers stdout otherwise).
     print(f"ShelfKit server on {url}{bind}", flush=True)

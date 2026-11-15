@@ -58,9 +58,8 @@ long-lived poll connection per browser tab. The API is small and boring:
 State that has to outlive the process lives in shelfkit/store.py (one SQLite
 file): settings, tag metadata, rendered bitmaps and the event log.
 
-The server binds to 127.0.0.1 by default: it can drive a serial port and read
-image files on this machine, so it is not meant to be reachable from anywhere
-else.
+make_server() binds to 127.0.0.1 unless told otherwise (the tests rely on it);
+shelfkit-server.py passes 0.0.0.0 by default so the LAN can reach the page.
 """
 
 from __future__ import annotations
