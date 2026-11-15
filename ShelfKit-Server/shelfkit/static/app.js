@@ -2,7 +2,7 @@
 
 /* ShelfKit-Server front end. Plain JS, no build step.
  *
- * Screens: Fleet (home), Queue, Logs, Hub, Apps and more, plus a tag inspector that docks
+ * Screens: Fleet (home), Queue, Logs, Hubs, Apps and more, picked in the sidebar, plus a tag inspector that docks
  * over any of them. Everything the server knows arrives from /api/poll several
  * times a second and the screens are views over that. Lists update in place by key
  * (syncKeyed), so a poll never steals keyboard focus, closes a menu or reloads a
@@ -163,6 +163,33 @@ const ui = {
   logsEmpty: $("logs-empty"),
 
   panes: $("panes"),
+  navShelves: $("nav-shelves"),
+  navShelvesGroup: $("nav-shelves-group"),
+  hubsSummary: $("hubs-summary"),
+  hubsAdd: $("hubs-add"),
+  hubsList: document.querySelector(".hubs-list"),
+  hubsAll: document.querySelector('.hubs-item[data-view="all"]'),
+  hubsCount: $("hubs-count"),
+  hubsHubs: $("hubs-hubs"),
+  hubsDebug: $("hubs-debug"),
+  hubsDebugTitle: $("hubs-debug-title"),
+  hubsOverview: $("hubs-overview"),
+  hubsTiles: $("hubs-tiles"),
+  hubsRows: $("hubs-rows"),
+  hubsAttention: $("hubs-attention"),
+  hubsActivity: $("hubs-activity"),
+  hubsConsole: $("hubs-console"),
+  hubDetail: $("hub-detail"),
+  hubName: $("hub-name"),
+  hubSub: $("hub-sub"),
+  hubPill: $("hub-pill"),
+  hubTabs: $("hub-tabs"),
+  hubTabPanel: $("hub-tab-panel"),
+  hubRows: $("hub-rows"),
+  hubCapsSection: $("hub-caps-section"),
+  settingsTabs: $("settings-tabs"),
+  settingsActions: $("settings-actions"),
+  settingsHubs: $("settings-hubs"),
   hubBanner: $("hub-banner"),
   hubCaps: $("hub-caps"),
   copyLogs: $("copy-logs"),
@@ -404,8 +431,7 @@ function applyTheme(next, persist) {
   document.documentElement.dataset.theme = theme;
   if (persist) store(THEME_KEY, theme);
   // the button names what it will switch to
-  ui.theme.textContent = theme === "dark" ? "Light" : "Dark";
-  ui.theme.setAttribute("aria-label", `Switch to the ${ui.theme.textContent.toLowerCase()} theme`);
+  ui.theme.textContent = `Switch to ${theme === "dark" ? "light" : "dark"}`;
 }
 
 ui.theme.addEventListener("click", () => {
@@ -414,7 +440,8 @@ ui.theme.addEventListener("click", () => {
 
 // ── routing ────────────────────────────────────────────────────────────────
 function show(name) {
-  if (name === "console") name = "hub";          // the console now lives on the Hub screen
+  if (name === "console") { name = "hub"; hubTab = "console"; }   // the console lives on the Hubs screen
+  if (name === "hubs") name = "hub";
   if (!ui.screens.some((section) => section.dataset.screen === name)) name = "fleet";
   screen = name;
   for (const section of ui.screens) section.hidden = section.dataset.screen !== name;
@@ -2204,7 +2231,7 @@ function renderPanes() {
   for (const pane of state?.panes || []) {
     const view = panes.get(pane.key) || buildPane(pane);
     const isHub = pane.key === state.hub;
-    view.root.hidden = !isHub && prefs.show_tag_port === false;
+    view.root.hidden = pane.key !== hubsView;
     setText(view.name, isHub ? `Hub port (${pane.name})` : `Second port (${pane.name})`);
     if (active !== view.port) view.port.value = pane.port || "";
     if (active !== view.baud) view.baud.value = pane.baud;
@@ -2221,9 +2248,278 @@ function renderPanes() {
   }
 }
 
-// ── hub: firmware and panel ────────────────────────────────────────────────
+// ── hubs: the list, the overview of all of them, and one hub up close ─────────
+// The list on the left holds "All hubs", every hub, then the debug ports. Today the
+// server has one hub (the pane called state.hub) and a second port for a tag on
+// serial; the screen is laid out for several hubs of several kinds.
+const HUBS_VIEW_KEY = "shelfkit-hubs-view";
+const HUB_TAB_KEY = "shelfkit-hub-tab";
+const SETTINGS_TAB_KEY = "shelfkit-settings-tab";
+let hubsView = stored(HUBS_VIEW_KEY, "all");      // "all" or a pane key
+let hubTab = stored(HUB_TAB_KEY, "overview");     // overview | console | panel
+let settingsTab = stored(SETTINGS_TAB_KEY, "general");
+const SHELF_COLOURS = ["#C2410C", "#15803D", "#1D4ED8", "#7E22CE", "#B45309", "#0F766E"];
+
+function isHubPane(pane) {
+  return pane.key === state?.hub;
+}
+function paneTitle(pane) {
+  return isHubPane(pane) ? "Vusion hub" : "Tag on serial";
+}
+function paneKind(pane) {
+  return isHubPane(pane) ? "Sub-GHz radio over USB serial" : "Debug port";
+}
+/** Panes the Hubs screen lists: the hub always, the tag port unless Settings hides it. */
+function listedPanes() {
+  return (state?.panes || []).filter((pane) => isHubPane(pane) || prefs.show_tag_port !== false);
+}
+function paneHealth(pane) {
+  if (pane.status.startsWith("error")) return { word: "Error", cls: "bad" };
+  return pane.open ? { word: "Connected", cls: "ok" } : { word: "Closed", cls: "off" };
+}
+
+function pickHubsView(view, tab) {
+  hubsView = view;
+  store(HUBS_VIEW_KEY, view);
+  if (tab) {
+    hubTab = tab;
+    store(HUB_TAB_KEY, tab);
+  }
+  if (screen !== "hub") location.hash = "#hub";
+  else draw();
+  if (hubTab === "console") {
+    const view = panes.get(hubsView);
+    if (view) requestAnimationFrame(() => { view.log.scrollTop = view.log.scrollHeight; });
+  }
+}
+
+function createHubsItem(pane) {
+  const button = el("button", "hubs-item");
+  button.type = "button";
+  const icon = el("span", "hubs-icon");
+  icon.setAttribute("aria-hidden", "true");
+  icon.innerHTML = isHubPane(pane)
+    ? '<svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8a6 6 0 0 1 0 8.4M7.8 16.2a6 6 0 0 1 0-8.4"/></svg>'
+    : '<svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17l6-6-6-6M12 19h8"/></svg>';
+  const text = el("span", "hubs-text");
+  const name = el("span");
+  const sub = el("span", "hubs-sub");
+  text.append(name, sub);
+  const dot = el("span", "dot");
+  button.append(icon, text, dot);
+  button.addEventListener("click", () => pickHubsView(button.dataset.view));
+  Object.assign(button, { _name: name, _sub: sub, _dot: dot });
+  return button;
+}
+
+function updateHubsItem(button, pane) {
+  button.dataset.view = pane.key;
+  const health = paneHealth(pane);
+  setText(button._name, paneTitle(pane));
+  const tags = isHubPane(pane) ? ` · ${plural((state.tags || []).length, "tag")}` : "";
+  setText(button._sub, `${pane.port || "no port"}${pane.open ? "" : " · closed"}${tags}`);
+  setClass(button._dot, `dot ${health.cls}`);
+  button._dot.title = health.word;
+  button.setAttribute("aria-pressed", String(hubsView === pane.key));
+}
+
+function hubsTile(label, value, of, note, tone) {
+  const tile = el("div", "tile");
+  const big = el("span", "tile-value", value);
+  if (of) big.append(el("span", "tile-of", of));
+  tile.append(el("span", "tile-label", label), big, el("span", `tile-note ${tone || ""}`.trim(), note));
+  return tile;
+}
+
+function renderHubsOverview(listed, rows) {
+  const hubs = listed.filter(isHubPane);
+  const connected = hubs.filter((pane) => pane.open).length;
+  const silent = rows.filter((row) => row.status === "silent").length;
+  const heard = rows.length - silent;
+  const alerts = rows.filter((row) => row.alert);
+  const waiting = (state.queue || []).filter(
+    (job) => job.state === "pending" || job.state === "running").length;
+  const failedJobs = (state.queue || []).filter((job) => job.state === "failed").length;
+
+  const tiles = [
+    ["Hubs connected", String(connected), ` / ${hubs.length}`,
+      hubs.map((pane) => `${paneTitle(pane)} on ${pane.port || "no port"}`).join(", "),
+      connected < hubs.length ? "bad" : ""],
+    ["Tags heard", String(heard), ` / ${rows.length}`,
+      silent ? `${silent} silent` : "None silent", silent ? "bad" : "ok"],
+    ["Queue", String(waiting), "",
+      waiting ? "Waiting for check-ins" : "Nothing waiting to send", ""],
+    ["Needs attention", String(alerts.length), "",
+      failedJobs ? `${plural(failedJobs, "command")} failed` : alerts.length ? "Battery or a failed command" : "All clear",
+      alerts.length ? "bad" : "ok"],
+  ];
+  const tileSig = JSON.stringify(tiles);
+  if (signatures.hubTiles !== tileSig) {
+    signatures.hubTiles = tileSig;
+    ui.hubsTiles.replaceChildren(...tiles.map((tile) => hubsTile(...tile)));
+  }
+
+  syncKeyed(ui.hubsRows, listed, (pane) => pane.key, (pane) => {
+    const tr = el("tr");
+    const open = el("button", "link");
+    open.type = "button";
+    open.addEventListener("click", () => pickHubsView(tr.dataset.key, "overview"));
+    const pill = el("span", "pill");
+    tr.append(el("td"), el("td", "dim"), el("td", "mono"), el("td", "num"), el("td", "num"), el("td"));
+    tr.cells[0].append(open);
+    tr.cells[5].append(pill);
+    Object.assign(tr, { _open: open, _pill: pill });
+    return tr;
+  }, (tr, pane) => {
+    tr.dataset.key = pane.key;
+    const health = paneHealth(pane);
+    setText(tr._open, paneTitle(pane));
+    setText(tr.cells[1], paneKind(pane));
+    setText(tr.cells[2], pane.port || "–");
+    setText(tr.cells[3], isHubPane(pane) ? String(rows.length) : "–");
+    setText(tr.cells[4], isHubPane(pane) ? String(silent) : "–");
+    setText(tr._pill, health.word);
+    setClass(tr._pill, `pill ${health.cls}`);
+  });
+
+  // tags that need you: a low battery or a failed command first, then the silent ones
+  const attention = [
+    ...alerts.map((row) => ({ row, what: row.reason })),
+    ...rows.filter((row) => row.status === "silent" && !row.alert)
+      .map((row) => ({ row, what: row.seen === null ? "Never heard" : `Silent for ${ageText(row.seen)}` })),
+  ].slice(0, 8);
+  const attSig = JSON.stringify(attention.map(({ row, what }) => [row.hex, row.alias, what]));
+  if (signatures.hubAttention !== attSig) {
+    signatures.hubAttention = attSig;
+    ui.hubsAttention.replaceChildren();
+    if (!attention.length) ui.hubsAttention.append(el("p", "dim", "Nothing needs you right now."));
+    for (const { row, what } of attention) {
+      const line = el("div", "hubs-line");
+      const id = el("button", "id-link");
+      id.type = "button";
+      id.append(pixelText(row.hex, 1.5));
+      id.setAttribute("aria-label", `Open tag ${row.hex}`);
+      id.addEventListener("click", () => openInspector(row.hex));
+      const text = el("div", "hubs-line-text");
+      text.append(el("span", "strong", row.alias || what), el("span", "dim", row.alias ? what : ""));
+      const go = el("button", "link", "Details");
+      go.type = "button";
+      go.addEventListener("click", () => openInspector(row.hex));
+      line.append(el("span", `dot ${row.alert ? "bad" : "warn"}`), id, text, go);
+      ui.hubsAttention.append(line);
+    }
+  }
+
+  // the newest events, check-ins left out: they would bury everything else
+  const recent = events.filter((row) => row.event !== "sync").slice(-8).reverse();
+  const actSig = JSON.stringify(recent.map((row) => [row.id, row.count]));
+  if (signatures.hubActivity !== actSig) {
+    signatures.hubActivity = actSig;
+    ui.hubsActivity.replaceChildren();
+    if (!recent.length) ui.hubsActivity.append(el("p", "dim", "No events yet."));
+    for (const row of recent) {
+      const line = el("div", `hubs-line${/fail|error/.test(row.event) ? " bad" : ""}`);
+      const what = [row.hex, row.event, row.detail].filter(Boolean).join("  ");
+      line.append(el("span", "mono dim", eventTime(row.at)), el("span", "hubs-line-text", what),
+        el("span", "dim", row.count > 1 ? `×${row.count}` : ""));
+      ui.hubsActivity.append(line);
+    }
+  }
+}
+
+function hubRow(label, value, action, onClick) {
+  const row = el("div", "rowline");
+  const text = el("div", "rowline-text");
+  text.append(el("span", "strong", label), el("span", "dim", value));
+  row.append(text);
+  if (action) {
+    const button = el("button", null, action);
+    button.type = "button";
+    button.addEventListener("click", onClick);
+    row.append(button);
+  }
+  return row;
+}
+
+function renderHubDetail(pane, rows) {
+  const health = paneHealth(pane);
+  const hub = isHubPane(pane);
+  setText(ui.hubName, paneTitle(pane));
+  setText(ui.hubSub, `${paneKind(pane)} · ${pane.port || "no port"} · ${pane.baud} baud`);
+  setText(ui.hubPill, health.word);
+  setClass(ui.hubPill, `pill ${health.cls}`);
+
+  if (!hub && hubTab === "panel") hubTab = "overview";
+  ui.hubTabPanel.hidden = !hub;
+  for (const button of ui.hubTabs.querySelectorAll("[data-tab]")) {
+    button.setAttribute("aria-selected", String(button.dataset.tab === hubTab));
+  }
+  for (const tab of ui.hubDetail.querySelectorAll("[data-hubtab]")) {
+    tab.hidden = tab.dataset.hubtab !== hubTab;
+  }
+  ui.hubCapsSection.hidden = !hub;
+
+  const silent = rows.filter((row) => row.status === "silent").length;
+  const rowSig = JSON.stringify([pane.key, pane.port, pane.baud, pane.open, pane.status, pane.dtr,
+    pane.lines, hub ? rows.length : 0, silent]);
+  if (signatures.hubRows !== rowSig) {
+    signatures.hubRows = rowSig;
+    const open = () => pickHubsView(pane.key, "console");
+    const list = [
+      hubRow("Connection",
+        `USB serial on ${pane.port || "no port yet"} at ${pane.baud} baud · ${pane.status}`,
+        pane.open ? "Close" : "Open",
+        () => command(pane.key, pane.open ? "close" : "open", { port: pane.port, baud: pane.baud })),
+    ];
+    if (hub) {
+      list.push(hubRow("Tags",
+        `${plural(rows.length, "tag")} check in through this hub${silent ? `, ${silent} silent` : ""}`,
+        "Show on Fleet", () => { location.hash = "#fleet"; }));
+    }
+    list.push(
+      hubRow("Handshake lines",
+        `DTR ${pane.dtr ? "held" : "released"} · RTS ${pane.rts ? "held" : "released"}. Reset pulses RTS for 100 ms.`,
+        "Reset", () => command(pane.key, "reset")),
+      hubRow("Serial log", `${plural(pane.lines || 0, "line")} received`, "Open console", open),
+    );
+    if (!hub) {
+      list.push(hubRow("Careful", "A tag's DTR is its BOOT strap: opening the port can hold it in the bootloader.", null));
+    }
+    ui.hubRows.replaceChildren(...list);
+  }
+}
+
+function renderSettingsHubs() {
+  const listed = state?.panes || [];
+  const sig = JSON.stringify(listed.map((pane) => [pane.key, pane.port, pane.open, pane.status]));
+  if (signatures.settingsHubs === sig) return;
+  signatures.settingsHubs = sig;
+  ui.settingsHubs.replaceChildren(...listed.map((pane) => hubRow(paneTitle(pane),
+    `${paneKind(pane)} · ${pane.port || "no port"} · ${pane.baud} baud · ${paneHealth(pane).word}`,
+    "Open on Hubs", () => pickHubsView(pane.key, "overview"))));
+}
+
 function renderHub() {
+  const listed = listedPanes();
+  if (hubsView !== "all" && !listed.some((pane) => pane.key === hubsView)) hubsView = "all";
   renderPanes();
+  const rows = tagRows();
+
+  const hubs = listed.filter(isHubPane);
+  const ports = listed.filter((pane) => !isHubPane(pane));
+  setText(ui.hubsSummary, `${plural(hubs.length, "hub")} · ${plural(rows.length, "tag")}`);
+  setText(ui.hubsCount, `Hubs · ${hubs.length}`);
+  ui.hubsAll.setAttribute("aria-pressed", String(hubsView === "all"));
+  syncKeyed(ui.hubsHubs, hubs, (pane) => pane.key, createHubsItem, updateHubsItem);
+  syncKeyed(ui.hubsDebug, ports, (pane) => pane.key, createHubsItem, updateHubsItem);
+  ui.hubsDebugTitle.hidden = !ports.length;
+
+  const picked = listed.find((pane) => pane.key === hubsView);
+  ui.hubsOverview.hidden = !!picked;
+  ui.hubDetail.hidden = !picked;
+  if (!picked) renderHubsOverview(listed, rows);
+  else renderHubDetail(picked, rows);
+
   const caps = state?.hub_caps || {};
   const pane = hubPane();
   setText(ui.hubBanner, caps.banner || (pane?.open
@@ -2307,6 +2603,7 @@ function renderChrome() {
 
   const hub = hubPane();
   const open = !!hub?.open;
+  ui.linkState.hidden = open;
   setClass(ui.linkState, `link-state${open ? "" : " closed"}`);
   setClass(ui.linkMark, `mark ${open ? "s-online" : "s-alert"}`);
   setText(ui.linkText, open ? `Hub on ${hub.port}` : "Hub port closed");
@@ -2320,6 +2617,51 @@ function renderChrome() {
   const fraction = state.sending ? progressFraction(state.progress) : null;
   ui.transfer.hidden = !state.sending;
   ui.transferFill.style.width = `${Math.round((fraction ?? 0) * 100)}%`;
+  renderNavShelves();
+}
+
+/** The sidebar's shelf list: each numbered shelf and how many tags sit on it. */
+function renderNavShelves() {
+  const rows = tagRows();
+  const keys = shelfKeys();
+  const items = keys.map((key, i) => ({
+    key, name: shelfName(key), colour: SHELF_COLOURS[i % SHELF_COLOURS.length],
+    count: rows.filter((row) => String(row.row) === key).length,
+  }));
+  const sig = JSON.stringify(items);
+  if (signatures.navShelves === sig) return;
+  signatures.navShelves = sig;
+  ui.navShelvesGroup.hidden = !items.length;
+  ui.navShelves.replaceChildren(...items.map((item) => {
+    const link = el("a", "nav-shelf");
+    link.href = "#fleet";
+    const dot = el("span", "dot");
+    dot.style.background = item.colour;
+    link.append(dot, el("span", "nav-label", item.name), el("span", "nav-count", String(item.count)));
+    link.addEventListener("click", (event) => {
+      event.preventDefault();
+      if (screen !== "fleet") show("fleet");
+      requestAnimationFrame(() => {
+        const shelf = ui.fleetWall.querySelector(`.shelf[data-key="${item.key}"]`);
+        if (shelf) shelf.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    });
+    return link;
+  }));
+}
+
+// ── settings tabs ──────────────────────────────────────────────────────────
+const FORM_TABS = new Set(["general", "ports", "phones", "axsdb"]);
+function showSettingsTab(name) {
+  const tabs = [...ui.settingsTabs.querySelectorAll("[data-tab]")];
+  if (!tabs.some((tab) => tab.dataset.tab === name)) name = "general";
+  settingsTab = name;
+  store(SETTINGS_TAB_KEY, name);
+  for (const tab of tabs) tab.setAttribute("aria-selected", String(tab.dataset.tab === name));
+  for (const section of document.querySelectorAll('.screen[data-screen="settings"] section[data-tab]')) {
+    section.hidden = section.dataset.tab !== name;
+  }
+  ui.settingsActions.hidden = !FORM_TABS.has(name);
 }
 
 // ── flash ──────────────────────────────────────────────────────────────────
@@ -2728,6 +3070,7 @@ async function importAliases(file) {
 }
 
 function renderSettings() {
+  renderSettingsHubs();
   // the form shows what the server holds until you start typing
   if (!settingsDirty) loadSettingsForm();
   const axsdb = state?.flash?.axsdb;
@@ -2995,6 +3338,26 @@ ui.logsTag.addEventListener("change", draw);
 ui.logsEvent.addEventListener("change", draw);
 ui.logsSync.addEventListener("change", draw);
 ui.copyLogs.addEventListener("click", copyLogs);
+ui.hubsAll.addEventListener("click", () => pickHubsView("all"));
+ui.hubsConsole.addEventListener("click", () => pickHubsView(state?.hub || "all", "console"));
+ui.hubsAdd.addEventListener("click", () => {
+  toast("ShelfKit talks to one hub for now. Set its port under Settings > Serial ports.");
+});
+ui.hubTabs.addEventListener("click", (event) => {
+  const tab = event.target.closest("[data-tab]");
+  if (tab) pickHubsView(hubsView, tab.dataset.tab);
+});
+ui.settingsTabs.addEventListener("click", (event) => {
+  const tab = event.target.closest("[data-tab]");
+  if (tab) showSettingsTab(tab.dataset.tab);
+});
+// a link that opens one hub tab, e.g. Settings > The hub's panel
+document.addEventListener("click", (event) => {
+  const link = event.target.closest("a[data-hub-tab]");
+  if (!link) return;
+  event.preventDefault();
+  pickHubsView(state?.hub || "all", link.dataset.hubTab);
+});
 
 for (const input of [ui.displayEnabled, ui.displayAlias, ui.displayTitle, ui.displayTimeout, ui.displayInterval]) {
   input.addEventListener("change", () => saveDisplay());
@@ -3100,12 +3463,7 @@ document.addEventListener("keydown", (event) => {
 
 async function boot() {
   applyTheme(currentTheme(), false);   // label the button for the theme already applied
-  $("brand").append(pixelText("SHELFKIT", 2));
-  // the bar's height changes when it wraps, and the inspector docks right below it
-  const bar = document.querySelector(".topbar");
-  new ResizeObserver(() => {
-    document.documentElement.style.setProperty("--topbar-h", `${bar.offsetHeight}px`);
-  }).observe(bar);
+  showSettingsTab(settingsTab);
   while (!state) {
     try {
       state = await getJSON("/api/state");

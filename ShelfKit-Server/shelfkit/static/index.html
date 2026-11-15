@@ -6,13 +6,16 @@
   <meta name="color-scheme" content="dark light">
   <title>ShelfKit</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8' shape-rendering='crispEdges'%3E%3Crect width='8' height='8' fill='%23f2f2ec'/%3E%3Cpath d='M1 1h6v2H1zM1 4h4v1H1z' fill='%231c1e20'/%3E%3Cpath d='M1 6h3v1H1z' fill='%23c4141c'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;700&amp;display=swap">
   <link rel="stylesheet" href="/style.css">
   <script>
     /* Pick the theme before the first paint: ?theme=dark|light wins (handy for a
      * screenshot or a link), then the saved choice, then whatever the OS prefers.
      * app.js only owns the switch and writes the choice back. */
     (function () {
-      var theme = "dark";
+      var theme = "light";
       var forced = null;
       try {
         forced = new URLSearchParams(location.search).get("theme");
@@ -23,11 +26,11 @@
         var saved = localStorage.getItem("shelfkit-theme");
         if (saved === "light" || saved === "dark") {
           theme = saved;
-        } else if (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches) {
-          theme = "light";
+        } else if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+          theme = "dark";
         }
       } catch (err) {
-        /* private mode / storage disabled: fall back to dark */
+        /* private mode / storage disabled: fall back to light */
       }
       if (forced === "dark" || forced === "light") theme = forced;   // not persisted
       document.documentElement.dataset.theme = theme;
@@ -35,31 +38,43 @@
   </script>
 </head>
 <body>
-  <header class="topbar">
-    <a class="brand" href="#fleet" id="brand" aria-label="ShelfKit, go to the fleet"></a>
+  <div class="shell">
+  <aside class="sidebar">
+    <a class="brand" href="#fleet" id="brand" aria-label="ShelfKit, go to the fleet">
+      <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span class="brand-name">ShelfKit</span>
+    </a>
 
     <nav class="nav" id="nav" aria-label="Screens">
-      <a href="#fleet" data-screen="fleet">Fleet</a>
-      <a href="#queue" data-screen="queue">Queue<span class="count" id="nav-queue" hidden></span></a>
-      <a href="#logs" data-screen="logs">Logs</a>
-      <a href="#diagnostics" data-screen="diagnostics">Diagnostics</a>
-      <a href="#hub" data-screen="hub">Hub</a>
-      <a href="#flash" data-screen="flash">Flash<span class="mark s-sending" id="nav-flash" hidden></span></a>
-      <a href="#apps" data-screen="apps">Apps</a>
-      <a href="#settings" data-screen="settings">Settings</a>
+      <a href="#fleet" data-screen="fleet"><svg class="icon" aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg><span class="nav-label">Fleet</span></a>
+      <a href="#queue" data-screen="queue"><svg class="icon" aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h12M9 12h12M9 18h12"/><path d="M4 6h.01M4 12h.01M4 18h.01" stroke-width="2.6"/></svg><span class="nav-label">Queue</span><span class="count" id="nav-queue" hidden></span></a>
+      <a href="#logs" data-screen="logs"><svg class="icon" aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg><span class="nav-label">Logs</span></a>
+      <a href="#diagnostics" data-screen="diagnostics"><svg class="icon" aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg><span class="nav-label">Diagnostics</span></a>
+      <hr class="nav-rule">
+      <a href="#apps" data-screen="apps"><svg class="icon" aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><path d="M17.5 14v7M14 17.5h7"/></svg><span class="nav-label">Apps</span></a>
+      <a href="#flash" data-screen="flash"><svg class="icon" aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9z"/></svg><span class="nav-label">Flash</span><span class="mark s-sending" id="nav-flash" hidden></span></a>
+      <a href="#hub" data-screen="hub"><svg class="icon" aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8a6 6 0 0 1 0 8.4M7.8 16.2a6 6 0 0 1 0-8.4M19.1 4.9a10 10 0 0 1 0 14.2M4.9 19.1a10 10 0 0 1 0-14.2"/></svg><span class="nav-label">Hubs</span></a>
+      <div class="nav-group" id="nav-shelves-group" hidden>
+        <hr class="nav-rule">
+        <span class="nav-title">Shelves</span>
+        <div id="nav-shelves"></div>
+      </div>
+      <span class="nav-spacer"></span>
+      <hr class="nav-rule">
+      <a href="#settings" data-screen="settings"><svg class="icon" aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg><span class="nav-label">Settings</span></a>
     </nav>
 
-    <p id="status" class="status" role="status">Connecting to the server</p>
-
-    <a class="link-state" id="link-state" href="#hub">
-      <span class="mark" id="link-mark"></span><span id="link-text">Hub</span>
-    </a>
-    <button id="theme-toggle" class="quiet" type="button"></button>
-
-    <div class="transfer" id="transfer" hidden>
-      <div class="transfer-fill" id="transfer-fill"></div>
+    <div class="side-foot">
+      <a class="link-state" id="link-state" href="#hub">
+        <span class="mark" id="link-mark"></span><span id="link-text">Hub</span>
+      </a>
+      <p id="status" class="status" role="status">Connecting to the server</p>
     </div>
-  </header>
+  </aside>
+
+  <div class="transfer" id="transfer" hidden>
+    <div class="transfer-fill" id="transfer-fill"></div>
+  </div>
 
   <main id="screens">
 
@@ -292,56 +307,128 @@
       </div>
     </section>
 
-    <!-- Hub -->
+    <!-- Hubs -->
     <section class="screen" data-screen="hub" aria-labelledby="hub-title" hidden>
       <div class="screen-head">
-        <h1 id="hub-title">Hub</h1>
-        <p class="screen-note" id="hub-banner"></p>
+        <h1 id="hub-title">Hubs</h1>
+        <p class="screen-note" id="hubs-summary"></p>
         <span class="grow"></span>
         <button id="copy-logs" class="quiet" type="button">Copy logs</button>
         <a id="save-log" class="button quiet" href="/api/log" download="shelfkit-log.txt">Save log</a>
+        <button id="hubs-add" class="primary" type="button"
+                title="ShelfKit talks to one hub for now. More hubs, and other kinds of hub, come later.">Add hub</button>
       </div>
 
-      <div id="panes" class="panes"></div>
+      <div class="hubs">
+        <nav class="hubs-list" aria-label="Hubs and ports">
+          <button type="button" class="hubs-item" data-view="all">
+            <span class="hubs-icon" aria-hidden="true"><svg class="icon" aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg></span>
+            <span class="hubs-text"><span>All hubs</span><span class="hubs-sub">Overview</span></span>
+          </button>
+          <span class="nav-title" id="hubs-count">Hubs</span>
+          <div id="hubs-hubs" class="hubs-group"></div>
+          <span class="nav-title" id="hubs-debug-title">Debug ports</span>
+          <div id="hubs-debug" class="hubs-group"></div>
+        </nav>
 
-      <div class="hub-lower">
-        <section class="hub-section" aria-labelledby="caps-title">
-          <h2 id="caps-title">Firmware features</h2>
-          <dl class="facts" id="hub-caps"></dl>
-          <p class="hint">Read from the banner the hub prints when it starts. Press Reset on the
-            hub port if these say unknown.</p>
-        </section>
+        <div class="hubs-body">
+          <div id="hubs-overview" class="hubs-overview">
+            <div class="hubs-heading">
+              <h2>All hubs</h2>
+              <p class="dim">Every hub and debug port together</p>
+            </div>
+            <div class="tiles" id="hubs-tiles"></div>
 
-        <section class="hub-section hub-display" aria-labelledby="display-title">
-          <h2 id="display-title">Hub's own panel</h2>
-          <p id="display-warning" class="warning" hidden></p>
-          <label class="check">
-            <input id="display-enabled" type="checkbox">
-            List the connected tags on the hub's panel
-          </label>
-          <div class="display-fields">
-            <label class="field-inline">Title
-              <input id="display-title-input" maxlength="24" spellcheck="false">
-            </label>
-            <label class="field-inline">Drop a tag after (seconds)
-              <input id="display-timeout" type="number" min="1" step="30">
-            </label>
-            <label class="field-inline">Shortest redraw gap (seconds)
-              <input id="display-interval" type="number" min="1" step="10">
-            </label>
+            <section class="hubs-block" aria-labelledby="hubs-per-title">
+              <h3 id="hubs-per-title">Per hub</h3>
+              <div class="table-wrap">
+                <table class="grid hubs-table">
+                  <thead>
+                    <tr><th>Hub</th><th>Type</th><th>Port</th><th class="num">Tags</th><th class="num">Silent</th><th>Status</th></tr>
+                  </thead>
+                  <tbody id="hubs-rows"></tbody>
+                </table>
+              </div>
+            </section>
+
+            <div class="hubs-two">
+              <section class="hubs-block" aria-labelledby="hubs-att-title">
+                <h3 id="hubs-att-title">Needs attention</h3>
+                <div id="hubs-attention" class="hubs-lines"></div>
+              </section>
+              <section class="hubs-block" aria-labelledby="hubs-act-title">
+                <h3 id="hubs-act-title">Recent activity</h3>
+                <div id="hubs-activity" class="hubs-lines"></div>
+                <button id="hubs-console" class="link" type="button">Open the hub console</button>
+              </section>
+            </div>
           </div>
-          <label class="check">
-            <input id="display-alias" type="checkbox">
-            Print each tag's alias next to its ID
-          </label>
-          <div class="row">
-            <button id="display-refresh" type="button">Redraw now</button>
-            <span id="display-result" class="hint"></span>
+
+          <div id="hub-detail" class="hub-detail" hidden>
+            <div class="hub-card">
+              <span class="hub-avatar" aria-hidden="true"><svg class="icon" aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8a6 6 0 0 1 0 8.4M7.8 16.2a6 6 0 0 1 0-8.4M19.1 4.9a10 10 0 0 1 0 14.2M4.9 19.1a10 10 0 0 1 0-14.2"/></svg></span>
+              <div class="hub-card-text">
+                <h2 id="hub-name"></h2>
+                <span id="hub-sub" class="dim"></span>
+              </div>
+              <span id="hub-pill" class="pill"></span>
+            </div>
+
+            <div class="tabs" id="hub-tabs" role="tablist" aria-label="Hub details">
+              <button type="button" role="tab" data-tab="overview">Overview</button>
+              <button type="button" role="tab" data-tab="console">Console</button>
+              <button type="button" role="tab" data-tab="panel" id="hub-tab-panel">Hub panel</button>
+            </div>
+
+            <div class="hub-tab" data-hubtab="overview">
+              <div class="rows" id="hub-rows"></div>
+              <section class="hub-section" id="hub-caps-section" aria-labelledby="caps-title">
+                <h3 id="caps-title">Firmware features</h3>
+                <p class="dim" id="hub-banner"></p>
+                <dl class="facts" id="hub-caps"></dl>
+                <p class="hint">Read from the banner the hub prints when it starts. Press Reset on the
+                  Console tab if these say unknown.</p>
+              </section>
+            </div>
+
+            <div class="hub-tab" data-hubtab="console" hidden>
+              <div id="panes" class="panes"></div>
+            </div>
+
+            <div class="hub-tab" data-hubtab="panel" hidden>
+              <section class="hub-section hub-display" aria-labelledby="display-title">
+                <h3 id="display-title">The hub's own panel</h3>
+                <p id="display-warning" class="warning" hidden></p>
+                <label class="check">
+                  <input id="display-enabled" type="checkbox">
+                  List the connected tags on the hub's panel
+                </label>
+                <div class="display-fields">
+                  <label class="field-inline">Title
+                    <input id="display-title-input" maxlength="24" spellcheck="false">
+                  </label>
+                  <label class="field-inline">Drop a tag after (seconds)
+                    <input id="display-timeout" type="number" min="1" step="30">
+                  </label>
+                  <label class="field-inline">Shortest redraw gap (seconds)
+                    <input id="display-interval" type="number" min="1" step="10">
+                  </label>
+                </div>
+                <label class="check">
+                  <input id="display-alias" type="checkbox">
+                  Print each tag's alias next to its ID
+                </label>
+                <div class="row">
+                  <button id="display-refresh" type="button">Redraw now</button>
+                  <span id="display-result" class="hint"></span>
+                </div>
+                <p class="hint">Each redraw takes about 15 seconds, and the hub can't answer tags while it
+                  runs. Keep the drop time above 600 seconds if any tag has a weak link.</p>
+                <div id="display-shown" class="shown-ids"></div>
+              </section>
+            </div>
           </div>
-          <p class="hint">Each redraw takes about 15 seconds, and the hub can't answer tags while it
-            runs. Keep the drop time above 600 seconds if any tag has a weak link.</p>
-          <div id="display-shown" class="shown-ids"></div>
-        </section>
+        </div>
       </div>
     </section>
 
@@ -462,8 +549,18 @@
           browser that opens the page sees the same values.</p>
       </div>
 
+      <div class="tabs" id="settings-tabs" role="tablist" aria-label="Settings sections">
+        <button type="button" role="tab" data-tab="general">General</button>
+        <button type="button" role="tab" data-tab="hubs">Hubs</button>
+        <button type="button" role="tab" data-tab="ports">Serial ports</button>
+        <button type="button" role="tab" data-tab="phones">Tag pages for phones</button>
+        <button type="button" role="tab" data-tab="axsdb">USB debugger</button>
+        <button type="button" role="tab" data-tab="aliases">Aliases and shelves</button>
+        <button type="button" role="tab" data-tab="hubpanel">The hub's panel</button>
+      </div>
+
       <form id="settings-form" class="settings" novalidate>
-        <section class="setting-group" aria-labelledby="set-timing">
+        <section class="setting-group" data-tab="general" aria-labelledby="set-timing">
           <h2 id="set-timing">When a tag counts as quiet</h2>
           <p class="hint">Tags check in about every 2 minutes, slow to 5 when idle, and to 10 on a
             weak link. Keep these above those rates or healthy tags will look quiet.</p>
@@ -480,7 +577,7 @@
           </div>
         </section>
 
-        <section class="setting-group" aria-labelledby="set-battery">
+        <section class="setting-group" data-tab="general" aria-labelledby="set-battery">
           <h2 id="set-battery">Battery</h2>
           <div class="setting-fields">
             <label>Warn below (volts)
@@ -491,7 +588,7 @@
             battery reading and show up under Needs attention.</p>
         </section>
 
-        <section class="setting-group" aria-labelledby="set-display">
+        <section class="setting-group" data-tab="general" aria-labelledby="set-display">
           <h2 id="set-display">Fleet screen</h2>
           <fieldset>
             <legend>Layout</legend>
@@ -512,7 +609,22 @@
           </fieldset>
         </section>
 
-        <section class="setting-group" aria-labelledby="set-ports-title">
+        <section class="setting-group" data-tab="general" aria-labelledby="set-theme">
+          <h2 id="set-theme">Theme</h2>
+          <div class="row">
+            <button id="theme-toggle" type="button"></button>
+            <span class="hint">Remembered by this browser only.</span>
+          </div>
+        </section>
+
+        <section class="setting-group" data-tab="hubs" aria-labelledby="set-hubs-title">
+          <h2 id="set-hubs-title">Hubs</h2>
+          <div class="rows" id="settings-hubs"></div>
+          <p class="hint">Open, reset and watch each hub on the <a href="#hub">Hubs screen</a>. The
+            hub's port is set under Serial ports.</p>
+        </section>
+
+        <section class="setting-group" data-tab="ports" aria-labelledby="set-ports-title">
           <h2 id="set-ports-title">Serial ports</h2>
           <div class="setting-fields">
             <label>Hub port
@@ -525,13 +637,13 @@
             </label>
           </div>
           <label class="check"><input id="set-show-tag" type="checkbox">
-            Show the tag debug port on the Hub screen</label>
-          <p class="hint">The ports are remembered and opened on the Hub screen. Hiding the tag
+            Show the tag debug port on the Hubs screen</label>
+          <p class="hint">The ports are remembered and opened on the Hubs screen. Hiding the tag
             port closes it, but it stays available as a target on the Flash screen. The hub and
             the tag can't share a port.</p>
         </section>
 
-        <section class="setting-group" aria-labelledby="set-public-title">
+        <section class="setting-group" data-tab="phones" aria-labelledby="set-public-title">
           <h2 id="set-public-title">Tag pages for phones</h2>
           <div class="setting-fields">
             <label>Address phones use
@@ -546,7 +658,7 @@
             port is this admin page. Leave it empty to show this server's own address.</p>
         </section>
 
-        <section class="setting-group" aria-labelledby="set-axsdb-title">
+        <section class="setting-group" data-tab="axsdb" aria-labelledby="set-axsdb-title">
           <h2 id="set-axsdb-title">USB debugger (AXSDB)</h2>
           <div class="setting-fields">
             <label>Location of axsdb.exe, or the folder that holds it
@@ -559,14 +671,14 @@
             that folder with --eraseall and --flashprog.</p>
         </section>
 
-        <div class="setting-actions">
+        <div class="setting-actions" id="settings-actions">
           <button id="settings-save" class="primary" type="submit" disabled>Save settings</button>
           <button id="settings-reset" type="button">Restore defaults</button>
           <span id="settings-note" class="hint" role="status"></span>
         </div>
       </form>
 
-      <section class="setting-group settings" aria-labelledby="set-aliases">
+      <section class="setting-group settings" data-tab="aliases" aria-labelledby="set-aliases">
         <h2 id="set-aliases">Aliases, notes and shelf positions</h2>
         <p class="hint">A CSV with the columns hex_id, alias, notes, shelf and slot. Importing sets
           every tag in the file, including tags the hub hasn't heard yet, and a blank cell clears
@@ -579,13 +691,14 @@
         <p id="aliases-result" class="hint" role="status"></p>
       </section>
 
-      <section class="setting-group settings" aria-labelledby="set-hubpanel">
+      <section class="setting-group settings" data-tab="hubpanel" aria-labelledby="set-hubpanel">
         <h2 id="set-hubpanel">The hub's own panel</h2>
         <p class="hint">Which tags the hub lists on its display is set on the
-          <a href="#hub">Hub screen</a>, and is also saved.</p>
+          <a href="#hub" data-hub-tab="panel">Hub panel tab of the Hubs screen</a>, and is also saved.</p>
       </section>
     </section>
   </main>
+  </div>
 
   <!-- Tag inspector -->
   <aside id="inspector" class="inspector" aria-labelledby="inspector-id" hidden>

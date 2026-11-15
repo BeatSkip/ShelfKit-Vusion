@@ -87,30 +87,36 @@ address. It can drive serial ports and flash tags, so keep it off untrusted netw
 Two ways:
 
 - **On the command line** — `hub=COM4 tag=COM3` opens those two at startup, which is the usual way.
-- **In the page** — the **Hub** screen holds the two panes: type or pick the port, set the baud,
-  press **Open** on each. **DTR**, **Reset** and **Clear log** sit on the same row.
+- **In the page** — on the **Hubs** screen pick the hub (or the tag debug port) and open its
+  **Console** tab: type or pick the port, set the baud, press **Open**. **DTR**, **Reset** and
+  **Clear log** sit on the same row. The hub's **Overview** tab has an Open/Close button too.
 
-The top bar always shows the hub port's state. When the port is closed, Fleet says so in its headline
+The sidebar shows "Hub port closed" in red whenever the hub's port is closed. Fleet then says so in its headline
 and offers a button that opens it, so an empty shelf never looks like a broken page.
 
 ### Light and dark theme
 
-The button at the right of the top bar switches between them; it shows the theme you would switch
-*to*. The choice is remembered in `localStorage` under `shelfkit-theme` and applied by a small
+The button under **Settings > General > Theme** switches between them; it names the theme you would
+switch *to*. The choice is remembered in `localStorage` under `shelfkit-theme` and applied by a small
 inline script in `<head>`, so a reload comes up in the right palette without a flash of the other
-one. On a first visit (nothing stored yet) the page follows the OS (`prefers-color-scheme`); after
+one. On a first visit (nothing stored yet) the page follows the OS (`prefers-color-scheme`, light when
+it says nothing); after
 that your explicit choice wins. `?theme=light` or `?theme=dark` in the URL forces one for a link or a
 screenshot without touching what is saved.
 
-Both palettes are the same layout with a different token set — `:root` holds the dark defaults and
-`[data-theme="light"]` overrides the colours, so no rule hard-codes a colour outside those two
+Both palettes are the same layout with a different token set — `:root` holds the light defaults and
+`[data-theme="dark"]` overrides the colours, so no rule hard-codes a colour outside those two
 blocks. `color-scheme` is set per theme too, which keeps scrollbars and native controls in step.
 
 ## The screens
 
-The page uses the panel's own inks: black, white and red on shelf-steel grey. Red only ever means
-"this needs you". State is also carried by shape, so it reads without colour. Tag IDs are drawn in a
-small bitmap font, and tags stay paper-coloured in both themes because they are physical objects.
+A sidebar on the left lists the screens (Fleet, Queue, Logs, Diagnostics, then Apps, Flash, Hubs),
+your shelves with their tag counts (a click scrolls Fleet to that shelf), and Settings at the bottom.
+On a phone-width window it folds into a bar along the top. The pages are white with one accent colour
+for where you are and the main action; red only ever means "this needs you". State is also carried by
+shape, so it reads without colour. Tag IDs are drawn in a small bitmap font, and tags stay
+paper-coloured in both themes because they are physical objects. Fonts are Inter and JetBrains Mono
+from Google Fonts, with system fonts as the fallback when the server has no internet.
 
 | Screen | What it does |
 |---|---|
@@ -118,11 +124,11 @@ small bitmap font, and tags stay paper-coloured in both themes because they are 
 | **Inspector** | Opens from any tag, on any screen. The tag's frame and facts; alias, notes, shelf and slot; push and service label; then wireless ID, firmware update, flash read-back, forget and factory reset, folded away until wanted |
 | **Queue** | Every outbound command (image, firmware, ID, factory reset, service label, flash read) waits here until its tag checks in. Live state and frame progress per command, and **Cancel all** |
 | **Logs** | Events recorded by the server (`push`, `ok`, `fail`, `error`, `boot`, `bootloader`, `open`, ...), identical neighbours collapsed into `×N`, filtered by tag or event, **kept across restarts**. Check-ins (`sync`) are hidden unless you ask for them, because every poll makes one |
-| **Hub** | Both serial panes (port, baud, Open/Close, DTR, Reset, Clear log, live log, and a **send box** to write text or hex bytes to the port with a chosen line ending), Copy logs and Save log, the features the hub's firmware reports, and the settings for the hub's own panel. The port and baud you used come back next run. `#console` links land here |
+| **Hubs** | A list of hubs and debug ports, laid out for several hubs of several kinds (the server drives one hub and one tag debug port today). **All hubs** is an overview: hubs connected, tags heard, queue and needs-attention tiles, a per-hub table, the tags that need you, and the newest events. Pick a hub for its own page with three tabs: **Overview** (connection with Open/Close, tags, handshake lines with Reset, and the features its firmware reports), **Console** (the serial pane: port, baud, Open/Close, DTR, Reset, Clear log, live log, and a **send box** for text or hex bytes with a chosen line ending) and **Hub panel** (the settings for the hub's own display). Copy logs and Save log sit at the top. The port and baud you used come back next run. `#hubs`, `#hub` and `#console` links land here; the picked hub and tab are remembered by the browser. **Add hub** only explains, for now, that one hub is supported |
 | **Flash** | Put firmware on a chip from the page, with the **USB debugger** (AXSDB) or the **serial bootloader**. Pick the file from `Release/`, press Start, press again to confirm. Four steps (find the chip, erase, write, start) show as they happen, with the tool's own output underneath. See [Flashing](#flashing-from-the-page) |
 | **Apps** | The InkServices apps in `inkapps/`: which tags run each one, a live preview, per-tag settings, the phone-page buttons to try (and Simulate NFC tap), stored data and the app's log. **Run on this tag** gives an app a tag's screen. Links to the layout playground. See [Documentation/InkServices.md](../Documentation/InkServices.md) and the [plan](../Documentation/plans/2026-11-11-inkservices.md) |
 | **Tag pages** | `/tag/<ID>` on the same port: what a phone opens from the tag's NFC link. Plain HTML forms with the app's buttons and the tag's current screen. Forward only `/tag/` (and `/t/`) through a reverse proxy, and set its address under Settings. Code and routes: `shelfkit/inkservices/phone.py` |
-| **Settings** | When a tag counts as late or silent, when to offer to forget it, the low-battery voltage, the Fleet layout and tag size, and the address phones use for tag pages. A CSV of aliases, notes, shelf and slot can be exported and imported. Saved by the server (the `prefs` setting in the state database), so every browser and every restart sees the same values; an impossible combination is refused with a message and nothing is stored |
+| **Settings** | Tabs: General, Hubs, Serial ports, Tag pages for phones, USB debugger, Aliases and shelves, The hub's panel. When a tag counts as late or silent, when to offer to forget it, the low-battery voltage, the Fleet layout and tag size, and the address phones use for tag pages. A CSV of aliases, notes, shelf and slot can be exported and imported. Saved by the server (the `prefs` setting in the state database), so every browser and every restart sees the same values; an impossible combination is refused with a message and nothing is stored |
 
 ### Tag status
 
@@ -193,7 +199,7 @@ send a form to this server's address, and this server drives serial ports and ru
 
 ## The working parts, in detail
 
-### The serial panes (Hub screen)
+### The serial panes (Hubs screen, Console tab)
 
 One pane per port, each with its own port field (type it, or pick a detected port from the list), baud
 rate, **Open/Close**, **DTR**, **Reset**, **Clear**, and its log below.
