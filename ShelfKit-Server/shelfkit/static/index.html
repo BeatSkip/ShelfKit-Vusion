@@ -131,6 +131,11 @@
         <button id="bulk-service" type="button">Send service labels</button>
         <button id="bulk-nfc" type="button"
                 title="Make each tag's NFC chip open its own page: the address in Settings > Tag pages for phones, then /tag/ and the tag's ID">Write NFC links</button>
+        <span class="bulk-fw">
+          <select id="bulk-fw" aria-label="Firmware file for the selected tags"></select>
+          <button id="bulk-flash" type="button"
+                  title="Queue a wireless update for every selected tag. Each starts at that tag's next check-in, one at a time. Tags that already report this build are skipped.">Update firmware</button>
+        </span>
         <button id="bulk-forget" class="danger" type="button">Forget</button>
         <span class="grow"></span>
         <button id="bulk-clear" class="quiet" type="button">Clear selection</button>

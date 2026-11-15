@@ -534,6 +534,8 @@ body.inspecting main { padding-right: calc(var(--inspector-w) + var(--gutter)); 
   background: var(--raised);
 }
 .bulkbar > span:first-child { font-weight: 600; margin-right: 6px; }
+.bulk-fw { display: inline-flex; gap: 6px; align-items: center; min-width: 0; }
+.bulk-fw select { max-width: 320px; min-width: 0; }
 
 /* tables ------------------------------------------------------------------- */
 .table-wrap { overflow-x: auto; }

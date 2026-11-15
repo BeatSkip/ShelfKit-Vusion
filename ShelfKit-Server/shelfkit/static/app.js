@@ -156,6 +156,8 @@ const ui = {
   bulkPush: $("bulk-push"),
   bulkService: $("bulk-service"),
   bulkNfc: $("bulk-nfc"),
+  bulkFw: $("bulk-fw"),
+  bulkFlash: $("bulk-flash"),
   bulkForget: $("bulk-forget"),
   bulkClear: $("bulk-clear"),
 
@@ -1416,6 +1418,7 @@ function renderFleet() {
   else renderTable(rows);
 
   ui.fleetBulk.hidden = picked.size === 0;
+  ui.bulkFlash.disabled = !fillFirmwareSelect(ui.bulkFw, "bulkFw").length;
   setText(ui.fleetSelected, `${plural(picked.size, "tag")} selected`);
 }
 
@@ -1716,30 +1719,7 @@ function renderInspector() {
   }
   ui.inspectorNewId.placeholder = nextFreeId();
 
-  // Only application images belong on a tag: a full bundle carries the bootloader,
-  // and the hub and bootloader files are not tag applications at all.
-  const firmwares = (state?.firmware || []).filter(
-    (file) => file.ok && !/hub|bootloader/i.test(file.name));
-  const wanted = firmwares.map((file) => file.path).join(",");
-  if (signatures.inspectorFw !== wanted) {
-    signatures.inspectorFw = wanted;
-    const keep = ui.inspectorFw.value;
-    ui.inspectorFw.replaceChildren();
-    if (!firmwares.length) {
-      const option = el("option", null, "No firmware in Release/");
-      option.value = "";
-      ui.inspectorFw.append(option);
-    }
-    for (const file of firmwares) {
-      const stamp = file.build ? `, ${file.build}` : "";
-      const option = el("option", null, `${file.name} (${Math.round(file.size / 1024)} kB${stamp})`);
-      option.value = file.path;
-      ui.inspectorFw.append(option);
-    }
-    if (keep && [...ui.inspectorFw.options].some((option) => option.value === keep)) {
-      ui.inspectorFw.value = keep;
-    }
-  }
+  const firmwares = fillFirmwareSelect(ui.inspectorFw, "inspectorFw");
   ui.inspectorFlash.disabled = !firmwares.length;
   setText(ui.inspectorFwStatus, state?.sending && state.progress && row.status === "sending"
     ? `Frame ${state.progress}`
@@ -1793,6 +1773,38 @@ async function saveInspector(event) {
 }
 
 /** Queue a command for one tag and report it in the page's words. */
+// Only application images belong on a tag: a full bundle carries the bootloader,
+// and the hub and bootloader files are not tag applications at all.
+function tagFirmwares() {
+  return (state?.firmware || []).filter((file) => file.ok && !/hub|bootloader/i.test(file.name));
+}
+
+// Fill a firmware <select> (inspector, bulk bar), keeping the choice across refreshes.
+function fillFirmwareSelect(select, key) {
+  const firmwares = tagFirmwares();
+  const wanted = firmwares.map((file) => file.path).join(",");
+  if (signatures[key] !== wanted) {
+    signatures[key] = wanted;
+    const keep = select.value;
+    select.replaceChildren();
+    if (!firmwares.length) {
+      const option = el("option", null, "No firmware in Release/");
+      option.value = "";
+      select.append(option);
+    }
+    for (const file of firmwares) {
+      const stamp = file.build ? `, ${file.build}` : "";
+      const option = el("option", null, `${file.name} (${Math.round(file.size / 1024)} kB${stamp})`);
+      option.value = file.path;
+      select.append(option);
+    }
+    if (keep && [...select.options].some((option) => option.value === keep)) {
+      select.value = keep;
+    }
+  }
+  return firmwares;
+}
+
 async function queueCommand(hex, path, body, doneText, button) {
   if (button) button.disabled = true;
   try {
@@ -3241,6 +3253,41 @@ ui.bulkNfc.addEventListener("click", async () => {
     }
   }
   if (queued) toast(`Queued NFC links for ${plural(queued, "tag")}`);
+});
+ui.bulkFw.addEventListener("change", disarm);
+ui.bulkFlash.addEventListener("click", () => {
+  const path = ui.bulkFw.value;
+  const file = tagFirmwares().find((one) => one.path === path);
+  if (!file) return;
+  // a tag that already reports this build would only be restarted into it again
+  const rows = tagRows().filter((row) => picked.has(row.hex));
+  const current = (row) => row.fw && file.build && `${row.fw.version}-${row.fw.build}` === file.build;
+  const todo = rows.filter((row) => !current(row)).map((row) => row.hex);
+  const skipped = rows.length - todo.length;
+  if (!todo.length) {
+    toast(`Every selected tag already runs ${file.build}`);
+    return;
+  }
+  arm(ui.bulkFlash, `Press again to update ${plural(todo.length, "tag")}`, async () => {
+    ui.bulkFlash.disabled = true;
+    let queued = 0;
+    for (const hex of todo) {
+      try {
+        const payload = await postJSON(`/api/tags/${hex}/flash`, { path });
+        if (payload.result?.ok) queued += 1;
+        else toast(`${hex}: ${payload.result?.error || "not queued"}`, "bad");
+        render(payload.state);
+      } catch (err) {
+        toast(`${hex}: ${err.message}`, "bad");
+      }
+    }
+    ui.bulkFlash.disabled = false;
+    if (queued) {
+      toast(`Firmware ${file.build || file.name} queued for ${plural(queued, "tag")}`
+        + (skipped ? `, ${plural(skipped, "tag")} already on it` : "")
+        + ". Each starts at its next check-in.");
+    }
+  });
 });
 ui.bulkForget.addEventListener("click", () => {
   arm(ui.bulkForget, `Press again to forget ${plural(picked.size, "tag")}`, async () => {
