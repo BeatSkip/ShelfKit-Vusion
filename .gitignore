@@ -36,3 +36,5 @@ dump.hex
 
 # AI related stuff
 .claude
+.playwright-mcp
+.serena
