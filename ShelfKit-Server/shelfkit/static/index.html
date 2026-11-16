@@ -615,12 +615,9 @@
       <div class="tabs settings-nav" id="settings-tabs" role="tablist" aria-label="Settings sections"
            aria-orientation="vertical">
         <button type="button" role="tab" data-tab="general">General</button>
-        <button type="button" role="tab" data-tab="hubs">Hubs</button>
-        <button type="button" role="tab" data-tab="ports">Serial ports</button>
         <button type="button" role="tab" data-tab="phones">Tag pages for phones</button>
         <button type="button" role="tab" data-tab="axsdb">USB debugger</button>
         <button type="button" role="tab" data-tab="aliases">Aliases and shelves</button>
-        <button type="button" role="tab" data-tab="hubpanel">The hub's panel</button>
         <button type="button" role="tab" data-tab="ai">AI services</button>
       </div>
 
@@ -683,32 +680,6 @@
           </div>
         </section>
 
-        <section class="setting-group" data-tab="hubs" aria-labelledby="set-hubs-title">
-          <h2 id="set-hubs-title">Hubs</h2>
-          <div class="rows" id="settings-hubs"></div>
-          <p class="hint">Open, reset and watch each hub on the <a href="#hub">Hubs screen</a>. The
-            hub's port is set under Serial ports.</p>
-        </section>
-
-        <section class="setting-group" data-tab="ports" aria-labelledby="set-ports-title">
-          <h2 id="set-ports-title">Serial ports</h2>
-          <div class="setting-fields">
-            <label>Hub port
-              <input id="set-hub-port" type="text" list="port-options" spellcheck="false"
-                     autocomplete="off" placeholder="COM4">
-            </label>
-            <label>Tag debug port
-              <input id="set-tag-port" type="text" list="port-options" spellcheck="false"
-                     autocomplete="off" placeholder="COM5">
-            </label>
-          </div>
-          <label class="check"><input id="set-show-tag" type="checkbox">
-            Show the tag debug port on the Hubs screen</label>
-          <p class="hint">The ports are remembered and opened on the Hubs screen. Hiding the tag
-            port closes it, but it stays available as a target on the Flash screen. The hub and
-            the tag can't share a port.</p>
-        </section>
-
         <section class="setting-group" data-tab="phones" aria-labelledby="set-public-title">
           <h2 id="set-public-title">Tag pages for phones</h2>
           <div class="setting-fields">
@@ -755,12 +726,6 @@
           <input id="aliases-file" type="file" accept=".csv,text/csv" hidden>
         </div>
         <p id="aliases-result" class="hint" role="status"></p>
-      </section>
-
-      <section class="setting-group settings" data-tab="hubpanel" aria-labelledby="set-hubpanel">
-        <h2 id="set-hubpanel">The hub's own panel</h2>
-        <p class="hint">Which tags the hub lists on its display is set on the
-          <a href="#hub" data-hub-tab="panel">Hub panel tab of the Hubs screen</a>, and is also saved.</p>
       </section>
 
       <section class="setting-group settings ai-settings" data-tab="ai" aria-labelledby="set-ai">

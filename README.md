@@ -26,6 +26,10 @@ battery and the exact frame it is showing.*
 - **Design screens as text.** *InkLayout* is a small XML layout language made for this panel:
   rows, grids, text that fits, icons, the three colours, and a renderer that tells you what
   overflowed. It is simple enough that a cheap AI model can write layouts from a skill file.
+- **Build apps in the browser, with an AI agent.** The Develop screen has a code editor, a virtual
+  tag and the phone page side by side. Describe a change and the agent (Claude, OpenAI, DeepSeek or
+  Mistral, with your own key) proposes files you can diff, try on the virtual tag, then accept or
+  reject. Every save keeps a checkpoint to go back to.
 - **Look after the fleet.** Over-the-air firmware updates, wireless ID assignment, flash read-back,
   factory reset, service labels for finding a tag in hand, and per-tag battery history with a drain
   estimate.
@@ -75,13 +79,35 @@ The host takes care of the rest:
 - An app that crashes logs its error and leaves every other tag alone.
 
 <table><tr>
-<td width="68%"><img src="Documentation/screenshots/apps.png" alt="The Apps screen"></td>
-<td width="32%"><img src="Documentation/screenshots/phone.png" alt="A tag's phone page"></td>
+<td width="72%"><img src="Documentation/screenshots/apps.png" alt="The Apps screen"></td>
+<td width="28%"><img src="Documentation/screenshots/phone.png" alt="A tag's phone page"></td>
 </tr><tr>
-<td><em>The Apps screen: which tags run each app, a live preview, per-tag settings, the phone
-buttons to try, stored data and the app's log.</em></td>
+<td><em>The Apps screen: the installed apps on the left; for each one the tags it runs on, its
+settings, what a phone tap does, its timers, and per tag the settings, the phone buttons to try,
+stored data and the log.</em></td>
 <td><em>What a phone sees after tapping the tag. Plain HTML, no script, so it works in any browser.</em></td>
 </tr></table>
+
+### Develop
+
+![The Develop screen](Documentation/screenshots/develop.png)
+
+*The Develop screen: the app's files with an outline and live layout checks, and the agent beside
+them. Here it was asked to make the count bigger: it planned, changed `layout.xml`, checked the
+result without running it, and shows the new screen before anything is saved.*
+
+- **Code**: an editor with InkLayout and Python highlighting, an outline, go-to-definition, and a
+  file explorer (right-click for new, duplicate and delete).
+- **Virtual tag** and **Phone**: the app's screen and its phone page, live, with the buttons and an
+  NFC tap to try. Pop the virtual tag out into its own window or hide it.
+- **Settings**: the app's variables and secrets, kept in the server's database rather than the
+  app's folder. Code reads them with `tag.var("name")` and `tag.secret("name")`; the agent sees
+  the variables and only the *names* of secrets, and you type a secret's value when you accept.
+- **Versions** and **Debug**: checkpoints to diff and restore, and the app's log and stored data.
+
+AI keys go under **Settings › AI services**. They stay in the server's database and are only sent
+to that service. Keys for the web services your apps call (weather, calendars) go there too, as
+named API tokens an app reads with `tag.token("name")`.
 
 The **layout playground** (`/inkapps.html`) renders InkLayout as you type, and
 `GET /api/layout/skill` hands a model everything it needs to write layouts. See
@@ -95,11 +121,12 @@ The **layout playground** (`/inkapps.html`) renders InkLayout as you type, and
 | ![Inspector](Documentation/screenshots/inspector.png) | |
 | **Inspector**: a tag's frame, alias, notes, shelf slot, battery history, and (folded away) ID, firmware update, flash read-back and reset. | |
 | ![Queue](Documentation/screenshots/queue.png) | ![Hub](Documentation/screenshots/hub.png) |
-| **Queue**: every command waits for its tag's next check-in, with live progress and **Cancel all**. | **Hub**: both serial ports live, handshake lines, a reset button, and the hub's own e-paper panel. |
+| **Queue**: every command waits for its tag's next check-in, with live progress and **Cancel all**. | **Hubs**: every hub and debug port with its serial port, live log, handshake lines, a reset button, and the hub's own e-paper panel. |
 | ![Flash](Documentation/screenshots/flash.png) | ![Settings](Documentation/screenshots/settings.png) |
-| **Flash**: program a chip from the page, via the AXSDB debugger or the serial bootloader. | **Settings**: thresholds, fleet layout, the address phones use for tag pages, and CSV import/export. |
+| **Flash**: program a chip from the page, via the AXSDB debugger or the serial bootloader. | **Settings**: thresholds, fleet layout, the address phones use for tag pages, the USB debugger, CSV import/export and the AI services. |
 
-Every screen comes in light and dark. `?theme=light` or `?theme=dark` forces one.
+Every screen comes in light and dark (Settings › General, or `?theme=light` / `?theme=dark` in the
+address).
 
 ## How it works
 
@@ -130,9 +157,10 @@ Every screen comes in light and dark. `?theme=light` or `?theme=dark` forces one
 | Tag firmware | Adaptive polling with back-off, images (raw or ECO-compressed) straight to the panel, identity in SPI flash, OTA updates, NFC field wake, deep sleep between polls |
 | Hub firmware | Relays polls, images and batches, serial command channel at 115200, flash read-back relay, draws on its own panel |
 | OTA updates | **Working on hardware.** CRC-checked image in SPI flash, real chip reset, programmed by the bootloader ([design](Documentation/ota-update.md)) |
-| Server | Fleet, Queue, Logs, Diagnostics, Hub, Flash, Apps and Settings screens; a tag inspector reachable from anywhere |
+| Server | Fleet, Queue, Logs, Diagnostics, Apps, Develop, Flash, Hubs and Settings screens; a tag inspector reachable from anywhere |
 | InkServices | App SDK, per-app SQLite stores, timers, NFC-tap hooks, phone pages at `/tag/<ID>`, duplicate-push suppression; pill, weather and hello apps |
 | InkLayout | Layout language, renderer with overflow warnings, playground, model skill file, CLI (`python -m shelfkit.inklayout render`) |
+| Develop | In-browser editor, virtual tag and phone page, checkpoints, app variables and secrets, and an AI agent (Claude, OpenAI, DeepSeek, Mistral) that proposes changes you review |
 | Storage | One SQLite file: tags, aliases, shelf positions, last frames, battery history, power measurements, settings and the event log |
 | Tag power | Radio in deep sleep, MCU sleeping, panel rail off between polls. **The figures are datasheet models, not measurements.** See [power](ShelfKit-Firmware/Vusion/README.md#power) and [the deep dive](Documentation/power-deepdive.md) |
 | Honest gaps | The command queue is in memory, so a restart forgets pending pushes. There is no auth, so keep the admin page on localhost. Tag firmware doesn't yet put its own ID into the NFC link (below). Apps run in the server process. No partial refresh yet. Power still needs metering on a real tag |
@@ -216,8 +244,6 @@ tag, because the app-only hex skips the bootloader. The `.map` files stay out.
 
 - **More apps from the [InkServices idea list](Documentation/InkServices.md)**: waste collection,
   commute, calendar, chores, a message board.
-- **A dev mode** with an in-browser editor and a virtual tag, then an **AI layout chat**: describe a
-  screen and watch the virtual tag update.
 - **Install apps from git**, each in its own process, with an advisory AI review before an app is
   enabled.
 - **Firmware**: keep the NFC link and fill in the tag's ID, poll faster for a minute after a tap,
@@ -249,5 +275,6 @@ web pages are the app.
 - **License:** the code in each `src/` has no license declared yet. The Axsem SDK under
   `ShelfKit-Firmware/Shared/` keeps its original terms: compiler headers are GPL with a linking
   exception, and the rest is vendor-licensed.
-- The screenshots are the running app with simulated serial data, since a screenshot can't include
-  a physical tag. The tag renders are the real output of the apps.
+- The screenshots are the running app with simulated serial data and a stand-in AI service, since
+  a screenshot can't include a physical tag. The tag screens in them are the real output of the
+  apps.

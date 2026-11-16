@@ -189,7 +189,6 @@ const ui = {
   hubCapsSection: $("hub-caps-section"),
   settingsTabs: $("settings-tabs"),
   settingsActions: $("settings-actions"),
-  settingsHubs: $("settings-hubs"),
   hubBanner: $("hub-banner"),
   hubCaps: $("hub-caps"),
   copyLogs: $("copy-logs"),
@@ -251,9 +250,6 @@ const ui = {
   aliasesImport: $("aliases-import"),
   aliasesFile: $("aliases-file"),
   aliasesResult: $("aliases-result"),
-  setHubPort: $("set-hub-port"),
-  setTagPort: $("set-tag-port"),
-  setShowTag: $("set-show-tag"),
   setAxsdb: $("set-axsdb"),
   setPublicUrl: $("set-public-url"),
   setAxsdbState: $("set-axsdb-state"),
@@ -2524,16 +2520,6 @@ function renderHubDetail(pane, rows) {
   }
 }
 
-function renderSettingsHubs() {
-  const listed = state?.panes || [];
-  const sig = JSON.stringify(listed.map((pane) => [pane.key, pane.port, pane.open, pane.status]));
-  if (signatures.settingsHubs === sig) return;
-  signatures.settingsHubs = sig;
-  ui.settingsHubs.replaceChildren(...listed.map((pane) => hubRow(paneTitle(pane),
-    `${paneKind(pane)} · ${pane.port || "no port"} · ${pane.baud} baud · ${paneHealth(pane).word}`,
-    "Open on Hubs", () => pickHubsView(pane.key, "overview"))));
-}
-
 function renderHub() {
   const listed = listedPanes();
   if (hubsView !== "all" && !listed.some((pane) => pane.key === hubsView)) hubsView = "all";
@@ -2687,7 +2673,7 @@ function renderNavShelves() {
 }
 
 // ── settings tabs ──────────────────────────────────────────────────────────
-const FORM_TABS = new Set(["general", "ports", "phones", "axsdb"]);
+const FORM_TABS = new Set(["general", "phones", "axsdb"]);
 function showSettingsTab(name) {
   const tabs = [...ui.settingsTabs.querySelectorAll("[data-tab]")];
   if (!tabs.some((tab) => tab.dataset.tab === name)) name = "general";
@@ -2988,9 +2974,6 @@ function loadSettingsForm() {
   setRadio(ui.setSize, prefs.wall_size);
   ui.setAxsdb.value = prefs.axsdb_path || "";
   ui.setPublicUrl.value = prefs.public_url || "";
-  ui.setHubPort.value = prefs.hub_port || "";
-  ui.setTagPort.value = prefs.tag_port || "";
-  ui.setShowTag.checked = prefs.show_tag_port !== false;
   setSettingsDirty(false);
 }
 
@@ -3046,9 +3029,6 @@ function settingsFromForm() {
   out.wall_size = radioValue(ui.setSize);
   out.axsdb_path = ui.setAxsdb.value.trim();
   out.public_url = ui.setPublicUrl.value.trim();
-  out.hub_port = ui.setHubPort.value.trim();
-  out.tag_port = ui.setTagPort.value.trim();
-  out.show_tag_port = ui.setShowTag.checked;
   return out;
 }
 
@@ -3107,7 +3087,6 @@ async function importAliases(file) {
 }
 
 function renderSettings() {
-  renderSettingsHubs();
   // the form shows what the server holds until you start typing
   if (!settingsDirty) loadSettingsForm();
   const axsdb = state?.flash?.axsdb;
