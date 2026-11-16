@@ -82,6 +82,7 @@ ASSETS = {
     "/app.js": "app.js",
     "/apps.js": "apps.js",               # the Apps screen
     "/develop.js": "develop.js",         # the Develop screen, Settings > AI services
+    "/codeedit.js": "codeedit.js",       # its highlighter and go-to-definition
     "/diag.js": "diag.js",               # the Diagnostics screen
     "/style.css": "style.css",
     "/inkapps.html": "inkapps.html",     # InkServices + InkLayout development page

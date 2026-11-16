@@ -394,7 +394,7 @@ def _propose(host, job: dict, current: dict, proposed: dict) -> None:
             compile(clean["app.py"], "app.py", "exec")
             checks.append("app.py compiles (it runs only after you accept)")
         except SyntaxError as exc:
-            checks.append(f"app.py has a syntax error on line {exc.lineno}: {exc.msg}")
+            checks.append(f"syntax error in app.py line {exc.lineno}: {exc.msg}")
             job["proposal"]["broken"] = True
     if "layout.xml" in clean:
         try:

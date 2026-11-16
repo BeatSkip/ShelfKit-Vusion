@@ -137,7 +137,7 @@
     $("dev-save").disabled = !dirty.length || D.busy;
     $("dev-discard").disabled = !dirty.length || D.busy;
     const a = appOf(D.app);
-    $("dev-app-error").textContent = a && a.error ? `Didn't load: ${a.error}` : "";
+    $("dev-app-error").innerHTML = a && a.error ? CodeEdit.linkRefs(`Didn't load: ${a.error}`, fileNames()) : "";
     $("dev-app-error").hidden = !(a && a.error);
   }
 
@@ -242,7 +242,7 @@
       if (s.change && j.proposal) return changeCard(j, s);
       return `<li class="dev-step is-${esc(s.state)}"><span class="dev-step-ico">${STEP_ICON[s.state] || STEP_ICON.done}</span>
         <span class="dev-step-text"><span class="dev-step-title">${esc(s.title)}</span>
-        ${s.detail ? `<span class="dev-step-detail">${esc(s.detail)}</span>` : ""}</span></li>`;
+        ${s.detail ? `<span class="dev-step-detail">${CodeEdit.linkRefs(s.detail, fileNames())}</span>` : ""}</span></li>`;
     }).join("");
     const waiting = j.status === "running" && !(j.steps || []).some((s) => s.state === "running")
       ? `<li class="dev-step is-running"><span class="dev-step-ico">${STEP_ICON.running}</span>
@@ -278,7 +278,7 @@
     const stats = p.stats.map((s) => `<span class="dev-stat"><code>${esc(s.name)}</code>${s.new ? " new" : ""}
       <span class="dev-add">+${s.added}</span> <span class="dev-del">−${s.removed}</span></span>`).join("");
     const diff = D.diff ? `<div class="dev-diff">${p.stats.map((s) =>
-      `<div class="dev-diff-file"><div class="dev-diff-name">${esc(s.name)}</div>${diffHtml(p.before[s.name] || "", p.files[s.name])}</div>`).join("")}</div>` : "";
+      `<div class="dev-diff-file"><div class="dev-diff-name">${esc(s.name)}</div>${diffHtml(p.before[s.name] || "", p.files[s.name], s.name)}</div>`).join("")}</div>` : "";
     return `<li class="dev-step dev-change ${p.broken ? "is-broken" : ""}">
       <div class="dev-change-head">
         <span class="dev-change-title">${p.broken ? "Proposed change, with problems" : "Proposed change"}</span>
@@ -298,7 +298,7 @@
   }
 
   // a line diff (longest common subsequence), enough for app-sized files
-  function diffHtml(a, b) {
+  function diffHtml(a, b, name) {
     const x = a.split("\n"), y = b.split("\n");
     if (x.length * y.length > 4e6) return '<p class="hint">Too large to compare here.</p>';
     const n = x.length, m = y.length;
@@ -308,11 +308,12 @@
     }
     const out = [];
     let i = 0, k = 0;
-    while (i < n || k < m) {
-      if (i < n && k < m && x[i] === y[k]) { out.push([" ", x[i]]); i++; k++; }
-      else if (i < n && (k >= m || t[i + 1][k] >= t[i][k + 1])) { out.push(["-", x[i]]); i++; }
-      else { out.push(["+", y[k]]); k++; }
+    while (i < n || k < m) {          // [sign, text, old line, new line]
+      if (i < n && k < m && x[i] === y[k]) { out.push([" ", x[i], i + 1, k + 1]); i++; k++; }
+      else if (i < n && (k >= m || t[i + 1][k] >= t[i][k + 1])) { out.push(["-", x[i], i + 1, null]); i++; }
+      else { out.push(["+", y[k], null, k + 1]); k++; }
     }
+    const lang = CodeEdit.lang(name || "");
     // only changed lines with two lines of context
     const keep = out.map((_, idx) => out.slice(Math.max(0, idx - 2), idx + 3).some((l) => l[0] !== " "));
     let html = "", gap = false;
@@ -320,7 +321,8 @@
       if (!keep[idx]) { if (!gap) html += '<div class="dev-dl dev-gap">⋯</div>'; gap = true; return; }
       gap = false;
       const cls = l[0] === "+" ? "dev-dl-add" : l[0] === "-" ? "dev-dl-del" : "";
-      html += `<div class="dev-dl ${cls}"><span class="dev-dl-sign">${l[0]}</span>${esc(l[1]) || " "}</div>`;
+      const code = CodeEdit.highlight(lang, l[1]).replace(/\n$/, "") || " ";
+      html += `<div class="dev-dl ${cls}" ${l[3] ? `data-diff-goto="${esc(name)}:${l[3]}" title="Open ${esc(name)} at line ${l[3]}"` : ""}><span class="dev-dl-n">${l[2] ?? ""}</span><span class="dev-dl-n">${l[3] ?? ""}</span><span class="dev-dl-sign">${l[0]}</span><span class="dev-dl-code">${code}</span></div>`;
     });
     return `<pre class="dev-diff-body">${html}</pre>`;
   }
@@ -374,7 +376,7 @@
 
   function renderPane() {
     const pane = $("dev-pane");
-    const msg = D.msg ? `<p class="dev-msg ${D.msg.bad ? "bad" : ""}" role="status">${esc(D.msg.text)}</p>` : "";
+    const msg = D.msg ? `<p class="dev-msg ${D.msg.bad ? "bad" : ""}" role="status">${CodeEdit.linkRefs(D.msg.text, fileNames())}</p>` : "";
     if (!D.app) {
       pane.innerHTML = '<p class="hint">No apps yet. Make one with New app on the Apps screen.</p>';
       return;
@@ -384,33 +386,188 @@
     else {
       pane.innerHTML = msg + codeHtml();
       const ed = $("dev-editor");
-      if (ed) ed.value = textOf(D.file);
+      if (ed) {
+        ed.value = textOf(D.file);
+        const v = (D.view || {})[D.file];
+        if (v) {
+          ed.setSelectionRange(Math.min(v.pos, ed.value.length), Math.min(v.end, ed.value.length));
+          ed.scrollTop = v.top;
+          ed.scrollLeft = v.left;
+        }
+        D.caretLine = ed.value.slice(0, ed.selectionStart).split("\n").length;
+        paintEditor();
+      }
     }
   }
 
+  // ── the code editor: an explorer on the left, a highlighted editor on the right ──
+  const LINE_H = 20;            // px; must match .ide-hl / .ide-input in style.css
+  const PAD = 12;
+  const FILE_ICON = {
+    python: '<svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M8 1.5c-3 0-3 1.3-3 2.3V5h3.2v.6H3.6C2.4 5.6 1.5 6.6 1.5 8.3s.9 2.9 2.1 2.9H5V9.6c0-1.2 1-2.1 2.2-2.1h3c1 0 1.8-.8 1.8-1.8V3.8c0-1-.9-2.3-4-2.3z" fill="#3b78b0"/><path d="M8 14.5c3 0 3-1.3 3-2.3V11H7.8v-.6h4.6c1.2 0 2.1-1 2.1-2.7s-.9-2.9-2.1-2.9H11v1.6c0 1.2-1 2.1-2.2 2.1h-3c-1 0-1.8.8-1.8 1.8v2.2c0 1 .9 2.3 4 2.3z" fill="#e0b532"/></svg>',
+    xml: '<svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M5.5 4 2 8l3.5 4M10.5 4 14 8l-3.5 4" fill="none" stroke="#d9534f" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    json: '<svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M6 2.5c-1.5 0-2 .7-2 2v1.6c0 .8-.5 1.4-1.5 1.9 1 .5 1.5 1.1 1.5 1.9v1.6c0 1.3.5 2 2 2M10 2.5c1.5 0 2 .7 2 2v1.6c0 .8.5 1.4 1.5 1.9-1 .5-1.5 1.1-1.5 1.9v1.6c0 1.3-.5 2-2 2" fill="none" stroke="#c49a1a" stroke-width="1.5" stroke-linecap="round"/></svg>',
+    text: '<svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M4 2.5h5.5L12.5 5.5V13a.5.5 0 0 1-.5.5H4a.5.5 0 0 1-.5-.5V3a.5.5 0 0 1 .5-.5z" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M5.5 8h5M5.5 10.5h4" stroke="currentColor" stroke-width="1.2"/></svg>',
+  };
+  const fileNames = () => D.files.map((f) => f.name);
+  const allTexts = () => Object.fromEntries(D.files.map((f) => [f.name, textOf(f.name)]));
+
   function codeHtml() {
     const dirty = new Set(dirtyNames());
-    const tabs = D.files.map((f) => `<button type="button" role="tab" data-file="${esc(f.name)}"
-      aria-selected="${f.name === D.file}">${esc(f.name)}${dirty.has(f.name) ? '<span class="dev-dot" title="Unsaved"></span>' : ""}</button>`).join("");
-    const isLayout = D.file.endsWith(".xml");
-    const note = isLayout
-      ? "Drawn on the virtual tag as you type (not saved). InkLayout: 152 × 296, black, white, red."
-      : D.file.endsWith(".py") ? "Runs inside the server only after Save and reload; a checkpoint is saved first."
-        : "Saved with the app.";
-    const diags = isLayout && D.draft && D.draft.diagnostics ? diagHtml(D.draft.diagnostics) : "";
+    const lang = CodeEdit.lang(D.file);
+    const files = D.files.map((f) => {
+      const l = CodeEdit.lang(f.name);
+      return `<li><button type="button" class="ide-file" data-file="${esc(f.name)}"
+        aria-current="${f.name === D.file ? "true" : "false"}" title="${esc(f.name)}">${FILE_ICON[l]}
+        <span class="ide-file-name">${esc(f.name)}</span>${dirty.has(f.name) ? '<span class="dev-dot" title="Unsaved"></span>' : ""}</button></li>`;
+    }).join("");
+    const isLayout = lang === "xml";
+    const note = isLayout ? "Drawn on the virtual tag as you type, not saved"
+      : lang === "python" ? "Runs in the server only after Save and reload" : "Saved with the app";
     return `
-      <div class="dev-files" role="tablist" aria-label="Files">${tabs}</div>
-      <textarea id="dev-editor" class="dev-editor" spellcheck="false" autocomplete="off"
-        aria-label="${esc(D.file)}"></textarea>
-      <p class="hint">${note}</p>
-      ${diags}`;
+      <div class="ide">
+        <nav class="ide-side" aria-label="Explorer">
+          <div class="ide-side-title">Explorer</div>
+          <div class="ide-folder" title="inkapps/${esc(D.app)}"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M1.5 4.5v8a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1H8L6.5 3.5h-4a1 1 0 0 0-1 1z" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>
+            ${esc(D.app)}</div>
+          <ul class="ide-files">${files}</ul>
+          <div class="ide-side-title">Outline</div>
+          <ul class="ide-outline" id="dev-outline"></ul>
+        </nav>
+        <div class="ide-main">
+          <div class="ide-tabbar">
+            <span class="ide-tab">${FILE_ICON[lang]}<span>${esc(D.file)}</span>${dirty.has(D.file) ? '<span class="dev-dot"></span>' : ""}</span>
+            <span class="ide-crumb">inkapps / ${esc(D.app)} / ${esc(D.file)}</span>
+          </div>
+          <div class="ide-code" data-lang="${lang}">
+            <pre class="ide-gutter" id="dev-gutter" aria-hidden="true"></pre>
+            <div class="ide-area">
+              <div class="ide-curline" id="dev-curline" aria-hidden="true"></div>
+              <pre class="ide-hl" id="dev-hl" aria-hidden="true"></pre>
+              <textarea id="dev-editor" class="ide-input" spellcheck="false" autocomplete="off" autocapitalize="off"
+                wrap="off" aria-label="${esc(D.file)}"></textarea>
+            </div>
+          </div>
+          <div class="ide-status">
+            <span id="dev-pos">Ln 1, Col 1</span>
+            <span>${esc(CodeEdit.LANG_NAME[lang])}</span>
+            <span class="ide-status-note">${esc(note)}</span>
+            <span class="ide-status-tip" id="dev-goto-note">Ctrl+click or F12: go to definition</span>
+          </div>
+          <div class="ide-problems" id="dev-problems">${problemsHtml()}</div>
+        </div>
+      </div>`;
+  }
+
+  function problemsHtml() {
+    if (!D.file.endsWith(".xml")) return "";
+    const list = D.draft && D.draft.diagnostics ? D.draft.diagnostics
+      : D.vt && D.vt.diagnostics && !(D.file in D.edits) ? D.vt.diagnostics : null;
+    return list ? diagHtml(list) : "";
   }
 
   function diagHtml(list) {
     const shown = list.filter((d) => d.level !== "info");
     if (!shown.length) return '<p class="dev-diag-ok">No layout problems.</p>';
+    const xml = D.files.find((f) => f.name.endsWith(".xml"));
+    const names = fileNames();
     return `<ul class="dev-diags">${shown.map((d) => `<li class="is-${esc(d.level)}"><span>${esc(d.level)}</span>
-      <code>${esc(d.at)}</code> ${esc(d.msg)}</li>`).join("")}</ul>`;
+      ${xml ? `<button type="button" class="code-ref" data-goto-at="${esc(d.at)}" title="Show it in ${esc(xml.name)}">${esc(d.at)}</button>`
+    : `<code>${esc(d.at)}</code>`} ${CodeEdit.linkRefs(d.msg, names, xml && xml.name)}</li>`).join("")}</ul>`;
+  }
+
+  // the editor's layers: highlighted text, line numbers, the caret's line, the outline
+  function paintEditor() {
+    const ed = $("dev-editor");
+    if (!ed) return;
+    const text = ed.value;
+    $("dev-hl").innerHTML = CodeEdit.highlight(CodeEdit.lang(D.file), text);
+    const lines = text.split("\n").length;
+    const g = $("dev-gutter");
+    if (Number(g.dataset.lines) !== lines) {
+      g.textContent = Array.from({ length: lines }, (_, k) => k + 1).join("\n") + "\n";
+      g.dataset.lines = lines;
+    }
+    const out = CodeEdit.outline(CodeEdit.lang(D.file), text);
+    $("dev-outline").innerHTML = out.length ? out.map((o) => `<li><button type="button" data-line="${o.line}"
+      style="--depth: ${o.depth}" title="Line ${o.line}"><span class="ide-ol-label">${esc(o.label)}</span>
+      ${o.kind ? `<span class="ide-ol-kind">${esc(o.kind)}</span>` : ""}</button></li>`).join("")
+      : '<li class="ide-ol-none">Nothing to outline</li>';
+    syncScroll();
+    caretMoved();
+  }
+
+  function syncScroll() {
+    const ed = $("dev-editor");
+    if (!ed) return;
+    $("dev-hl").style.transform = `translate(${-ed.scrollLeft}px, ${-ed.scrollTop}px)`;
+    $("dev-gutter").style.transform = `translateY(${-ed.scrollTop}px)`;
+    placeCurline();
+  }
+
+  function caretMoved() {
+    const ed = $("dev-editor");
+    if (!ed) return;
+    const pos = ed.selectionStart;
+    const before = ed.value.slice(0, pos);
+    const ln = before.split("\n").length;
+    const col = pos - before.lastIndexOf("\n");
+    const sel = Math.abs(ed.selectionEnd - ed.selectionStart);
+    $("dev-pos").textContent = `Ln ${ln}, Col ${col}${sel ? ` (${sel} selected)` : ""}`;
+    D.caretLine = ln;
+    (D.view || (D.view = {}))[D.file] = { pos, end: ed.selectionEnd, top: ed.scrollTop, left: ed.scrollLeft };
+    placeCurline();
+    for (const b of document.querySelectorAll("#dev-outline [data-line]")) b.removeAttribute("aria-current");
+    const items = [...document.querySelectorAll("#dev-outline [data-line]")].filter((b) => Number(b.dataset.line) <= ln);
+    if (items.length) items[items.length - 1].setAttribute("aria-current", "true");
+  }
+
+  function placeCurline() {
+    const ed = $("dev-editor"), cur = $("dev-curline");
+    if (!ed || !cur) return;
+    cur.style.transform = `translateY(${PAD + ((D.caretLine || 1) - 1) * LINE_H - ed.scrollTop}px)`;
+    const g = $("dev-gutter");
+    g.style.setProperty("--cur", `${PAD + ((D.caretLine || 1) - 1) * LINE_H}px`);
+  }
+
+  // open a file at a line (and column), scrolled into the middle, the line flashed
+  function goto(file, line, col) {
+    if (!D.files.some((f) => f.name === file)) return;
+    if (D.tab !== "code") { D.tab = "code"; store("dev.tab", "code"); renderTabs(); }
+    if (file !== D.file || !$("dev-editor")) { D.file = file; renderPane(); }
+    const ed = $("dev-editor");
+    const lines = ed.value.split("\n");
+    const ln = Math.max(1, Math.min(lines.length, Number(line) || 1));
+    let pos = 0;
+    for (let k = 0; k < ln - 1; k++) pos += lines[k].length + 1;
+    pos += Math.max(0, Math.min(lines[ln - 1].length, (Number(col) || 1) - 1));
+    ed.focus({ preventScroll: true });
+    ed.setSelectionRange(pos, pos);
+    ed.scrollTop = Math.max(0, (ln - 1) * LINE_H - ed.clientHeight / 3);
+    D.caretLine = ln;
+    syncScroll();
+    caretMoved();
+    const cur = $("dev-curline");
+    cur.classList.remove("flash");
+    void cur.offsetWidth;
+    cur.classList.add("flash");
+    $("dev-editor").closest(".ide").scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }
+
+  function gotoDefinition() {
+    const ed = $("dev-editor");
+    if (!ed) return;
+    const hit = CodeEdit.definition(allTexts(), D.file, ed.value, ed.selectionStart);
+    if (hit.file) goto(hit.file, hit.line, hit.col);
+    const note = $("dev-goto-note");      // after goto: another file is a new status bar
+    if (note) { note.textContent = hit.note; note.classList.toggle("is-miss", !hit.file); }
+  }
+
+  function gotoAt(path) {
+    const xml = D.files.find((f) => f.name.endsWith(".xml"));
+    if (!xml) return;
+    const line = CodeEdit.xmlLine(textOf(xml.name), path);
+    goto(xml.name, line || 1);
   }
 
   function versionsHtml() {
@@ -445,7 +602,7 @@
           <dl class="dev-facts">
             <dt>Last draw</dt><dd>${vt.ms != null ? `${vt.ms} ms` : "—"}</dd>
             <dt>Time it drew for</dt><dd>${esc(vt.now || "—")}</dd>
-            <dt>Result</dt><dd>${vt.error ? `<span class="dev-bad">${esc(vt.error)}</span>` : vt.png ? "drawn" : "—"}</dd>
+            <dt>Result</dt><dd>${vt.error ? `<span class="dev-bad">${CodeEdit.linkRefs(vt.error, fileNames(), "layout.xml")}</span>` : vt.png ? "drawn" : "—"}</dd>
           </dl>
           ${vt.diagnostics ? diagHtml(vt.diagnostics) : ""}
           <h4>What the layout gets (@app.data)</h4>
@@ -455,7 +612,7 @@
         </section>
         <section>
           <div class="dev-log-head"><h3>The app's log</h3><button type="button" data-relog>Refresh</button></div>
-          <pre class="json dev-log">${esc(log || "Nothing logged yet.")}</pre>
+          <pre class="json dev-log">${log ? CodeEdit.linkRefs(log, fileNames(), "layout.xml") : "Nothing logged yet."}</pre>
         </section>
       </div>`;
   }
@@ -516,10 +673,8 @@
         D.draft = { png: null, diagnostics: [{ level: "error", at: name, msg: e.message }] };
       }
       renderVirtual();
-      const box = document.querySelector("#dev-pane .dev-diags, #dev-pane .dev-diag-ok");
-      const html = D.draft ? diagHtml(D.draft.diagnostics || []) : "";
-      if (box) box.outerHTML = html;
-      else if (html && D.tab === "code") $("dev-pane").insertAdjacentHTML("beforeend", html);
+      const box = $("dev-problems");
+      if (box) box.innerHTML = problemsHtml();
     }, 300);
   }
 
@@ -570,7 +725,7 @@
     ? `<img src="data:image/png;base64,${src}" alt="The virtual tag's screen">`
     : `<span class="dev-glass-err">${esc(vt.error || "Drawing…")}</span>`}</span></span>
       <span class="app-glass-cap">${esc(cap)}${vt.ms != null && src === vt.png ? ` · ${vt.ms} ms` : ""}</span>
-      ${vt.error && src ? `<p class="dev-bad dev-vt-err">${esc(vt.error)}</p>` : ""}
+      ${vt.error && src ? `<p class="dev-bad dev-vt-err">${CodeEdit.linkRefs(vt.error, fileNames(), "layout.xml")}</p>` : ""}
       <div class="dev-vt-group">
         <label class="dev-pretend">Pretend it is
           <input type="datetime-local" id="dev-pretend" value="${esc(D.pretend)}"></label>
@@ -619,8 +774,22 @@
 
     const screenEl = document.querySelector('.screen[data-screen="develop"]');
     screenEl.addEventListener("click", (e) => {
+      const dl = e.target.closest("[data-diff-goto]");
+      if (dl && !e.target.closest("button")) {
+        const [file, line] = dl.dataset.diffGoto.split(":");
+        if (D.job && D.job.status === "proposed" && D.job.proposal.files[file] !== undefined) takeProposal();
+        goto(file, Number(line));
+        return;
+      }
       const b = e.target.closest("button, a");
       if (!b) return;
+      if (b.dataset.goto) {
+        const [file, line, col] = b.dataset.goto.split(":");
+        goto(file, Number(line), Number(col) || 1);
+        return;
+      }
+      if (b.dataset.gotoAt) { gotoAt(b.dataset.gotoAt); return; }
+      if (b.dataset.line && b.closest("#dev-outline")) { goto(D.file, Number(b.dataset.line)); return; }
       if (b.matches("[data-ai-settings]")) { e.preventDefault(); openAiSettings(); }
       else if (b.dataset.try) { send(b.dataset.try); }
       else if (b.matches("[data-forget]")) {
@@ -633,7 +802,12 @@
       else if (b.matches("[data-accept]")) accept();
       else if (b.matches("[data-reject]")) reject();
       else if (b.matches("[data-take]")) takeProposal();
-      else if (b.dataset.file) { D.file = b.dataset.file; renderPane(); layoutDraft(); }
+      else if (b.dataset.file) {
+        D.file = b.dataset.file;
+        renderPane();
+        layoutDraft();
+        $("dev-editor")?.focus({ preventScroll: true });
+      }
       else if (b.dataset.revert) revert(b.dataset.revert);
       else if (b.matches("[data-relog]")) refreshSide();
       else if (b.dataset.vt) {
@@ -663,24 +837,58 @@
     screenEl.addEventListener("input", (e) => {
       if (e.target.id !== "dev-editor") return;
       D.edits[D.file] = e.target.value;
-      const wasDirty = $("dev-save").disabled;
       renderHead();
-      if (wasDirty !== $("dev-save").disabled || !document.querySelector(`[data-file="${CSS.escape(D.file)}"] .dev-dot`)) {
-        const tab = document.querySelector(`[data-file="${CSS.escape(D.file)}"]`);
-        const dirty = D.edits[D.file] !== textOf(D.file, true);
-        if (tab && dirty && !tab.querySelector(".dev-dot")) tab.insertAdjacentHTML("beforeend", '<span class="dev-dot" title="Unsaved"></span>');
-        if (tab && !dirty) tab.querySelector(".dev-dot")?.remove();
+      paintEditor();
+      const dirty = D.edits[D.file] !== textOf(D.file, true);
+      for (const el of [document.querySelector(`.ide-file[data-file="${CSS.escape(D.file)}"]`), document.querySelector(".ide-tab")]) {
+        if (!el) continue;
+        if (dirty && !el.querySelector(".dev-dot")) el.insertAdjacentHTML("beforeend", '<span class="dev-dot" title="Unsaved"></span>');
+        if (!dirty) el.querySelector(".dev-dot")?.remove();
       }
       if (D.file.endsWith(".xml")) layoutDraft();
     });
     screenEl.addEventListener("keydown", (e) => {
-      if (e.target.id === "dev-editor" && e.key === "Tab" && !e.shiftKey) {
+      if (e.target.id !== "dev-editor") return;
+      const ed = e.target;
+      const indent = CodeEdit.lang(D.file) === "python" ? "    " : "  ";
+      if (e.key === "Tab" && !e.ctrlKey && !e.altKey) {
         e.preventDefault();
-        document.execCommand("insertText", false, "    ");
-      } else if (e.target.id === "dev-editor" && e.key === "s" && (e.ctrlKey || e.metaKey)) {
+        const { selectionStart: s, selectionEnd: t, value: v } = ed;
+        const multi = v.slice(s, t).includes("\n");
+        if (!multi && !e.shiftKey) { document.execCommand("insertText", false, indent); return; }
+        // indent or outdent every selected line
+        const a = v.lastIndexOf("\n", s - 1) + 1;
+        const block = v.slice(a, t);
+        const lines = block.split("\n");
+        const changed = lines.map((l) => e.shiftKey ? l.replace(new RegExp(`^ {1,${indent.length}}`), "") : indent + l).join("\n");
+        ed.setSelectionRange(a, t);
+        document.execCommand("insertText", false, changed);
+        ed.setSelectionRange(a, a + changed.length);
+      } else if (e.key === "Enter" && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        const v = ed.value, s = ed.selectionStart;
+        const line = v.slice(v.lastIndexOf("\n", s - 1) + 1, s);
+        let pad = /^\s*/.exec(line)[0];
+        if (CodeEdit.lang(D.file) === "python" && /:\s*(#.*)?$/.test(line)) pad += indent;
+        if (CodeEdit.lang(D.file) === "xml" && /<[A-Za-z][^<>]*[^/]>\s*$/.test(line) && !/<\//.test(line)) pad += indent;
+        document.execCommand("insertText", false, "\n" + pad);
+      } else if (e.key === "F12") {
+        e.preventDefault();
+        gotoDefinition();
+      } else if (e.key === "s" && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
         saveFiles();
       }
+    });
+    screenEl.addEventListener("scroll", (e) => { if (e.target.id === "dev-editor") syncScroll(); }, true);
+    screenEl.addEventListener("keyup", (e) => { if (e.target.id === "dev-editor") caretMoved(); });
+    screenEl.addEventListener("mouseup", (e) => {
+      if (e.target.id !== "dev-editor") return;
+      caretMoved();
+      if (e.ctrlKey || e.metaKey) setTimeout(gotoDefinition, 0);
+    });
+    document.addEventListener("selectionchange", () => {
+      if (document.activeElement && document.activeElement.id === "dev-editor") caretMoved();
     });
     window.addEventListener("beforeunload", (e) => {
       if (dirtyNames().length) { e.preventDefault(); e.returnValue = ""; }
