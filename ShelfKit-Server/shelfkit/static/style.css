@@ -2019,16 +2019,15 @@ body.apps-dragging, body.apps-dragging * { cursor: grabbing !important; }
   .settings-layout > .settings-nav button { width: auto; min-height: 34px; }
   .settings-body { padding: 20px var(--gutter) 88px; }
 }
-
-/* the categories stay in view; only the settings scroll */
-.settings-layout {
-  background: linear-gradient(var(--rule-soft), var(--rule-soft)) 219px 0 / 1px 100% no-repeat;
-}
-.settings-layout > .settings-nav {
-  position: sticky; top: 0; align-self: start; max-height: 100vh; box-sizing: border-box;
-  overflow-y: auto; border-right: 0;
-}
-@media (max-width: 720px) {
-  .settings-layout { background: none; }
-  .settings-layout > .settings-nav { position: static; max-height: none; overflow: visible; border-bottom: 1px solid var(--rule-soft); }
+/* wide screens: the page stands still (header, category list); only the settings pane scrolls */
+@media (min-width: 721px) {
+  html:has(.screen[data-screen="settings"]:not([hidden])),
+  html:has(.screen[data-screen="settings"]:not([hidden])) body { overflow: hidden; }
+  main:has(> .screen[data-screen="settings"]:not([hidden])) {
+    height: 100vh; box-sizing: border-box; padding-bottom: 0; display: flex; flex-direction: column;
+  }
+  .screen[data-screen="settings"]:not([hidden]) { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .settings-layout { flex: 1; min-height: 0; margin-bottom: 0; }
+  .settings-layout > .settings-nav { min-height: 0; overflow-y: auto; }
+  .settings-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-bottom: 40px; }
 }

@@ -488,6 +488,7 @@ function show(name) {
   if (name === "flash") refreshFlash();
   if (name === "apps" && window.appsShown) window.appsShown();     // apps.js
   if (name === "develop" && window.developShown) window.developShown();   // develop.js
+  if (name === "settings" && settingsTab === "ai" && window.aiSettingsShown) window.aiSettingsShown();
   if (name === "diagnostics" && window.diagShown) window.diagShown();   // diag.js
   if (name === "hub") {
     // lines arrive while the screen is hidden, when a log has no height to scroll

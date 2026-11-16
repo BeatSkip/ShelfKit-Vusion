@@ -1630,4 +1630,6 @@
 
   wire();
   wireAi();
+  // app.js picks the remembered Settings tab before this file loads: fill AI services now if it is the one shown
+  if (!document.querySelector('section[data-tab="ai"]').hidden) window.aiSettingsShown();
 })();
