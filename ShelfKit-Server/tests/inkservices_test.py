@@ -1100,13 +1100,192 @@ def test_manage(tmp: Path) -> None:
     s.close()
 
 
+def test_develop(tmp: Path) -> None:
+    print("develop screen and AI services")
+    import json
+    import threading
+    import time as _time
+    import urllib.error
+    import urllib.request
+
+    from shelfkit import ai, webapp
+    from shelfkit.app import App
+    from shelfkit.serial_link import PortSpec
+
+    s = store_mod.Store(tmp / "dev.db")
+    a = App([PortSpec("hub", "INKDEV")], False, store=s)
+    root = tmp / "dev-apps"
+    write_app(root, "lay", """
+from shelfkit.inkservices import InkApp
+app = InkApp("lay", layout="layout.xml")
+app.config_field("who", label="Who", default="you")
+
+@app.data
+def data(tag):
+    return {"n": tag.data.get("n", 0), "who": tag.config["who"]}
+
+@app.button("Add")
+def add(tag):
+    tag.data["n"] = tag.data.get("n", 0) + 1
+
+@app.on_open
+def opened(tag):
+    tag.data["n"] = tag.data.get("n", 0) + 10
+""")
+    (root / "lay" / "layout.xml").write_text(
+        '<screen><text size="24">{{ data.who }}: {{ data.n }}</text></screen>', encoding="utf-8")
+    a.start_inkservices(root=root, image_dir=tmp / "dev-img")
+    server = webapp.make_server(a, "127.0.0.1", 0)
+    threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.05},
+                     daemon=True).start()
+    base = f"http://127.0.0.1:{server.server_address[1]}"
+
+    def get(path):
+        try:
+            with urllib.request.urlopen(base + path, timeout=10) as res:
+                return json.loads(res.read())
+        except urllib.error.HTTPError as exc:
+            return json.loads(exc.read())
+
+    def post(path, body):
+        req = urllib.request.Request(base + path, data=json.dumps(body).encode(),
+                                     headers={"Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=10) as res:
+                return json.loads(res.read())
+        except urllib.error.HTTPError as exc:
+            return json.loads(exc.read())
+
+    def wait(job):
+        for _ in range(200):
+            view = get(f"/api/dev/agent?job={job}")
+            if view["status"] != "running":
+                return view
+            _time.sleep(0.05)
+        return view
+
+    real_ask = ai.ask
+    try:
+        # Settings > AI services
+        r = get("/api/ai")
+        check("four AI services listed", [p["id"] for p in r["providers"]]
+              == ["anthropic", "openai", "deepseek", "mistral"] and r["default"] is None, r)
+        r = post("/api/ai/account", {"provider": "mistral", "api_key": "sk-test-abcd1234",
+                                     "model": "mistral-large-latest"})
+        m = next(p for p in r["providers"] if p["id"] == "mistral")
+        check("a key is stored and only its end comes back", m["has_key"]
+              and m["key_hint"] == "…1234" and "sk-test" not in json.dumps(r), m)
+        check("the only service with a key is the default", r["default"] == "mistral", r)
+        check("a first key turns the service on", m["enabled"], m)
+        r = post("/api/ai/account", {"provider": "openai", "model": "gpt 5!"})
+        check("a bad model name is refused", "model" in r.get("error", ""), r)
+        r = post("/api/ai/account", {"provider": "nope", "api_key": "x"})
+        check("an unknown service is refused", "unknown" in r.get("error", ""), r)
+        r = post("/api/ai/account", {"provider": "mistral", "model": "codestral-latest"})
+        m = next(p for p in r["providers"] if p["id"] == "mistral")
+        check("changing the model keeps the key", m["has_key"] and m["model"] == "codestral-latest", m)
+        r = post("/api/ai/token", {"name": "wx_key", "value": "token-9876", "note": "weather"})
+        check("an API token is stored, masked", r["tokens"] == [{"name": "wx_key", "hint": "…9876",
+              "note": "weather", "at": r["tokens"][0]["at"]}], r)
+        check("apps read a token with tag.token()", a.inkhost._context(
+              a.inkhost._app("lay"), "0101").token("wx_key") == "token-9876")
+        r = post("/api/ai/token", {"name": "9bad", "value": "x"})
+        check("a bad token name is refused", "starts with a letter" in r.get("error", ""), r)
+        r = post("/api/ai/token", {"name": "wx_key", "remove": True})
+        check("a token can be removed", r["tokens"] == [], r)
+        check("the key is kept server side",
+              s.setting(ai.ACCOUNTS_KEY)["mistral"]["api_key"] == "sk-test-abcd1234")
+
+        # files, virtual tag
+        r = get("/api/dev/files?app=lay")
+        check("develop lists the app's files",
+              [f["name"] for f in r["files"]] == ["app.py", "layout.xml"], r)
+        check("an unknown app is refused", "no app" in get("/api/dev/files?app=zz").get("error", ""))
+        r = post("/api/dev/virtual", {"app": "lay", "do": "draw"})
+        check("virtual tag draws", r.get("ok") and r["png"] and r["data"] == {"n": 0, "who": "you"}, r)
+        r = post("/api/dev/virtual", {"app": "lay", "do": "action", "action": "add"})
+        check("virtual tag runs a button", r.get("ok") and r["data"]["n"] == 1, r)
+        r = post("/api/dev/virtual", {"app": "lay", "do": "open"})
+        check("virtual tag simulates an NFC tap", r.get("ok") and r["data"]["n"] == 11, r)
+        r = post("/api/dev/virtual", {"app": "lay", "do": "config", "config": {"who": "Oz"}})
+        check("virtual tag settings", r["data"]["who"] == "Oz", r)
+        r = post("/api/dev/virtual", {"app": "lay", "do": "draw", "now": "2026-12-24T08:00"})
+        check("pretend time", r["now"] == "2026-12-24T08:00", r)
+        check("the virtual tag is never bound or pushed", s.app_binding("FFF0") is None
+              and not (tmp / "dev-img" / "FFF0.png").exists())
+        r = post("/api/dev/virtual", {"app": "lay", "do": "reset"})
+        check("virtual tag reset", r["data"] == {"n": 0, "who": "you"}, r)
+
+        # save, checkpoints, revert
+        r = post("/api/dev/save", {"app": "lay",
+                                   "files": {"layout.xml": "<screen><text>New</text></screen>"}})
+        check("save writes and checkpoints", r.get("ok")
+              and r["checkpoint"]["files"] == ["app.py", "layout.xml"], r)
+        cps = get("/api/dev/checkpoints?app=lay")["checkpoints"]
+        check("checkpoint listed", len(cps) == 1, cps)
+        r = post("/api/dev/save", {"app": "lay", "files": {"../evil.py": "x"}})
+        check("a path outside the app is refused", "not a file name" in r.get("error", ""), r)
+        r = post("/api/dev/revert", {"app": "lay", "id": cps[0]["id"]})
+        text = (root / "lay" / "layout.xml").read_text(encoding="utf-8")
+        check("revert restores the files", r.get("ok") and "data.who" in text, text)
+
+        # the agent, with the AI faked: no real API call
+        seen = []
+
+        def fake_ask(store, system, messages, **kw):
+            seen.append((system, messages))
+            return {"text": json.dumps({
+                "summary": "Bigger count", "plan": ["make the number big"],
+                "files": {"layout.xml": '<screen><text size="40">{{ data.n }}</text></screen>'},
+                "question": None, "suggestions": ["Add a title"]}),
+                "provider": "mistral", "label": "Mistral", "model": "codestral-latest",
+                "usage": {"output": 10}, "seconds": 0.1}
+        ai.ask = fake_ask
+        job = post("/api/dev/agent", {"app": "lay", "prompt": "make the number bigger"})["job"]
+        view = wait(job)
+        check("the agent proposes a change", view["status"] == "proposed"
+              and view["proposal"]["stats"][0]["name"] == "layout.xml" and view["preview"],
+              view.get("steps"))
+        check("the AI saw the files and the InkLayout reference", "InkLayout" in seen[0][0]
+              and "data.who" in seen[0][1][-1]["content"])
+        check("a proposal is not written until accepted",
+              "data.who" in (root / "lay" / "layout.xml").read_text(encoding="utf-8"))
+        r = post("/api/dev/agent/apply", {"job": job})
+        check("accept writes the proposal", r.get("ok") and 'size="40"' in
+              (root / "lay" / "layout.xml").read_text(encoding="utf-8"), r)
+        check("accept checkpoints first",
+              len(get("/api/dev/checkpoints?app=lay")["checkpoints"]) == 3)
+
+        def bad_ask(store, system, messages, **kw):
+            return {"text": json.dumps({"summary": "oops", "files": {"app.py": "def (:"}}),
+                    "provider": "mistral", "label": "Mistral", "model": "m", "usage": {},
+                    "seconds": 0}
+        ai.ask = bad_ask
+        job = post("/api/dev/agent", {"app": "lay", "prompt": "break it"})["job"]
+        view = wait(job)
+        check("broken Python is flagged, not run", view["proposal"]["broken"]
+              and "syntax error" in view["steps"][-1]["detail"], view["steps"])
+        check("reject leaves the files", post("/api/dev/agent/reject", {"job": job}).get("ok")
+              and "def (:" not in (root / "lay" / "app.py").read_text(encoding="utf-8"))
+        r = post("/api/dev/agent", {"app": "lay", "prompt": ""})
+        check("an empty prompt is refused", "say what" in r.get("error", ""), r)
+        check("parse_json reads a fenced reply",
+              ai.parse_json('Sure:\n```json\n{"a": 1}\n```') == {"a": 1})
+    finally:
+        ai.ask = real_ask
+        server.shutdown()
+        server.server_close()
+        a.inkhost.close()
+        s.close()
+
+
 def main() -> int:
     # a failed test can leave a database open, which Windows will not delete
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
         tmp = Path(d)
         for test in (test_store, test_appstore, test_displays, test_sdk, test_loader,
                      test_host, test_timers, test_pill_app, test_weather_app, test_layout_apps,
-                     test_wiring, test_web, test_manage,
+                     test_wiring, test_web, test_develop, test_manage,
                      test_phone):
             try:
                 test(tmp)

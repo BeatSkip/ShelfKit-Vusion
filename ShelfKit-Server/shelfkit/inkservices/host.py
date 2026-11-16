@@ -381,8 +381,12 @@ class AppHost:
             config={**app.config_defaults(), **st.config(hex_id)},
             data=st.state(hex_id), shared=st.state(""), db=st.sql,
             battery=info.get("battery"), display=displays.preset(info.get("display")),
-            now=self.clock(), fetch=self.fetch,
+            now=self.clock(), fetch=self.fetch, tokens=self._token,
         )
+
+    def _token(self, name: str) -> str | None:
+        from .. import ai
+        return ai.token_value(self.store, name)
 
     def _draw(self, app: InkApp, tag: TagContext):
         """(image, layout result or None); layout warnings go to the app's log."""

@@ -118,6 +118,7 @@ class TagContext:
     now: datetime = field(default_factory=datetime.now)
     logs: list = field(default_factory=list)
     fetch: Callable | None = None           # (url, params, timeout) -> JSON; host-supplied
+    tokens: Callable | None = None          # name -> str | None; Settings > AI services
 
     def log(self, msg: str) -> None:
         """A line in the app's log (Apps tab), stamped with the tag's id by the host."""
@@ -129,6 +130,12 @@ class TagContext:
         @app.data or @app.render: those run on every redraw. Raises on failure; the
         host logs it and keeps the old screen."""
         return (self.fetch or http_json)(url, params, timeout)
+
+    def token(self, name: str) -> str | None:
+        """An API token the owner saved under Settings > AI services > API tokens
+        (a weather service's key, say), so it never has to be written in app.py.
+        None when there is no token by that name."""
+        return self.tokens(name) if self.tokens else None
 
 
 class InkApp:

@@ -52,6 +52,7 @@
       <a href="#diagnostics" data-screen="diagnostics"><svg class="icon" aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg><span class="nav-label">Diagnostics</span></a>
       <hr class="nav-rule">
       <a href="#apps" data-screen="apps"><svg class="icon" aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><path d="M17.5 14v7M14 17.5h7"/></svg><span class="nav-label">Apps</span></a>
+      <a href="#develop" data-screen="develop"><svg class="icon" aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m8 8-4 4 4 4M16 8l4 4-4 4M13.5 5l-3 14"/></svg><span class="nav-label">Develop</span></a>
       <a href="#flash" data-screen="flash"><svg class="icon" aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9z"/></svg><span class="nav-label">Flash</span><span class="mark s-sending" id="nav-flash" hidden></span></a>
       <a href="#hub" data-screen="hub"><svg class="icon" aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8a6 6 0 0 1 0 8.4M7.8 16.2a6 6 0 0 1 0-8.4M19.1 4.9a10 10 0 0 1 0 14.2M4.9 19.1a10 10 0 0 1 0-14.2"/></svg><span class="nav-label">Hubs</span></a>
       <div class="nav-group" id="nav-shelves-group" hidden>
@@ -548,6 +549,43 @@
     </section>
 
     <!-- Settings -->
+    <!-- Develop (drawn by develop.js) -->
+    <section class="screen" data-screen="develop" id="develop" aria-labelledby="dev-title" hidden>
+      <div class="screen-head dev-head">
+        <h1 id="dev-title">Develop</h1>
+        <label class="dev-pick"><span class="visually-hidden">App</span>
+          <select id="dev-app" aria-label="App to work on"></select></label>
+        <span class="dev-dirty" id="dev-dirty" role="status"></span>
+        <span class="spacer"></span>
+        <button id="dev-discard" type="button" disabled>Discard</button>
+        <button id="dev-save" class="primary" type="button" disabled title="Ctrl+S">Save and reload</button>
+      </div>
+      <p class="dev-bad dev-app-error" id="dev-app-error" hidden></p>
+      <div class="dev-body">
+        <div class="dev-main">
+          <form class="dev-prompt" id="dev-prompt">
+            <textarea id="dev-ask" rows="2" placeholder="Describe what to build or change…"
+              aria-label="Describe what to build or change"></textarea>
+            <div class="dev-prompt-foot">
+              <span class="dev-sees"><span class="dev-sees-label">The AI sees</span><span id="dev-sees"></span></span>
+              <span class="spacer"></span>
+              <span class="hint" id="dev-ai"></span>
+              <kbd title="Send with Ctrl+Enter; Ctrl+K jumps here">Ctrl+Enter</kbd>
+              <button class="primary" id="dev-send" type="submit">Send</button>
+            </div>
+          </form>
+          <section class="dev-agent" id="dev-agent" aria-label="Agent" aria-live="polite"></section>
+          <div class="tabs" id="dev-tabs" role="tablist" aria-label="Develop sections">
+            <button type="button" role="tab" data-tab="code">Code</button>
+            <button type="button" role="tab" data-tab="versions">Versions</button>
+            <button type="button" role="tab" data-tab="debug">Debug</button>
+          </div>
+          <div id="dev-pane" class="dev-pane"></div>
+        </div>
+        <aside class="app-glass dev-virtual" id="dev-virtual" aria-label="Virtual tag"></aside>
+      </div>
+    </section>
+
     <section class="screen" data-screen="settings" aria-labelledby="settings-title" hidden>
       <div class="screen-head">
         <h1 id="settings-title">Settings</h1>
@@ -563,6 +601,7 @@
         <button type="button" role="tab" data-tab="axsdb">USB debugger</button>
         <button type="button" role="tab" data-tab="aliases">Aliases and shelves</button>
         <button type="button" role="tab" data-tab="hubpanel">The hub's panel</button>
+        <button type="button" role="tab" data-tab="ai">AI services</button>
       </div>
 
       <form id="settings-form" class="settings" novalidate>
@@ -701,6 +740,18 @@
         <h2 id="set-hubpanel">The hub's own panel</h2>
         <p class="hint">Which tags the hub lists on its display is set on the
           <a href="#hub" data-hub-tab="panel">Hub panel tab of the Hubs screen</a>, and is also saved.</p>
+      </section>
+
+      <section class="setting-group settings ai-settings" data-tab="ai" aria-labelledby="set-ai">
+        <h2 id="set-ai">AI services</h2>
+        <p class="hint">The Develop screen's agent writes apps with one of these. A key is kept in
+          this server's database (in plain text, next to the rest of ShelfKit's data) and is only
+          ever sent to that service; this page never gets it back, only its last four characters.</p>
+        <div id="ai-accounts" class="ai-accounts"></div>
+        <h2 id="set-tokens">API tokens for apps</h2>
+        <p class="hint">Keys for the web services your apps call (weather, calendars, ...). An app
+          reads one with <code>tag.token("name")</code>, so the key never has to be in its code.</p>
+        <div id="ai-tokens"></div>
       </section>
     </section>
   </main>
@@ -887,5 +938,6 @@
   <script src="/app.js"></script>
   <script src="/diag.js"></script>
   <script src="/apps.js"></script>
+  <script src="/develop.js"></script>
 </body>
 </html>

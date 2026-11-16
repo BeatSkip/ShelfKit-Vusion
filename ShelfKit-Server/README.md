@@ -110,7 +110,7 @@ blocks. `color-scheme` is set per theme too, which keeps scrollbars and native c
 
 ## The screens
 
-A sidebar on the left lists the screens (Fleet, Queue, Logs, Diagnostics, then Apps, Flash, Hubs),
+A sidebar on the left lists the screens (Fleet, Queue, Logs, Diagnostics, then Apps, Develop, Flash, Hubs),
 your shelves with their tag counts (a click scrolls Fleet to that shelf), and Settings at the bottom.
 On a phone-width window it folds into a bar along the top. The pages are white with one accent colour
 for where you are and the main action; red only ever means "this needs you". State is also carried by
@@ -126,9 +126,10 @@ from Google Fonts, with system fonts as the fallback when the server has no inte
 | **Logs** | Events recorded by the server (`push`, `ok`, `fail`, `error`, `boot`, `bootloader`, `open`, ...), identical neighbours collapsed into `×N`, filtered by tag or event, **kept across restarts**. Check-ins (`sync`) are hidden unless you ask for them, because every poll makes one |
 | **Hubs** | A list of hubs and debug ports, laid out for several hubs of several kinds (the server drives one hub and one tag debug port today). **All hubs** is an overview: hubs connected, tags heard, queue and needs-attention tiles, a per-hub table, the tags that need you, and the newest events. Pick a hub for its own page with three tabs: **Overview** (connection with Open/Close, tags, handshake lines with Reset, and the features its firmware reports), **Console** (the serial pane: port, baud, Open/Close, DTR, Reset, Clear log, live log, and a **send box** for text or hex bytes with a chosen line ending) and **Hub panel** (the settings for the hub's own display). Copy logs and Save log sit at the top. The port and baud you used come back next run. `#hubs`, `#hub` and `#console` links land here; the picked hub and tab are remembered by the browser. **Add hub** only explains, for now, that one hub is supported |
 | **Flash** | Put firmware on a chip from the page, with the **USB debugger** (AXSDB) or the **serial bootloader**. Pick the file from `Release/`, press Start, press again to confirm. Four steps (find the chip, erase, write, start) show as they happen, with the tool's own output underneath. See [Flashing](#flashing-from-the-page) |
-| **Apps** | The InkServices apps in `inkapps/`: which tags run each one, a live preview, per-tag settings, the phone-page buttons to try (and Simulate NFC tap), stored data and the app's log. An open app keeps a list of every installed app on its left (groups and Disabled under their own headings) to switch straight to another one. The app's page fills the width: a header with its state and **Open the code** (its files, read-only), **Start on a tag** and **···**; cards for the tags it runs on, its settings, its phone page, what an NFC tap does, its timers and its files; the picked tag's settings and phone-page buttons; its activity log and stored data; and on the right **On the glass**, its screen at 1× or 2× with Refresh now and Simulate NFC tap. **Run on this tag** gives an app a tag's screen. Links to the layout playground. See [Documentation/InkServices.md](../Documentation/InkServices.md) and the [plan](../Documentation/plans/2026-11-11-inkservices.md) |
+| **Apps** | The InkServices apps in `inkapps/`: which tags run each one, a live preview, per-tag settings, the phone-page buttons to try (and Simulate NFC tap), stored data and the app's log. An open app keeps a list of every installed app on its left (groups and Disabled under their own headings) to switch straight to another one. The app's page fills the width: a header with its state and **Develop** (opens it on the Develop screen), **Start on a tag** and **···**; cards for the tags it runs on, its settings, its phone page, what an NFC tap does, its timers and its files; the picked tag's settings and phone-page buttons; its activity log and stored data; and on the right **On the glass**, its screen at 1× or 2× with Refresh now and Simulate NFC tap. **Run on this tag** gives an app a tag's screen. Links to the layout playground. See [Documentation/InkServices.md](../Documentation/InkServices.md) and the [plan](../Documentation/plans/2026-11-11-inkservices.md) |
+| **Develop** | Make and change apps with an AI agent. Pick an app, then describe what you want in the prompt bar (Ctrl+K jumps there, Ctrl+Enter sends). The agent gets the app's files, the virtual tag's data, the app's log and the InkLayout reference, and its steps show as they happen: the plan, a **proposed change** (files with +/− counts, Show diff, Edit first, Reject, Accept), a check of the change *without running it* (a new `layout.xml` is drawn on the virtual tag, a new `app.py` is only compiled), a question with answers to click, and suggestions to try next. Nothing is written until **Accept**, which saves a checkpoint first. Below it: **Code** (edit the files by hand; a layout is redrawn and checked as you type; **Save and reload**, Ctrl+S), **Versions** (checkpoints, with Go back to this) and **Debug** (the virtual tag's data and the app's log). On the right the **virtual tag FFF0** runs the app's own callbacks in the server but is never bound or sent anything: Pretend it is (another time), Draw again, Run timers, Simulate NFC tap, the phone-page buttons, its own settings, and Reset. The app's page on **Apps** has a **Develop** button. Needs an AI service under Settings. Code: `shelfkit/inkservices/develop.py`, `static/develop.js` |
 | **Tag pages** | `/tag/<ID>` on the same port: what a phone opens from the tag's NFC link. Plain HTML forms with the app's buttons and the tag's current screen. Forward only `/tag/` (and `/t/`) through a reverse proxy, and set its address under Settings. Code and routes: `shelfkit/inkservices/phone.py` |
-| **Settings** | Tabs: General, Hubs, Serial ports, Tag pages for phones, USB debugger, Aliases and shelves, The hub's panel. When a tag counts as late or silent, when to offer to forget it, the low-battery voltage, the Fleet layout and tag size, and the address phones use for tag pages. A CSV of aliases, notes, shelf and slot can be exported and imported. Saved by the server (the `prefs` setting in the state database), so every browser and every restart sees the same values; an impossible combination is refused with a message and nothing is stored |
+| **Settings** | Tabs: General, Hubs, Serial ports, Tag pages for phones, USB debugger, Aliases and shelves, The hub's panel, AI services ([below](#ai-services)). When a tag counts as late or silent, when to offer to forget it, the low-battery voltage, the Fleet layout and tag size, and the address phones use for tag pages. A CSV of aliases, notes, shelf and slot can be exported and imported. Saved by the server (the `prefs` setting in the state database), so every browser and every restart sees the same values; an impossible combination is refused with a message and nothing is stored |
 
 ### Tag status
 
@@ -196,6 +197,39 @@ debugger flash of an image without the bootloader). The code is in `shelfkit/fla
 
 Every POST is refused with 403 when its `Origin` is another site: a page you happen to have open can
 send a form to this server's address, and this server drives serial ports and runs the flasher.
+
+### AI services
+
+Settings › **AI services** holds an account for each of **Claude (Anthropic)**, **OpenAI**, **DeepSeek** and
+**Mistral**: an API key, the model, an optional base URL, Enabled, **Test the key** (a tiny request),
+**Load models** (the service's own list) and which one the Develop screen uses. Claude goes through the
+official `anthropic` SDK; the other three through the `openai` SDK (DeepSeek and Mistral at their
+OpenAI-compatible endpoints). Both are optional: `pip install anthropic openai`, and the page says which
+one is missing. Claude models that support it run with the server-side refusal fallback on, so a request
+that a safety check declines is retried on a fallback model in the same call.
+
+Keys are stored in the state database's settings table, **in plain text** (like the rest of ShelfKit's
+data, the file is only as safe as this computer), are sent only to their own service, and never come back
+to a browser: the page sees the last four characters. **API tokens for apps** on the same tab are named
+keys for the web services your apps call; an app reads one with `tag.token("name")`.
+
+```
+GET  /api/ai                     the services (key set?, last 4, model, enabled), the default, the tokens
+POST /api/ai/account             {provider, api_key?, model?, base_url?, enabled?, default?}
+POST /api/ai/default             {provider}
+POST /api/ai/check               {provider}
+POST /api/ai/models              {provider}
+POST /api/ai/token               {name, value?, note?, remove?}
+GET  /api/dev/files?app=         the Develop screen: the app's files
+POST /api/dev/save               {app, files: {name: text}}   checkpoint, write, reload
+GET  /api/dev/checkpoints?app=   POST /api/dev/revert {app, id}
+POST /api/dev/virtual            {app, do: draw|open|action|timers|config|reset, action?, value?, now?, config?}
+POST /api/dev/agent              {app, prompt}  -> {job};  GET /api/dev/agent?job=  its steps and proposal
+POST /api/dev/agent/apply|reject {job};  POST /api/dev/agent/forget {app}
+```
+
+The code is in `shelfkit/ai/` and `shelfkit/inkservices/develop.py`. Agent jobs and the conversation are
+kept in memory (gone after a restart); checkpoints are files in `inkapps/<id>/data/checkpoints/`.
 
 ## The working parts, in detail
 

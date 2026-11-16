@@ -1,5 +1,10 @@
 pyserial>=3.5        # both serial ports
 pillow>=10           # image conversion for the send bar (png2epd.py rules)
 
+# Optional: the Develop screen's AI services (Settings > AI services). Without them
+# the server runs as before and Settings says which one to install.
+anthropic>=2.8      # Claude
+openai>=3.51        # OpenAI, DeepSeek, Mistral
+
 # The web UI needs nothing else: the page is plain HTML/JS and the server is the
 # standard library's http.server, so textual is no longer required.

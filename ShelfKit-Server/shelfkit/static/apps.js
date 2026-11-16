@@ -374,7 +374,7 @@
     const shown = tag || (A.list.tags[0] ? A.list.tags[0].id : "0000");
     const live = !a.disabled && !a.error;
     const actions = [];
-    actions.push('<button type="button" data-code>Open the code</button>');
+    actions.push('<button type="button" data-code title="Edit the app, with AI help and a virtual tag">Develop</button>');
     if (a.disabled) actions.push('<button type="button" class="primary" id="app-enable">Enable app</button>');
     else if (live) {
       if (s === "run") actions.push('<button type="button" id="app-stop-all">Stop everywhere</button>');
@@ -1296,7 +1296,7 @@
     else if (b.id === "app-stop-all") askStop(app);
     else if (b.id === "app-enable") enable(app);
     else if (b.matches("[data-run]")) askRun(app);
-    else if (b.matches("[data-code]")) showCode(app);
+    else if (b.matches("[data-code]")) (window.openDevelop ? window.openDevelop(app) : showCode(app));
     else if (b.dataset.scale) {
       A.scale = Number(b.dataset.scale);
       store("apps.glass.scale", String(A.scale));

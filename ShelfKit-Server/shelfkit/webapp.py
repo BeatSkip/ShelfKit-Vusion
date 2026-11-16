@@ -71,6 +71,8 @@ from urllib.parse import parse_qs, unquote, urlparse
 from .app import App
 from .inkservices import phone as inkphone
 from .inkservices import web as inkweb
+from .inkservices import develop as inkdev
+from .ai import web as aiweb
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 # Only these are served, so a request path can never escape STATIC_DIR.
@@ -79,6 +81,7 @@ ASSETS = {
     "/index.html": "index.html",
     "/app.js": "app.js",
     "/apps.js": "apps.js",               # the Apps screen
+    "/develop.js": "develop.js",         # the Develop screen, Settings > AI services
     "/diag.js": "diag.js",               # the Diagnostics screen
     "/style.css": "style.css",
     "/inkapps.html": "inkapps.html",     # InkServices + InkLayout development page
@@ -139,6 +142,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._serve_asset(ASSETS[path])
         if inkweb.handle_get(self, path, query):      # /api/inkapps*, /api/layout/*
             return None
+        if inkdev.handle_get(self, path, query) or aiweb.handle_get(self, path, query):
+            return None   # /api/dev/* (Develop screen), /api/ai (Settings › AI services)
         if path == "/api/state":
             return self._json(self.app.state())
         if path == "/api/hub-display":
@@ -234,6 +239,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._error("cross-site request refused", HTTPStatus.FORBIDDEN)
         body = self._body()
         if inkweb.handle_post(self, path, body):      # /api/inkapps*, /api/layout/*
+            return None
+        if inkdev.handle_post(self, path, body) or aiweb.handle_post(self, path, body):
             return None
         parts = [part for part in path.split("/") if part]
         # every endpoint is /api/<something>
