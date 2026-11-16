@@ -220,9 +220,15 @@ def _view(handler, host, tag: str, message: str, kind: str) -> None:
 
     app = item.app
     sub = f"{esc(info['alias'])} · tag {tag}" if info.get("alias") else f"Tag {tag}"
+    body = page_body(app, sub, f"screen.png?t={int(time.time())}", message, kind)
+    _send(handler, HTTPStatus.OK, _page(app.title, body), "text/html; charset=utf-8")
+
+
+def page_body(app, sub: str, screen_src: str, message: str = "", kind: str = "") -> str:
+    """The app's phone page (also shown, as is, in Develop's Phone tab)."""
+    esc = html.escape
     parts = [f"<h1>{esc(app.title)}</h1><p class='sub'>{sub}</p>",
-             f"<div class='tag'><img src='screen.png?t={int(time.time())}' "
-             f"alt='What the tag shows'></div>"]
+             f"<div class='tag'><img src='{esc(screen_src)}' alt='What the tag shows'></div>"]
     if message:
         parts.append(f"<p class='msg{' err' if kind == 'err' else ''}' role='status'>"
                      f"{esc(message)}</p>")
@@ -239,7 +245,12 @@ def _view(handler, host, tag: str, message: str, kind: str) -> None:
                          f'<button type="submit">{esc(c.label)}</button></form>')
     if app.description:
         parts.append(f"<p class='foot'>{esc(app.description)}</p>")
-    _send(handler, HTTPStatus.OK, _page(app.title, "".join(parts)), "text/html; charset=utf-8")
+    return "".join(parts)
+
+
+def preview_page(app, screen_src: str, message: str = "", kind: str = "") -> str:
+    """The whole phone page for the virtual tag, for an iframe's srcdoc."""
+    return _page(app.title, page_body(app, "Virtual tag FFF0", screen_src, message, kind)).decode("utf-8")
 
 
 # ── POST ───────────────────────────────────────────────────────────────────

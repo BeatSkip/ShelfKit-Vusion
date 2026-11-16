@@ -35,7 +35,7 @@
     msg: null,
     poll: 0,
     layoutSeq: 0,
-    vmode: stored("dev.vt", "show") === "hidden" ? "hidden" : "show",   // show | hidden | popout
+    vmode: "show",              // show (on its tab) | popout (its own window)
     vbox: null,                 // the virtual tag panel; it moves into its own window when popped out
     vwin: null,
   };
@@ -287,7 +287,9 @@
         <span class="dev-change-title">${p.broken ? "Proposed change, with problems" : "Proposed change"}</span>
         ${stats}
       </div>
-      <p class="dev-change-note">${open ? "Not saved. The virtual tag shows it; accept to write the files (a checkpoint is saved first)."
+      ${open && j.preview ? `<button type="button" class="dev-change-shot" data-vtab title="Open it on the Virtual tag tab">
+        <img src="data:image/png;base64,${j.preview}" alt="The proposed screen"></button>` : ""}
+      <p class="dev-change-note">${open ? "Not saved. The Virtual tag tab shows it; accept to write the files (a checkpoint is saved first)."
         : j.status === "accepted" ? "Accepted and saved." : "Rejected: the files did not change."}</p>
       <div class="dev-change-actions">
         <button type="button" data-diff aria-pressed="${D.diff}">${D.diff ? "Hide diff" : "Show diff"}</button>
@@ -372,7 +374,20 @@
   }
 
   // ── tabs: code, versions, debug ──────────────────────────────────────────
+  const hasPhone = (a) => !!a && ((a.controls || []).length > 0 || !!a.has_on_open);
+
+  function setTab(tab) {
+    D.tab = tab;
+    store("dev.tab", tab);
+    renderTabs();
+    renderPane();
+    if (tab !== "code" && tab !== "virtual" && tab !== "phone") refreshSide();
+  }
+
   function renderTabs() {
+    const phoneTab = document.querySelector('#dev-tabs [data-tab="phone"]');
+    phoneTab.hidden = !hasPhone(appOf(D.app));
+    if (D.tab === "phone" && phoneTab.hidden) D.tab = "code";
     for (const b of document.querySelectorAll("#dev-tabs [data-tab]")) {
       b.setAttribute("aria-selected", String(b.dataset.tab === D.tab));
     }
@@ -387,7 +402,13 @@
       pane.innerHTML = '<p class="hint">No apps yet. Make one with New app on the Apps screen.</p>';
       return;
     }
-    if (D.tab === "versions") pane.innerHTML = msg + versionsHtml();
+    renderVmode();
+    if (D.tab === "virtual") {
+      pane.innerHTML = msg + (D.vmode === "popout" ? `<div class="dev-vt-away"><p>The virtual tag is in its own window.</p>
+        <button type="button" data-vdock>Bring it back to this tab</button></div>` : "");
+    }
+    else if (D.tab === "phone") { pane.innerHTML = msg + phoneHtml(); wirePhone(); }
+    else if (D.tab === "versions") pane.innerHTML = msg + versionsHtml();
     else if (D.tab === "debug") pane.innerHTML = msg + debugHtml();
     else {
       pane.innerHTML = msg + codeHtml();
@@ -733,7 +754,7 @@
       D.vt = { error: e.message };
     }
     renderVirtual();
-    if (D.tab === "debug") renderPane();
+    if (D.tab === "debug" || D.tab === "phone") renderPane();
     if (what !== "draw") refreshSide();
   }
 
@@ -751,10 +772,7 @@
     let src = vt.png, cap = "Saved app · nothing is sent to a tag";
     if (prop && D.showProposal) { src = D.job.preview; cap = "The AI's proposal · not saved"; }
     else if (D.draft && D.draft.png) { src = D.draft.png; cap = "Your unsaved layout"; }
-    // side by side on a narrower screen leaves no room for the 2× tag (its own window has)
-    const tight = D.vbox.ownerDocument === document && innerWidth < 1500
-      && document.querySelector(".dev-split") && innerWidth > 1000;
-    const k = tight || Number(stored("dev.scale", "2")) === 1 ? 1 : 2;
+    const k = Number(stored("dev.scale", "2")) === 1 ? 1 : 2;
     const controls = (a.controls || []).map((c) => c.kind === "text"
       ? `<form class="dev-ctl" data-ctl="${esc(c.id)}"><input name="v" placeholder="${esc(c.placeholder || c.label)}"
           aria-label="${esc(c.label)}"><button type="submit">${esc(c.label)}</button></form>`
@@ -770,10 +788,10 @@
         </span>
         ${D.vmode === "popout"
     ? `<button type="button" class="dev-vt-icon" data-vdock title="Put the virtual tag back in the page" aria-label="Put the virtual tag back in the page"><svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M2.5 3.5h11v9h-11zM9.5 3.5v9" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg></button>`
-    : `<button type="button" class="dev-vt-icon" data-vpop title="Open the virtual tag in its own window" aria-label="Open the virtual tag in its own window"><svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M9.5 2.5h4v4M13.5 2.5 8 8M12 9.5V13a.5.5 0 0 1-.5.5h-8A.5.5 0 0 1 3 13V5a.5.5 0 0 1 .5-.5H7" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-        <button type="button" class="dev-vt-icon" data-vhide title="Hide the virtual tag (the Virtual tag button brings it back)" aria-label="Hide the virtual tag"><svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>`}
+    : `<button type="button" class="dev-vt-icon" data-vpop title="Open the virtual tag in its own window" aria-label="Open the virtual tag in its own window"><svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M9.5 2.5h4v4M13.5 2.5 8 8M12 9.5V13a.5.5 0 0 1-.5.5h-8A.5.5 0 0 1 3 13V5a.5.5 0 0 1 .5-.5H7" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>`}
       </div>
       <p class="dev-vt-app">${esc(a.title || a.id)}</p>
+      <div class="dev-vt-screen">
       ${prop ? `<span class="apps-seg dev-which" role="group" aria-label="Show">
         <button type="button" data-which="now" aria-pressed="${!D.showProposal}">Now</button>
         <button type="button" data-which="prop" aria-pressed="${D.showProposal}">Proposal</button></span>` : ""}
@@ -782,6 +800,8 @@
     : `<span class="dev-glass-err">${esc(vt.error || "Drawing…")}</span>`}</span></span>
       <span class="app-glass-cap">${esc(cap)}${vt.ms != null && src === vt.png ? ` · ${vt.ms} ms` : ""}</span>
       ${vt.error && src ? `<p class="dev-bad dev-vt-err">${CodeEdit.linkRefs(vt.error, fileNames(), "layout.xml")}</p>` : ""}
+      </div>
+      <div class="dev-vt-side">
       <div class="dev-vt-group">
         <label class="dev-pretend">Pretend it is
           <input type="datetime-local" id="dev-pretend" value="${esc(D.pretend)}"></label>
@@ -795,27 +815,55 @@
       ${controls ? `<div class="dev-vt-group dev-vt-col"><span class="dev-vt-label">Phone page</span>${controls}</div>` : ""}
       ${fields ? `<form class="dev-vt-group dev-vt-col dev-vt-config" id="dev-config"><span class="dev-vt-label">Settings for this tag</span>
         ${fields}<button type="submit">Use these settings</button></form>` : ""}
-      <button type="button" class="dev-vt-reset" data-vt="reset" title="Forget the virtual tag's data and settings">Reset the virtual tag</button>`;
+      <button type="button" class="dev-vt-reset" data-vt="reset" title="Forget the virtual tag's data and settings">Reset the virtual tag</button>
+      </div>`;
   }
 
-  // where the panel is: in the page, hidden, or in its own window
+  // where the panel is: on its tab, or in its own window
   function renderVmode() {
-    const box = D.vbox;
-    box.hidden = D.vmode === "hidden";
-    const t = $("dev-vt-toggle");
-    t.setAttribute("aria-pressed", String(D.vmode !== "hidden"));
-    $("dev-vt-toggle-text").textContent = D.vmode === "popout" ? "Virtual tag (own window)" : "Virtual tag";
-    t.title = D.vmode === "popout" ? "Put the virtual tag back in the page"
-      : D.vmode === "hidden" ? "Show the virtual tag" : "Hide the virtual tag";
-    document.querySelector(".dev-body").classList.toggle("vt-away", D.vmode !== "show");
+    if (!D.vbox) return;
+    const inTab = D.tab === "virtual";
+    D.vbox.hidden = D.vmode !== "popout" && !inTab;
+    $("dev-pane").hidden = inTab && D.vmode !== "popout" && !D.msg;
+    const t = document.querySelector('#dev-tabs [data-tab="virtual"]');
+    t.textContent = D.vmode === "popout" ? "Virtual tag ↗" : "Virtual tag";
+    t.title = D.vmode === "popout" ? "The virtual tag is in its own window" : "";
   }
 
-  function setVmode(mode) {
-    if (mode === "popout") return popOut();
-    if (D.vmode === "popout") dock(false);
-    D.vmode = mode;
-    store("dev.vt", mode);
-    renderVirtual();
+  // the phone page as the app's phone would show it (the server builds it; no scripts run in it)
+  function phoneHtml() {
+    const a = appOf(D.app);
+    const vt = D.vt || {};
+    return `<div class="dev-phone-wrap">
+      <div class="dev-phone">
+        <div class="dev-phone-bar"><span>tag/FFF0</span></div>
+        ${vt.phone ? `<iframe id="dev-phone-frame" title="The app's phone page" sandbox="allow-same-origin allow-forms"></iframe>`
+    : `<p class="dev-phone-none">${esc(vt.error || "Drawing…")}</p>`}
+      </div>
+      <div class="dev-phone-side">
+        <p class="hint">This is the page a phone opens when it taps a tag running <strong>${esc(a ? a.title || a.id : "")}</strong>,
+          here for the virtual tag. Its buttons run the app's code for the virtual tag; nothing is sent to a real tag.</p>
+        ${a && a.has_on_open ? `<button type="button" data-vt-open title="Runs @app.on_open, as a tap on the tag does">Simulate NFC tap</button>` : ""}
+        <p class="hint">A real phone reaches it at <code>/tag/&lt;ID&gt;</code> on this server, through your reverse proxy.</p>
+      </div>
+    </div>`;
+  }
+
+  function wirePhone() {
+    const f = $("dev-phone-frame");
+    if (!f) return;
+    f.srcdoc = (D.vt || {}).phone || "";
+    f.addEventListener("load", () => {
+      const doc = f.contentDocument;
+      if (!doc) return;
+      doc.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const form = e.target;
+        const action = form.elements.action && form.elements.action.value;
+        const value = form.elements.value ? form.elements.value.value : null;
+        if (action) virtual("action", { action, value });
+      });
+    });
   }
 
   function popOut() {
@@ -832,6 +880,7 @@
     w.document.body.appendChild(w.document.adoptNode(D.vbox));
     D.vwin = w;
     D.vmode = "popout";
+    if (D.tab === "virtual") renderPane();
     w.addEventListener("pagehide", () => { if (D.vmode === "popout") dock(true); });
     renderVirtual();
   }
@@ -840,13 +889,11 @@
   function dock(closed) {
     const w = D.vwin;
     D.vwin = null;
-    if (D.vbox.ownerDocument !== document) {
-      document.querySelector(".dev-body").appendChild(document.adoptNode(D.vbox));
-    }
+    if (D.vbox.ownerDocument !== document) $("dev-pane").after(document.adoptNode(D.vbox));
     D.vmode = "show";
-    store("dev.vt", "show");
     if (!closed && w && !w.closed) w.close();
     renderVirtual();
+    if (D.tab === "virtual") renderPane();
   }
 
   // the panel handles its own events, so they work in the page and in its own window
@@ -861,7 +908,6 @@
         goto(file, Number(line), Number(col) || 1);
       }
       else if (b.matches("[data-vpop]")) popOut();
-      else if (b.matches("[data-vhide]")) setVmode("hidden");
       else if (b.matches("[data-vdock]")) dock(false);
       else if (b.dataset.vt) {
         if (b.dataset.vt === "reset" && !ask("Forget the virtual tag's data and settings?")) return;
@@ -893,14 +939,13 @@
   // Side by side: the agent is a column right of the code and the page itself never scrolls
   const CHAT_W = { min: 300, max: 760 };
   function applyLayout() {
-    const split = stored("dev.layout", "stacked") === "split";
+    const split = stored("dev.layout", "split") === "split";
     document.querySelector('.screen[data-screen="develop"]').classList.toggle("dev-split", split);
     $("dev-layout").setAttribute("aria-pressed", String(split));
     const w = Number(stored("dev.chatw", "420")) || 420;
     document.querySelector(".dev-body").style.setProperty("--dev-chat-w", `${w}px`);
     $("dev-grip").setAttribute("aria-valuenow", String(w));
     if (split) window.scrollTo(0, 0);
-    if (D.vbox) renderVirtual();
   }
 
   function setChatWidth(w) {
@@ -914,7 +959,7 @@
 
   function wireLayout() {
     $("dev-layout").addEventListener("click", () => {
-      store("dev.layout", stored("dev.layout", "stacked") === "split" ? "stacked" : "split");
+      store("dev.layout", stored("dev.layout", "split") === "split" ? "stacked" : "split");
       applyLayout();
     });
     const grip = $("dev-grip");
@@ -941,10 +986,6 @@
       else if (e.key === "ArrowRight") { e.preventDefault(); setChatWidth(w - step); }
     });
     grip.addEventListener("dblclick", () => setChatWidth(420));
-    let wasTight = innerWidth < 1500;
-    window.addEventListener("resize", () => {
-      if ((innerWidth < 1500) !== wasTight) { wasTight = innerWidth < 1500; if (D.vbox) renderVirtual(); }
-    });
     // the agent's feed follows new steps while you are at its bottom, like a chat
     const feed = $("dev-agent");
     let stick = true;
@@ -958,10 +999,6 @@
     wireLayout();
     D.vbox = $("dev-virtual");
     wireVirtual(D.vbox);
-    $("dev-vt-toggle").addEventListener("click", () => {
-      if (D.vmode === "popout") dock(false);
-      else setVmode(D.vmode === "hidden" ? "show" : "hidden");
-    });
     window.addEventListener("pagehide", () => { if (D.vwin && !D.vwin.closed) D.vwin.close(); });
     $("dev-app").addEventListener("change", (e) => openApp(e.target.value));
     $("dev-save").addEventListener("click", saveFiles);
@@ -993,11 +1030,7 @@
     $("dev-tabs").addEventListener("click", (e) => {
       const b = e.target.closest("[data-tab]");
       if (!b) return;
-      D.tab = b.dataset.tab;
-      store("dev.tab", D.tab);
-      renderTabs();
-      renderPane();
-      if (D.tab !== "code") refreshSide();
+      setTab(b.dataset.tab);
     });
 
     const screenEl = document.querySelector('.screen[data-screen="develop"]');
@@ -1018,6 +1051,9 @@
         return;
       }
       if (b.dataset.gotoAt) { gotoAt(b.dataset.gotoAt); return; }
+      if (b.matches("[data-vdock]")) { dock(false); return; }
+      if (b.matches("[data-vt-open]")) { virtual("open"); return; }
+      if (b.matches("[data-vtab]")) { D.showProposal = true; setTab("virtual"); renderVirtual(); return; }
       if (b.dataset.line && b.closest("#dev-outline")) { goto(D.file, Number(b.dataset.line)); return; }
       if (b.matches("[data-ai-settings]")) { e.preventDefault(); openAiSettings(); }
       else if (b.dataset.try) { send(b.dataset.try); }

@@ -1206,6 +1206,8 @@ def opened(tag):
         check("virtual tag draws", r.get("ok") and r["png"] and r["data"] == {"n": 0, "who": "you"}, r)
         r = post("/api/dev/virtual", {"app": "lay", "do": "action", "action": "add"})
         check("virtual tag runs a button", r.get("ok") and r["data"]["n"] == 1, r)
+        check("the phone page comes along, as a phone would show it", "<form" in (r.get("phone") or "")
+              and "data:image/png;base64," in r["phone"] and "Done." in r["phone"], (r.get("phone") or "")[:200])
         r = post("/api/dev/virtual", {"app": "lay", "do": "open"})
         check("virtual tag simulates an NFC tap", r.get("ok") and r["data"]["n"] == 11, r)
         r = post("/api/dev/virtual", {"app": "lay", "do": "config", "config": {"who": "Oz"}})

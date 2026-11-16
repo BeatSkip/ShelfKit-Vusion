@@ -1841,9 +1841,6 @@ body.apps-dragging, body.apps-dragging * { cursor: grabbing !important; }
 .dev-virtual .app-glass-head { gap: 6px; }
 .dev-vt-icon { width: 30px; min-height: 30px; padding: 0; justify-content: center; color: var(--ink-2); }
 .dev-vt-app { display: none; margin: -6px 0 0; align-self: stretch; font-size: var(--t-small); color: var(--ink-2); }
-.dev-vt-toggle { gap: 7px; }
-.dev-vt-toggle svg { flex: none; }
-.dev-vt-toggle[aria-pressed="false"] { color: var(--ink-2); }
 .vtag-window { margin: 0; padding: 14px; background: var(--ground); color: var(--ink); font-family: var(--font); }
 .vtag-window .dev-virtual { position: static; max-width: none; margin: 0 auto; }
 .vtag-window .dev-vt-app { display: block; }
@@ -1871,12 +1868,8 @@ body.apps-dragging, body.apps-dragging * { cursor: grabbing !important; }
   .dev-split .screen-head { margin-bottom: 0; }
   .dev-split .dev-body {
     flex: 1; min-height: 0; display: grid; gap: 0; margin-top: 12px; align-items: stretch;
-    grid-template-columns: minmax(0, 1fr) 14px min(var(--dev-chat-w, 420px), 32vw) 20px auto;
+    grid-template-columns: minmax(0, 1fr) 14px min(var(--dev-chat-w, 420px), 38vw);
     grid-template-rows: auto minmax(0, 1fr);
-    grid-template-areas: "tabs grip chat . vt" "pane grip chat . vt";
-  }
-  .dev-split .dev-body.vt-away {
-    grid-template-columns: minmax(0, 1fr) 14px min(var(--dev-chat-w, 420px), 32vw);
     grid-template-areas: "tabs grip chat" "pane grip chat";
   }
   .dev-split .dev-main { display: contents; }
@@ -1890,10 +1883,7 @@ body.apps-dragging, body.apps-dragging * { cursor: grabbing !important; }
   .dev-split .dev-agent { order: 1; flex: 1 1 auto; min-height: 0; overflow: auto; padding-right: 4px; overscroll-behavior: contain; }
   .dev-split .dev-prompt { order: 2; flex: none; }
   .dev-split .dev-prompt textarea { max-height: 30vh; }
-  .dev-split .dev-virtual {
-    grid-area: vt; position: static; align-self: stretch; min-height: 0; overflow: auto;
-    width: max-content; max-width: 400px; overscroll-behavior: contain;
-  }
+  .dev-split .dev-virtual { grid-area: pane; min-height: 0; overflow: auto; overscroll-behavior: contain; }
   .dev-split .dev-grip {
     grid-area: grip; display: block; position: relative; cursor: col-resize; touch-action: none;
   }
@@ -1907,6 +1897,30 @@ body.apps-dragging, body.apps-dragging * { cursor: grabbing !important; }
 }
 @media (min-width: 1001px) and (max-width: 1499px) {
   .dev-split .ide { grid-template-columns: 150px minmax(0, 1fr); }
-  .dev-split .dev-virtual { width: 260px; padding: 14px; }
-  .dev-split .dev-virtual .apps-seg[aria-label="Preview size"] { display: none; }
 }
+
+/* Develop › Virtual tag and Phone tabs */
+.dev-main .dev-virtual, .vtag-window .dev-virtual {
+  position: static; max-width: none; flex-direction: row; flex-wrap: wrap; align-items: flex-start;
+  justify-content: center; gap: 20px 32px;
+}
+.dev-main .dev-virtual[hidden] { display: none; }
+.dev-virtual .app-glass-head { flex: 1 1 100%; }
+.dev-vt-screen { flex: none; display: flex; flex-direction: column; align-items: center; gap: 12px; max-width: 100%; }
+.dev-vt-side { flex: 1 1 280px; max-width: 440px; display: flex; flex-direction: column; gap: 12px; }
+.dev-vt-side .dev-vt-reset { align-self: flex-start; }
+.dev-vt-away { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 20px 0; color: var(--ink-2); }
+.dev-change-shot { align-self: flex-start; padding: 4px; min-height: 0; background: var(--ground); border: 1px solid var(--rule-soft); border-radius: 6px; }
+.dev-change-shot img { display: block; width: 76px; height: auto; image-rendering: pixelated; }
+.dev-phone-wrap { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: center; gap: 24px 32px; padding: 8px 0; }
+.dev-phone {
+  flex: none; width: 390px; max-width: 100%; height: 760px; display: flex; flex-direction: column;
+  border: 10px solid #1b1e22; border-radius: 34px; overflow: hidden; background: #1b1e22;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+}
+.dev-phone-bar { flex: none; display: flex; justify-content: center; padding: 6px 0 8px; color: #c9ccd0; font-family: var(--mono); font-size: 0.6875rem; }
+.dev-phone-bar span { padding: 2px 12px; border-radius: 999px; background: #2c3136; }
+.dev-phone iframe { flex: 1; width: 100%; border: 0; border-radius: 0 0 24px 24px; background: #ecebe4; }
+.dev-phone-none { flex: 1; display: grid; place-items: center; margin: 0; padding: 20px; color: #f0a0a0; background: #ecebe4; text-align: center; }
+.dev-phone-side { flex: 1 1 260px; max-width: 420px; display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
+.dev-split .dev-phone { height: min(760px, calc(100vh - 230px)); }

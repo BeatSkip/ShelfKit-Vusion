@@ -7,7 +7,8 @@ an AI agent that proposes changes.
     POST /api/dev/revert   {app, id}      back to a checkpoint (after saving one of now)
     POST /api/dev/virtual  {app, do, action?, value?, now?, config?}
                            do: draw | open | action | timers | config | reset
-                           -> {png (base64), ms, diagnostics, data, config, error}
+                           -> {png (base64), ms, diagnostics, data, config, error,
+                               phone (the phone page's HTML, if the app has one)}
     POST /api/dev/agent    {app, prompt, provider?, context?}  -> {job}
     GET  /api/dev/agent?job=              the job: steps so far, the proposal, a question
     POST /api/dev/agent/apply   {job}     checkpoint, write the proposal, reload
@@ -44,6 +45,7 @@ from http import HTTPStatus
 from pathlib import Path
 
 from .. import ai, inklayout
+from . import phone
 from . import sdk as sdk_module
 from .screen import AppError, tag_view
 
@@ -216,7 +218,15 @@ def virtual(host, app_id: str, do: str = "draw", action: str | None = None,
         data = app.data_fn(tag) if (app.data_fn is not None and png) else tag.data
     if calls and not error:
         host._log(app_id, f"[{VIRTUAL}] {calls[0][0] if len(calls) == 1 else 'timers'} (virtual tag)")
-    return {"ok": error is None, "error": error, "png": png, "ms": ms, "diagnostics": diagnostics,
+    phone_page = None
+    if app.controls or app.on_open_fn is not None:     # the app has a phone page: show it as a phone would
+        if do in ("action", "open"):
+            message, kind = (error, "err") if error else ("Done. On a real tag the screen follows "
+                                                        "at its next check-in.", "ok")
+        else:
+            message, kind = "", ""
+        phone_page = phone.preview_page(app, "data:image/png;base64," + png if png else "", message, kind)
+    return {"phone": phone_page, "ok": error is None, "error": error, "png": png, "ms": ms, "diagnostics": diagnostics,
             "data": _jsonable(data), "state": _jsonable(tag.data), "config": tag.config,
             "now": tag.now.isoformat(timespec="minutes")}
 
