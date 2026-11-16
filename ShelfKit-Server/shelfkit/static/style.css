@@ -235,7 +235,42 @@ input[type="checkbox"], input[type="radio"] {
 .pixel { display: block; fill: currentColor; shape-rendering: crispEdges; flex: none; }
 
 /* sidebar ------------------------------------------------------------------ */
-.shell { display: grid; grid-template-columns: var(--side-w) minmax(0, 1fr); min-height: 100vh; }
+.shell { display: grid; grid-template-columns: var(--side-w) minmax(0, 1fr); min-height: 100vh;
+  transition: grid-template-columns 0.16s ease-out; }
+.side-top { display: flex; align-items: center; gap: 4px; }
+.side-top .brand { flex: 1 1 auto; min-width: 0; }
+.side-toggle {
+  flex: none; width: 34px; min-height: 34px; padding: 0; justify-content: center;
+  border-color: transparent; background: transparent; color: var(--ink-2);
+}
+.side-toggle:hover { background: var(--hover); color: var(--ink); }
+.side-chev { transition: transform 0.16s ease-out; transform-origin: 14.5px 12px; }
+
+/* folded to icons: more room for the screen */
+@media (min-width: 861px) {
+  :root[data-side="rail"] { --side-w: 68px; }
+  [data-side="rail"] .sidebar { padding: 12px 10px; overflow-x: hidden; }
+  [data-side="rail"] .side-top { flex-direction: column; gap: 6px; }
+  [data-side="rail"] .brand { padding: 4px 0; justify-content: center; }
+  [data-side="rail"] .brand-name,
+  [data-side="rail"] .nav-label,
+  [data-side="rail"] .nav-title,
+  [data-side="rail"] .nav-count,
+  [data-side="rail"] #link-text,
+  [data-side="rail"] .status { display: none; }
+  [data-side="rail"] .side-chev { transform: scaleX(-1); }
+  [data-side="rail"] .nav a { position: relative; justify-content: center; padding: 0; gap: 0; }
+  [data-side="rail"] .nav a.nav-shelf { padding: 0; min-height: 30px; }
+  [data-side="rail"] .nav .count {
+    position: absolute; top: 3px; right: 3px; min-width: 15px; padding: 0 3px; box-sizing: border-box;
+    border-radius: 999px; background: var(--accent); color: var(--on-accent); font-size: 0.625rem;
+    line-height: 15px; text-align: center;
+  }
+  [data-side="rail"] .nav .mark { position: absolute; top: 6px; right: 8px; width: 7px; height: 7px; }
+  [data-side="rail"] .side-foot { align-items: center; padding: 6px 0 2px; }
+}
+@media (max-width: 860px) { .side-toggle { display: none; } }
+@media (prefers-reduced-motion: reduce) { .shell, .side-chev { transition: none; } }
 .sidebar {
   position: sticky;
   top: 0;

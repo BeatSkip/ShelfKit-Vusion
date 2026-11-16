@@ -112,7 +112,7 @@ blocks. `color-scheme` is set per theme too, which keeps scrollbars and native c
 
 A sidebar on the left lists the screens (Fleet, Queue, Logs, Diagnostics, then Apps, Develop, Flash, Hubs),
 your shelves with their tag counts (a click scrolls Fleet to that shelf), and Settings at the bottom.
-On a phone-width window it folds into a bar along the top. The pages are white with one accent colour
+The button next to the logo (or Ctrl+B) folds it to a narrow column of icons for more working room; the browser remembers the choice. On a phone-width window it folds into a bar along the top. The pages are white with one accent colour
 for where you are and the main action; red only ever means "this needs you". State is also carried by
 shape, so it reads without colour. Tag IDs are drawn in a small bitmap font, and tags stay
 paper-coloured in both themes because they are physical objects. Fonts are Inter and JetBrains Mono

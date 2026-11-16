@@ -438,6 +438,39 @@ ui.theme.addEventListener("click", () => {
   applyTheme(currentTheme() === "light" ? "dark" : "light", true);
 });
 
+// ── the sidebar: full, or folded to icons for more room ─────────────────────
+const SIDE_KEY = "shelfkit-side";
+function applySide(rail) {
+  document.documentElement.dataset.side = rail ? "rail" : "";
+  if (!rail) delete document.documentElement.dataset.side;
+  const button = $("side-toggle");
+  const text = rail ? "Show the menu's labels" : "Fold the menu to icons";
+  button.setAttribute("aria-pressed", String(rail));
+  button.setAttribute("aria-label", text);
+  button.title = `${text} (Ctrl+B)`;
+  // folded, the labels are gone: each link says what it is on hover
+  for (const link of document.querySelectorAll("#nav > a, #link-state")) {
+    const label = link.querySelector(".nav-label, #link-text");
+    if (rail && label) link.title = label.textContent.trim();
+    else if (!rail) link.removeAttribute("title");
+  }
+}
+function toggleSide() {
+  const rail = document.documentElement.dataset.side !== "rail";
+  applySide(rail);
+  store(SIDE_KEY, rail ? "rail" : "full");
+}
+$("side-toggle").addEventListener("click", toggleSide);
+document.addEventListener("keydown", (event) => {
+  if (event.key.toLowerCase() === "b" && (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey) {
+    const t = event.target;
+    if (t.closest && t.closest("input, textarea, select, [contenteditable]")) return;
+    event.preventDefault();
+    toggleSide();
+  }
+});
+applySide(document.documentElement.dataset.side === "rail");
+
 // ── routing ────────────────────────────────────────────────────────────────
 function show(name) {
   if (name === "console") { name = "hub"; hubTab = "console"; }   // the console lives on the Hubs screen
@@ -2639,6 +2672,7 @@ function renderNavShelves() {
     const dot = el("span", "dot");
     dot.style.background = item.colour;
     link.append(dot, el("span", "nav-label", item.name), el("span", "nav-count", String(item.count)));
+    link.title = `${item.name}: ${item.count} tag${item.count === 1 ? "" : "s"}`;
     link.addEventListener("click", (event) => {
       event.preventDefault();
       if (screen !== "fleet") show("fleet");
