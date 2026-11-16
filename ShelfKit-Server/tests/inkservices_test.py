@@ -1129,6 +1129,10 @@ def data(tag):
 def add(tag):
     tag.data["n"] = tag.data.get("n", 0) + 1
 
+@app.button("Peek")
+def peek(tag):
+    tag.data["peek"] = [tag.var("city", "-"), tag.secret("k")]
+
 @app.on_open
 def opened(tag):
     tag.data["n"] = tag.data.get("n", 0) + 10
@@ -1219,6 +1223,26 @@ def opened(tag):
         r = post("/api/dev/virtual", {"app": "lay", "do": "reset"})
         check("virtual tag reset", r["data"] == {"n": 0, "who": "you"}, r)
 
+        # the app's own settings: variables and secrets, read at run time, secrets kept from the AI
+        r = post("/api/dev/virtual", {"app": "lay", "do": "action", "action": "peek"})
+        check("unset variables and secrets give the default and None", r["state"]["peek"] == ["-", None], r["state"])
+        post("/api/dev/settings", {"app": "lay", "kind": "var", "name": "city", "value": "Utrecht"})
+        r = post("/api/dev/settings", {"app": "lay", "kind": "secret", "name": "k", "value": "s3cret-value-9876"})
+        check("a secret is shown masked", r.get("secrets") and r["secrets"][0]["hint"] == "…9876"
+              and "value" not in r["secrets"][0], r)
+        r = post("/api/dev/virtual", {"app": "lay", "do": "action", "action": "peek"})
+        check("the app reads its variable and secret", r["state"]["peek"] == ["Utrecht", "s3cret-value-9876"], r["state"])
+        ctx = develop_mod._context_text(a.inkhost, s, "lay", {})
+        check("the AI sees the variable and the secret's name, never its value",
+              "Utrecht" in ctx and "names only): k" in ctx and "s3cret" not in ctx, ctx[-600:])
+        r = post("/api/dev/settings", {"app": "lay", "kind": "var", "name": "1bad", "value": "x"})
+        check("a bad setting name is refused", "error" in r, r)
+        post("/api/dev/settings", {"app": "lay", "kind": "secret", "name": "k", "remove": True})
+        r = post("/api/dev/virtual", {"app": "lay", "do": "action", "action": "peek"})
+        check("a removed secret is gone", r["state"]["peek"] == ["Utrecht", None], r["state"])
+        post("/api/dev/virtual", {"app": "lay", "do": "reset"})
+
+
         # save, checkpoints, revert
         r = post("/api/dev/save", {"app": "lay",
                                    "files": {"layout.xml": "<screen><text>New</text></screen>"}})
@@ -1288,7 +1312,7 @@ def opened(tag):
         check("the superseded proposal is not offered", sum(1 for st in view["steps"] if st.get("change")) == 1)
         sys_prompt, first = seen[0][0], seen[0][1][-1]["content"]
         check("the AI gets the runtime rules and the API token names", "HOW AN APP RUNS" in sys_prompt
-              and "API tokens the owner saved" in first)
+              and "global API tokens" in first)
         bad_src = ("import nosuchmodule" + chr(10) + "from shelfkit.inkservices import InkApp" + chr(10)
                    + 'app = InkApp("other", layout="x.xml")' + chr(10) + "app.evry(1)" + chr(10))
         found = develop_mod._contract("lay", bad_src, {})
@@ -1300,6 +1324,13 @@ def opened(tag):
         check("an empty prompt is refused", "say what" in r.get("error", ""), r)
         check("parse_json reads a fenced reply",
               ai.parse_json('Sure:\n```json\n{"a": 1}\n```') == {"a": 1})
+        # files: a new one is written by saving it; delete removes one, never app.py
+        post("/api/dev/save", {"app": "lay", "files": {"notes.md": "# notes"}})
+        r = post("/api/dev/delete", {"app": "lay", "file": "notes.md"})
+        check("delete removes a file, with a checkpoint first", r.get("ok") and r.get("checkpoint")
+              and not (root / "lay" / "notes.md").exists(), r)
+        r = post("/api/dev/delete", {"app": "lay", "file": "app.py"})
+        check("app.py cannot be deleted", "error" in r and (root / "lay" / "app.py").exists(), r)
     finally:
         ai.ask = real_ask
         server.shutdown()

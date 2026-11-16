@@ -119,6 +119,8 @@ class TagContext:
     logs: list = field(default_factory=list)
     fetch: Callable | None = None           # (url, params, timeout) -> JSON; host-supplied
     tokens: Callable | None = None          # name -> str | None; Settings > AI services
+    vars: dict = field(default_factory=dict)   # the app's variables (Develop > Settings)
+    secrets: Callable | None = None         # name -> str | None; the app's secrets, then API tokens
 
     def log(self, msg: str) -> None:
         """A line in the app's log (Apps tab), stamped with the tag's id by the host."""
@@ -136,6 +138,19 @@ class TagContext:
         (a weather service's key, say), so it never has to be written in app.py.
         None when there is no token by that name."""
         return self.tokens(name) if self.tokens else None
+
+    def var(self, name: str, default: str | None = None) -> str | None:
+        """A variable of the app, set in Develop > Settings (the same for every tag):
+        a city, a URL, a threshold. Always a string; default when it is not set."""
+        return self.vars.get(name, default)
+
+    def secret(self, name: str) -> str | None:
+        """A secret of the app (an API key, a password), set in Develop > Settings and never
+        written in the app's files. Falls back to the global API token of the same name
+        (Settings > AI services). None when neither exists."""
+        if self.secrets:
+            return self.secrets(name)
+        return self.token(name)
 
 
 class InkApp:

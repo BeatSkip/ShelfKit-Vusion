@@ -45,6 +45,7 @@ from .appstore import AppStore, app_db_path
 from . import scaffold
 from .loader import INKAPPS_DIR, LoadedApp, load_app, load_apps
 from .screen import AppError, LayoutError, draw_screen
+from . import appsettings
 from .sdk import InkApp, TagContext, http_json
 
 LOG_LINES = 200
@@ -382,6 +383,8 @@ class AppHost:
             data=st.state(hex_id), shared=st.state(""), db=st.sql,
             battery=info.get("battery"), display=displays.preset(info.get("display")),
             now=self.clock(), fetch=self.fetch, tokens=self._token,
+            vars=appsettings.variables(self.store, app.id),
+            secrets=lambda name, _app=app.id: appsettings.secret(self.store, _app, name) or self._token(name),
         )
 
     def _token(self, name: str) -> str | None:

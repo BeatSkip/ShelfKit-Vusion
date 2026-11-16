@@ -53,7 +53,8 @@
   }
 
   const appOf = (id) => D.apps.find((a) => a.id === id);
-  const dirtyNames = () => Object.keys(D.edits).filter((n) => D.edits[n] !== textOf(n, true));
+  const dirtyNames = () => [...new Set([...D.files.filter((f) => f.isNew).map((f) => f.name),
+    ...Object.keys(D.edits).filter((n) => D.edits[n] !== textOf(n, true))])];
   function textOf(name, saved) {
     if (!saved && name in D.edits) return D.edits[name];
     const f = D.files.find((x) => x.name === name);
@@ -381,7 +382,8 @@
     store("dev.tab", tab);
     renderTabs();
     renderPane();
-    if (tab !== "code" && tab !== "virtual" && tab !== "phone") refreshSide();
+    if (tab === "settings") loadSettings();
+    else if (tab !== "code" && tab !== "virtual" && tab !== "phone") refreshSide();
   }
 
   function renderTabs() {
@@ -408,6 +410,7 @@
         <button type="button" data-vdock>Bring it back to this tab</button></div>` : "");
     }
     else if (D.tab === "phone") { pane.innerHTML = msg + phoneHtml(); wirePhone(); }
+    else if (D.tab === "settings") pane.innerHTML = msg + settingsHtml();
     else if (D.tab === "versions") pane.innerHTML = msg + versionsHtml();
     else if (D.tab === "debug") pane.innerHTML = msg + debugHtml();
     else {
@@ -446,16 +449,18 @@
       const l = CodeEdit.lang(f.name);
       return `<li><button type="button" class="ide-file" data-file="${esc(f.name)}"
         aria-current="${f.name === D.file ? "true" : "false"}" title="${esc(f.name)}">${FILE_ICON[l]}
-        <span class="ide-file-name">${esc(f.name)}</span>${D.files.indexOf(f) < 9 ? `<kbd class="ide-key" title="Alt+${D.files.indexOf(f) + 1}">${D.files.indexOf(f) + 1}</kbd>` : ""}${dirty.has(f.name) ? '<span class="dev-dot" title="Unsaved"></span>' : ""}</button></li>`;
+        <span class="ide-file-name">${esc(f.name)}</span>${f.isNew ? '<span class="ide-new-tag">new</span>' : ""}${D.files.indexOf(f) < 9 ? `<kbd class="ide-key" title="Alt+${D.files.indexOf(f) + 1}">${D.files.indexOf(f) + 1}</kbd>` : ""}${dirty.has(f.name) ? '<span class="dev-dot" title="Unsaved"></span>' : ""}</button></li>`;
     }).join("");
     const note = fileNote(lang);
     return `
       <div class="ide">
         <nav class="ide-side" aria-label="Explorer">
-          <div class="ide-side-title">Explorer</div>
+          <div class="ide-side-title ide-side-head">Explorer
+            <button type="button" class="ide-side-btn" data-file-menu title="New file… (or right-click the explorer)"
+              aria-label="New file" aria-haspopup="menu"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button></div>
           <div class="ide-folder" title="inkapps/${esc(D.app)}"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M1.5 4.5v8a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1H8L6.5 3.5h-4a1 1 0 0 0-1 1z" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>
             ${esc(D.app)}</div>
-          <ul class="ide-files">${files}</ul>
+          <ul class="ide-files" id="dev-files">${files}</ul>
           <div class="ide-side-title">Outline</div>
           <ul class="ide-outline" id="dev-outline"></ul>
         </nav>
@@ -520,6 +525,164 @@
     $("dev-problems").innerHTML = problemsHtml();
     ed.focus({ preventScroll: true });
     layoutDraft();
+  }
+
+  // ── the explorer's context menu ──────────────────────────────────────────
+  const FILE_NAME = /^[A-Za-z0-9_-][A-Za-z0-9_.-]{0,60}\.(py|xml|md|json|txt|toml)$/;   // develop.EDITABLE
+  const NEW_KINDS = {
+    file: { label: "New file…", ext: "", text: () => "" },
+    py: { label: "New Python module…", ext: ".py", text: (n) => `"""${n}: part of the ${D.app} app."""\n` },
+    xml: { label: "New layout…", ext: ".xml",
+      text: () => '<screen padding="4" gap="4">\n  <text size="20" bold="true">{{ data.title | default:"Hello" }}</text>\n</screen>\n' },
+  };
+  let menuEl = null;
+
+  function closeFileMenu() {
+    if (!menuEl) return;
+    menuEl.remove();
+    menuEl = null;
+  }
+
+  function openFileMenu(x, y, file) {
+    closeFileMenu();
+    const f = file && D.files.find((g) => g.name === file);
+    const items = [
+      ...Object.entries(NEW_KINDS).map(([k, v]) => ({ act: `new:${k}`, label: v.label })),
+      ...(f ? [
+        { sep: true },
+        { act: "dup", label: "Duplicate…" },
+        { act: "copy", label: "Copy name" },
+        { act: "del", label: f.isNew ? "Remove (not saved yet)" : "Delete", danger: true, off: f.name === "app.py",
+          hint: f.name === "app.py" ? "app.py is the app itself" : "" },
+      ] : []),
+    ];
+    menuEl = document.createElement("div");
+    menuEl.className = "ide-menu";
+    menuEl.setAttribute("role", "menu");
+    menuEl.setAttribute("aria-label", f ? f.name : "Explorer");
+    menuEl.innerHTML = (f ? `<div class="ide-menu-title">${esc(f.name)}</div>` : "") + items.map((it) => it.sep
+      ? '<div class="ide-menu-sep" role="separator"></div>'
+      : `<button type="button" role="menuitem" data-act="${it.act}" ${it.off ? "disabled" : ""}
+          class="${it.danger ? "is-danger" : ""}" title="${esc(it.hint || "")}">${esc(it.label)}</button>`).join("");
+    document.body.appendChild(menuEl);
+    const r = menuEl.getBoundingClientRect();
+    menuEl.style.left = `${Math.max(4, Math.min(x, innerWidth - r.width - 4))}px`;
+    menuEl.style.top = `${Math.max(4, Math.min(y, innerHeight - r.height - 4))}px`;
+    menuEl.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-act]");
+      if (!b || b.disabled) return;
+      closeFileMenu();
+      fileAction(b.dataset.act, f ? f.name : null);
+    });
+    menuEl.addEventListener("keydown", (e) => {
+      const list = [...menuEl.querySelectorAll("button:not([disabled])")];
+      const i = list.indexOf(document.activeElement);
+      if (e.key === "ArrowDown") { e.preventDefault(); list[(i + 1) % list.length].focus(); }
+      else if (e.key === "ArrowUp") { e.preventDefault(); list[(i - 1 + list.length) % list.length].focus(); }
+      else if (e.key === "Home") { e.preventDefault(); list[0].focus(); }
+      else if (e.key === "End") { e.preventDefault(); list[list.length - 1].focus(); }
+      else if (e.key === "Escape" || e.key === "Tab") {
+        e.preventDefault();
+        closeFileMenu();
+        document.querySelector(`.ide-file[data-file="${CSS.escape(file || D.file)}"]`)?.focus();
+      }
+    });
+    menuEl.querySelector("button:not([disabled])").focus();
+  }
+
+  function fileAction(act, file) {
+    if (act.startsWith("new:")) return nameNewFile(act.slice(4), null, file);
+    if (act === "dup") return nameNewFile("dup", file, file);
+    if (act === "copy") { navigator.clipboard?.writeText(file).catch(() => {}); return; }
+    if (act === "del") return deleteFile(file);
+  }
+
+  // an input in the file list, like an IDE: Enter makes the file, Escape gives up
+  function nameNewFile(kind, source, after) {
+    if (D.tab !== "code") { D.tab = "code"; store("dev.tab", "code"); renderTabs(); renderPane(); }
+    const list = $("dev-files");
+    if (!list) return;
+    list.querySelector(".ide-naming")?.remove();
+    const ext = source ? (source.match(/\.[a-z]+$/) || [""])[0] : NEW_KINDS[kind].ext;
+    const li = document.createElement("li");
+    li.className = "ide-naming";
+    li.innerHTML = `<input type="text" spellcheck="false" autocomplete="off" aria-label="Name of the new file"
+      placeholder="${source ? "copy name" : ext ? `name${ext}` : "name.py, .xml, .md, .json, .txt"}"><span class="ide-naming-err" role="alert"></span>`;
+    const at = after && list.querySelector(`.ide-file[data-file="${CSS.escape(after)}"]`);
+    if (at) at.closest("li").after(li); else list.appendChild(li);
+    const input = li.querySelector("input");
+    const err = li.querySelector(".ide-naming-err");
+    if (source) {
+      const base = source.replace(/\.[a-z]+$/, "");
+      let n = 2;
+      while (D.files.some((f) => f.name === `${base}_${n}${ext}`)) n += 1;
+      input.value = `${base}_${n}${ext}`;
+      input.setSelectionRange(0, input.value.length - ext.length);
+    }
+    input.focus();
+    let done = false;
+    const check = () => {
+      let name = input.value.trim();
+      if (name && ext && !/\.[A-Za-z0-9]+$/.test(name)) name += ext;
+      if (!name) return { error: "" };
+      if (!FILE_NAME.test(name)) {
+        return { error: /\.[A-Za-z0-9]+$/.test(name) ? "Use .py, .xml, .md, .json, .txt or .toml, and letters, digits, - _ ."
+          : "Add an extension: .py, .xml, .md, .json, .txt or .toml" };
+      }
+      if (D.files.some((f) => f.name.toLowerCase() === name.toLowerCase())) return { error: `There is already a ${name}` };
+      return { name };
+    };
+    input.addEventListener("input", () => { err.textContent = check().error || ""; li.classList.toggle("is-bad", !!err.textContent); });
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") { e.preventDefault(); done = true; li.remove(); $("dev-editor")?.focus({ preventScroll: true }); }
+      else if (e.key === "Enter") {
+        e.preventDefault();
+        const c = check();
+        if (!c.name) { err.textContent = c.error || "Type a name"; li.classList.add("is-bad"); return; }
+        done = true;
+        createFile(c.name, source ? textOf(source) : NEW_KINDS[kind].text(c.name.replace(/\.[a-z]+$/, "")));
+      }
+    });
+    input.addEventListener("blur", () => { setTimeout(() => { if (!done) li.remove(); }, 120); });
+  }
+
+  function createFile(name, text) {
+    caretMoved();
+    D.files.push({ name, text: "", isNew: true });
+    D.edits[name] = text;
+    D.file = name;
+    D.msg = { text: `${name} is new and not saved yet: Save and reload writes it to the app's folder.` };
+    renderHead();
+    renderPane();
+    layoutDraft();
+    const ed = $("dev-editor");
+    if (ed) { ed.focus({ preventScroll: true }); ed.setSelectionRange(ed.value.length, ed.value.length); caretMoved(); }
+  }
+
+  async function deleteFile(name) {
+    const f = D.files.find((g) => g.name === name);
+    if (!f || name === "app.py") return;
+    if (f.isNew) {
+      D.files = D.files.filter((g) => g !== f);
+      delete D.edits[name];
+    } else {
+      const unsaved = dirtyNames().includes(name) ? " Its unsaved edits go too." : "";
+      if (!confirm(`Delete ${name} from the app? A checkpoint of the files is saved first, so Versions can bring it back.${unsaved}`)) return;
+      try {
+        const r = await api("/api/dev/delete", { app: D.app, file: name });
+        delete D.edits[name];
+        const keep = { ...D.edits };
+        await loadApps();
+        await loadApp();
+        D.edits = keep;            // edits to the other files stay
+        D.msg = r.error ? { text: `Deleted ${name}, but the app didn't load: ${r.error}`, bad: true }
+          : { text: `Deleted ${name} and reloaded the app. The checkpoint is under Versions.` };
+      } catch (e) {
+        D.msg = { text: e.message, bad: true };
+      }
+    }
+    if (D.file === name || !D.files.some((g) => g.name === D.file)) D.file = "app.py";
+    renderAll();
   }
 
   function problemsHtml() {
@@ -830,6 +993,94 @@
     t.title = D.vmode === "popout" ? "The virtual tag is in its own window" : "";
   }
 
+  // ── Settings: the app's variables and secrets (the same for every tag) ──
+  async function loadSettings() {
+    const app = D.app;
+    if (!app) return;
+    try {
+      const r = await fetch(`/api/dev/settings?app=${encodeURIComponent(app)}`);
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || r.statusText);
+      if (app !== D.app) return;
+      D.settings = { app, ...j };
+    } catch (e) {
+      D.settings = { app, error: e.message };
+    }
+    if (D.tab === "settings") renderPane();
+  }
+
+  async function saveSetting(kind, name, value, remove = false) {
+    try {
+      const r = await api("/api/dev/settings", { app: D.app, kind, name, value, remove });
+      D.settings = { ...D.settings, ...r };
+      D.setMsg = { text: remove ? `Removed ${name}.` : `Saved ${name}. The virtual tag was drawn again with it.` };
+      renderPane();
+      virtual("draw");
+      return true;
+    } catch (e) {
+      D.setMsg = { text: e.message, bad: true };
+      renderPane();
+      return false;
+    }
+  }
+
+  function settingsHtml() {
+    const st = D.settings;
+    if (!st || st.app !== D.app) { loadSettings(); return '<p class="hint">Loading…</p>'; }
+    if (st.error) return `<p class="dev-bad">${esc(st.error)}</p>`;
+    const note = D.setMsg ? `<p class="dev-msg ${D.setMsg.bad ? "bad" : ""}" role="status">${esc(D.setMsg.text)}</p>` : "";
+    D.setMsg = null;
+    const vars = st.vars.map((v) => `<form class="dev-set-row" data-kind="var" data-name="${esc(v.name)}">
+        <code class="dev-set-name">${esc(v.name)}</code>
+        <input name="value" value="${esc(v.value)}" aria-label="Value of ${esc(v.name)}" spellcheck="false">
+        <button type="submit">Save</button>
+        <button type="button" class="dev-set-del" data-set-del="var" data-name="${esc(v.name)}" aria-label="Remove ${esc(v.name)}">Remove</button>
+      </form>`).join("");
+    const secrets = st.secrets.map((x) => `<form class="dev-set-row" data-kind="secret" data-name="${esc(x.name)}">
+        <code class="dev-set-name">${esc(x.name)}</code>
+        <input name="value" type="password" autocomplete="new-password" placeholder="${esc(x.hint)} · type to replace"
+          aria-label="New value for ${esc(x.name)}">
+        <button type="submit">Replace</button>
+        <button type="button" class="dev-set-del" data-set-del="secret" data-name="${esc(x.name)}" aria-label="Remove ${esc(x.name)}">Remove</button>
+      </form>`).join("");
+    const fields = (st.fields || []).map((f) => `<tr><td><code>${esc(f.key)}</code></td><td>${esc(f.label)}</td>
+      <td>${f.default ? `<code>${esc(f.default)}</code>` : '<span class="hint">empty</span>'}</td></tr>`).join("");
+    return `${note}<div class="dev-settings">
+      <section class="dev-set-card">
+        <h3>Variables</h3>
+        <p class="hint">Plain values the app uses on every tag: a city, a URL, a threshold. Read them with
+          <code>tag.var("name", "default")</code>; they are always text. The AI sees them.</p>
+        <div class="dev-set-list">${vars || '<p class="hint dev-set-none">No variables yet.</p>'}</div>
+        <form class="dev-set-row dev-set-add" data-kind="var" data-add>
+          <input name="name" placeholder="name" aria-label="New variable's name" spellcheck="false" autocomplete="off">
+          <input name="value" placeholder="value" aria-label="New variable's value" spellcheck="false" autocomplete="off">
+          <button type="submit" class="primary">Add</button>
+        </form>
+      </section>
+      <section class="dev-set-card">
+        <h3>Secrets</h3>
+        <p class="hint">Keys and passwords for this app. Read them with <code>tag.secret("name")</code>. They are kept in the
+          server's database, not in the app's files, so they stay out of git and checkpoints, and the AI only sees their names.</p>
+        <div class="dev-set-list">${secrets || '<p class="hint dev-set-none">No secrets yet.</p>'}</div>
+        <form class="dev-set-row dev-set-add" data-kind="secret" data-add>
+          <input name="name" placeholder="name" aria-label="New secret's name" spellcheck="false" autocomplete="off">
+          <input name="value" type="password" placeholder="value" aria-label="New secret's value" autocomplete="new-password">
+          <button type="submit" class="primary">Add</button>
+        </form>
+        <p class="hint">Shared API tokens: <code>tag.secret</code> falls back to these when the app has no secret of that name.
+          ${st.tokens.length ? st.tokens.map((t) => `<code>${esc(t)}</code>`).join(" ") : "none yet."}
+          <a href="#settings" data-ai-settings>Manage them in Settings › AI services</a></p>
+      </section>
+      <section class="dev-set-card">
+        <h3>Per-tag settings</h3>
+        <p class="hint">Declared in app.py with <code>app.config_field(key, label=, default=)</code> and read with
+          <code>tag.config["key"]</code>. Each tag has its own values, set on the Apps screen; the virtual tag's are on the Virtual tag tab.</p>
+        ${fields ? `<table class="dev-set-fields"><thead><tr><th>Key</th><th>Label</th><th>Default</th></tr></thead><tbody>${fields}</tbody></table>`
+    : '<p class="hint dev-set-none">This app declares none.</p>'}
+      </section>
+    </div>`;
+  }
+
   // the phone page as the app's phone would show it (the server builds it; no scripts run in it)
   function phoneHtml() {
     const a = appOf(D.app);
@@ -995,8 +1246,62 @@
     applyLayout();
   }
 
+  function wireFileMenu(screenEl) {
+    screenEl.addEventListener("contextmenu", (e) => {
+      const side = e.target.closest(".ide-side");
+      if (!side || e.target.closest("#dev-outline, .ide-naming")) return;
+      e.preventDefault();
+      openFileMenu(e.clientX, e.clientY, e.target.closest(".ide-file")?.dataset.file || null);
+    });
+    screenEl.addEventListener("keydown", (e) => {
+      const b = e.target.closest && e.target.closest(".ide-file");
+      if (b && (e.key === "ContextMenu" || (e.key === "F10" && e.shiftKey))) {
+        e.preventDefault();
+        const r = b.getBoundingClientRect();
+        openFileMenu(r.left + 24, r.bottom, b.dataset.file);
+      } else if (b && e.key === "Delete" && b.dataset.file !== "app.py") {
+        e.preventDefault();
+        deleteFile(b.dataset.file);
+      }
+    });
+    document.addEventListener("pointerdown", (e) => { if (menuEl && !menuEl.contains(e.target)) closeFileMenu(); }, true);
+    window.addEventListener("resize", closeFileMenu);
+    window.addEventListener("blur", closeFileMenu);
+    document.addEventListener("scroll", closeFileMenu, true);
+  }
+
+  function wireSettings() {
+    const pane = $("dev-pane");
+    pane.addEventListener("submit", async (e) => {
+      const f = e.target.closest(".dev-set-row");
+      if (!f) return;
+      e.preventDefault();
+      const name = f.dataset.add !== undefined ? f.elements.name.value.trim() : f.dataset.name;
+      const value = f.elements.value.value;
+      if (f.dataset.kind === "secret" && !value) { f.elements.value.focus(); return; }
+      if (f.dataset.add !== undefined && st0(name)) return;
+      await saveSetting(f.dataset.kind, name, value);
+    });
+    const st0 = (name) => {
+      const s = D.settings || {};
+      if ([...(s.vars || []), ...(s.secrets || [])].some((x) => x.name === name)) {
+        D.setMsg = { text: `There is already a setting called ${name}; change it in its row.`, bad: true };
+        renderPane();
+        return true;
+      }
+      return false;
+    };
+    pane.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-set-del]");
+      if (!b) return;
+      if (!confirm(`Remove ${b.dataset.setDel === "secret" ? "the secret" : "the variable"} ${b.dataset.name}?`)) return;
+      saveSetting(b.dataset.setDel, b.dataset.name, null, true);
+    });
+  }
+
   function wire() {
     wireLayout();
+    wireSettings();
     D.vbox = $("dev-virtual");
     wireVirtual(D.vbox);
     window.addEventListener("pagehide", () => { if (D.vwin && !D.vwin.closed) D.vwin.close(); });
@@ -1034,6 +1339,7 @@
     });
 
     const screenEl = document.querySelector('.screen[data-screen="develop"]');
+    wireFileMenu(screenEl);
     screenEl.addEventListener("click", (e) => {
       if (e.target.closest("#dev-virtual")) return;     // the panel handles its own (wireVirtual)
       const dl = e.target.closest("[data-diff-goto]");
@@ -1052,6 +1358,7 @@
       }
       if (b.dataset.gotoAt) { gotoAt(b.dataset.gotoAt); return; }
       if (b.matches("[data-vdock]")) { dock(false); return; }
+      if (b.matches("[data-file-menu]")) { const r = b.getBoundingClientRect(); openFileMenu(r.left, r.bottom + 4, null); return; }
       if (b.matches("[data-vt-open]")) { virtual("open"); return; }
       if (b.matches("[data-vtab]")) { D.showProposal = true; setTab("virtual"); renderVirtual(); return; }
       if (b.dataset.line && b.closest("#dev-outline")) { goto(D.file, Number(b.dataset.line)); return; }

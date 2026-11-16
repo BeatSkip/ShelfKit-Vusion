@@ -4,6 +4,9 @@ an AI agent that proposes changes.
     GET  /api/dev/files?app=              the app's own text files, editable
     POST /api/dev/save     {app, files: {name: text}, note?}   checkpoint, write, reload
     GET  /api/dev/checkpoints?app=        saved versions of the app's files
+    GET  /api/dev/settings?app=          variables, secrets (masked), API token names, per-tag fields
+    POST /api/dev/settings {app, kind: var|secret, name, value?, remove?}
+    POST /api/dev/delete   {app, file}    checkpoint, remove one file (never app.py), reload
     POST /api/dev/revert   {app, id}      back to a checkpoint (after saving one of now)
     POST /api/dev/virtual  {app, do, action?, value?, now?, config?}
                            do: draw | open | action | timers | config | reset
@@ -45,7 +48,7 @@ from http import HTTPStatus
 from pathlib import Path
 
 from .. import ai, inklayout
-from . import phone
+from . import appsettings, phone
 from . import sdk as sdk_module
 from .screen import AppError, tag_view
 
@@ -130,6 +133,24 @@ def save(host, app_id: str, new: dict, note: str = "edited by hand", label: str 
     meta = checkpoint(host, app_id, f"before: {note}", label)
     for name, text in clean.items():
         (folder / name).write_text(text, encoding="utf-8", newline="\n")
+    host.reload()
+    item = host.loaded.get(app_id)
+    return {"ok": True, "checkpoint": meta, "error": item.error if item else None}
+
+
+def delete(host, app_id: str, name: str) -> dict:
+    """Checkpoint, remove one file, reload every app. app.py stays: the app is nothing without it."""
+    name = str(name or "")
+    if not EDITABLE.match(name):
+        raise AppError(f"{name!r} is not a file of the app")
+    if name == "app.py":
+        raise AppError("app.py is the app itself; it cannot be deleted here")
+    folder = _folder(host, app_id)
+    target = folder / name
+    if not target.is_file():
+        raise AppError(f"there is no {name}")
+    meta = checkpoint(host, app_id, f"before deleting {name}", "")
+    target.unlink()
     host.reload()
     item = host.loaded.get(app_id)
     return {"ok": True, "checkpoint": meta, "error": item.error if item else None}
@@ -286,8 +307,12 @@ HOW AN APP RUNS (the host, shelfkit/inkservices/host.py)
   sent if it changed.
 - Fresh data: @app.every(minutes=N) runs for every tag on a schedule (N >= 15 unless asked);
   tag.fetch_json(url, params) is the only network access; put results in tag.data.
-- Secrets: tag.token("name") returns an API token the owner saved in Settings (None if not);
-  never write a key into app.py. Tokens that exist are listed in the context.
+- Settings the owner sets for the whole app (Develop > Settings): tag.var("name", default)
+  for plain values (a city, a URL; always strings) and tag.secret("name") for keys and
+  passwords (falls back to the global API token of that name; None when missing). Never write
+  a key into app.py. The ones that exist are listed in the context; if the app needs a new one,
+  read it with a default and tell the owner its name. Per-tag settings are
+  app.config_field(...) and read from tag.config.
 - Imports: the Python standard library and shelfkit.inkservices only.
 - Files you may write: app.py, layout.xml and other .py .xml .md .json .txt .toml files in the
   app folder (plain names, no folders).
@@ -364,9 +389,13 @@ def _context_text(host, store, app_id: str, ctx: dict) -> str:
     except AppError as exc:
         parts.append(f"=== the virtual tag could not draw ===\n{exc}")
     tokens = [t["name"] for t in ai.tokens_public(store)] if store is not None else []
-    parts.append("=== API tokens the owner saved (read with tag.token(name)) ===\n"
-                 + (", ".join(tokens) if tokens else "none yet; if the app needs a key, say which "
-                    "name to save it under in Settings > AI services > API tokens"))
+    mine = appsettings.public(store, app_id) if store is not None else {"vars": [], "secrets": []}
+    parts.append("=== the app's settings (Develop > Settings) ===\nvariables (tag.var): "
+                 + (json.dumps({v["name"]: v["value"] for v in mine["vars"]})[:2000] if mine["vars"] else "none")
+                 + "\nsecrets (tag.secret; names only): "
+                 + (", ".join(x["name"] for x in mine["secrets"]) or "none")
+                 + "\nglobal API tokens (tag.secret or tag.token; names only): "
+                 + (", ".join(tokens) or "none"))
     log = host.log(app_id)[-30:]
     if log:
         parts.append("=== the app's recent log ===\n" + "\n".join(line for _, line in log))
@@ -642,6 +671,12 @@ def handle_get(handler, path: str, query: dict) -> bool:
             handler._json({"checkpoints": checkpoints(host, q.get("app", ""))})
         elif path == "/api/dev/agent":
             handler._json(job_view(q.get("job", "")))
+        elif path == "/api/dev/settings":
+            app_id = q.get("app", "")
+            app = host._app(app_id)
+            handler._json({**appsettings.public(handler.app.store, app_id),
+                           "tokens": [t["name"] for t in ai.tokens_public(handler.app.store)],
+                           "fields": [f.as_dict() for f in app.config_fields]})
         elif path == "/api/dev/agent/history":
             handler._json({"jobs": history(q.get("app", "")),
                            "ai": ai.describe(handler.app.store)})
@@ -663,6 +698,13 @@ def handle_post(handler, path: str, body: dict) -> bool:
     try:
         if path == "/api/dev/save":
             handler._json(save(host, app_id, body.get("files") or {}, str(body.get("note") or "edited by hand")))
+        elif path == "/api/dev/settings":
+            _folder(host, app_id)
+            handler._json(appsettings.save(handler.app.store, app_id, str(body.get("kind") or ""),
+                                           str(body.get("name") or ""), body.get("value"),
+                                           bool(body.get("remove"))))
+        elif path == "/api/dev/delete":
+            handler._json(delete(host, app_id, str(body.get("file") or "")))
         elif path == "/api/dev/revert":
             handler._json(revert(host, app_id, str(body.get("id") or "")))
         elif path == "/api/dev/virtual":
