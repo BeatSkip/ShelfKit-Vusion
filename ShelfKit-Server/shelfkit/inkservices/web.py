@@ -5,6 +5,7 @@
     GET  /api/inkapps/log?app=                the app's log
     GET  /api/inkapps/data?app=               what the app has stored (settings, data, tables)
     GET  /api/inkapps/layout?app=             the app's layout file, as text
+    GET  /api/inkapps/source?app=             the app's own files (app.py, layout.xml, ...), read-only
     POST /api/inkapps/reload                  re-import every app (picks up edits)
     POST /api/inkapps/grid     {grid}         save the Apps grid: order and groups
     POST /api/inkapps/disable  {app}          stop it everywhere and stop importing it
@@ -37,6 +38,7 @@ from .. import displays, inklayout
 from .screen import AppError
 
 _HEX = set("0123456789ABCDEF")
+_SOURCE = {".py", ".xml", ".md", ".txt", ".json", ".toml"}   # what "Open the code" shows
 
 
 def _hex(value) -> str | None:
@@ -111,6 +113,18 @@ def handle_get(handler, path: str, query: dict) -> bool:
             handler._error("that app has no layout file", HTTPStatus.NOT_FOUND)
             return True
         handler._send(HTTPStatus.OK, layout.read_bytes(), "text/plain; charset=utf-8")
+    elif path == "/api/inkapps/source":
+        app_id = q.get("app", "")
+        if app_id not in {a["id"] for a in host.apps()}:
+            handler._error("no such app", HTTPStatus.NOT_FOUND)
+            return True
+        item = host.loaded.get(app_id)
+        folder = item.path if item else host.root / app_id
+        files = []
+        for f in sorted(folder.iterdir(), key=lambda f: (f.name != "app.py", f.name)):
+            if f.is_file() and f.suffix in _SOURCE and f.stat().st_size <= 256_000:
+                files.append({"name": f.name, "text": f.read_text(encoding="utf-8", errors="replace")})
+        handler._json({"folder": str(folder), "files": files})
     else:
         handler._error(f"no such path {path}", HTTPStatus.NOT_FOUND)
     return True

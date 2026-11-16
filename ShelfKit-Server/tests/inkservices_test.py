@@ -876,6 +876,14 @@ def test_web(tmp: Path) -> None:
         data = json.loads(get("/api/inkapps/data?app=ctr")[2])
         check("app data over http", data.get("ok") and data["tags"][0]["hex_id"] == "0101"
               and data["tags"][0]["state"].get("n") == 1, data)
+        src = json.loads(get("/api/inkapps/source?app=ctr")[2])
+        check("app source over http", src["files"][0]["name"] == "app.py"
+              and "InkApp" in src["files"][0]["text"], src)
+        try:
+            get("/api/inkapps/source?app=..")
+            check("source of an unknown app refused", False)
+        except urllib.error.HTTPError as exc:
+            check("source of an unknown app refused", exc.code == 404)
         status, _, body = get("/")
         check("main page has the Apps screen", b'data-screen="apps"' in body
               and b"/apps.js" in body)

@@ -37,6 +37,7 @@
     sortAsc: stored("apps.dis.asc", "1") === "1",
     homeShape: "",
     railShape: "",
+    scale: stored("apps.glass.scale", "2") === "1" ? 1 : 2,   // the preview on the right: 1x or 2x
     shape: "",
     previewKeys: {},
     bump: 0,
@@ -335,80 +336,71 @@
     return `<span class="pill ok">${CHECK}Loaded</span>`;
   }
 
-  // One line of the app's page: a label, what it is, and maybe a button.
-  const appRow = (label, value, button) => `
-    <div class="app-row">
-      <div class="app-row-text"><span class="app-row-label">${label}</span><span class="app-row-value">${value}</span></div>
-      ${button || ""}
+  // One card on the app's page: a label, maybe a button, and what it is.
+  const appCard = (label, value, button, wide) => `
+    <div class="app-card${wide ? " wide" : ""}">
+      <div class="app-card-head"><span class="app-card-label">${label}</span>${button || ""}</div>
+      <div class="app-card-value">${value}</div>
     </div>`;
 
   const quoted = (list) => list.length === 1 ? `“${list[0]}”`
     : `${list.slice(0, -1).map((x) => `“${x}”`).join(", ")} and “${list[list.length - 1]}”`;
+
+  function cardsHtml(a, tag) {
+    const out = [];
+    const chips = a.tags.map((hex) => `<button type="button" class="app-chip" data-pick="${hex}"
+        aria-pressed="${hex === tag}"><code>${hex}</code>${tagInfo(hex).alias ? ` ${esc(tagInfo(hex).alias)}` : ""}</button>`).join("");
+    out.push(appCard("Runs on", a.tags.length ? `<span class="app-chips">${chips}</span>`
+      : "Not on a tag yet. Pick one or more tags; each keeps its own settings and data.",
+    '<button type="button" data-run>Choose tags</button>', true));
+    if (a.config_fields.length) {
+      out.push(appCard("Settings for each tag",
+        a.config_fields.map((f) => esc(f.label) + (f.default !== "" && f.default != null ? ` (default ${esc(f.default)})` : "")).join("<br>"),
+        tag ? '<button type="button" data-edit>Edit</button>' : ""));
+    }
+    const buttons = a.controls.filter((x) => x.kind === "button").map((x) => esc(x.label));
+    const texts = a.controls.filter((x) => x.kind !== "button").map((x) => `A text box: ${esc(x.label)}`);
+    const phone = [buttons.length ? `${quoted(buttons)} button${buttons.length > 1 ? "s" : ""}` : "", ...texts].filter(Boolean);
+    if (phone.length) out.push(appCard("On the phone page", phone.join("<br>")));
+    if (a.has_on_open) out.push(appCard("When a phone taps the tag", "Opens the phone page and runs the app"));
+    const timers = [...new Set((a.timers || []).map((x) => `Every ${plural(x.minutes, "minute", "minutes")}`))];
+    out.push(appCard("Timers", timers.length ? timers.join("<br>") : "None: redraws when someone uses the phone page"));
+    return out;
+  }
 
   function pageHtml(a) {
     const s = state(a);
     const tag = A.tag[a.id];
     const shown = tag || (A.list.tags[0] ? A.list.tags[0].id : "0000");
     const live = !a.disabled && !a.error;
-    const action = a.disabled ? '<button type="button" class="primary" id="app-enable">Enable app</button>'
-      : !live ? ""
-        : `<button type="button" class="primary" data-run>${s === "run" ? "Run on another tag" : "Start on a tag"}</button>
-           ${s === "run" ? '<button type="button" id="app-stop-all">Stop everywhere</button>' : ""}`;
-    const parts = [`
-      <div class="app-head">
-        <figure class="app-shot">
-          <span class="tag-case"><span class="glass">${live
-    ? `<img data-preview="${shown}" alt="${esc(tag ? `What ${a.title} draws for ${tagName(tag)}` : `Preview of ${a.title}`)}">`
-    : `<span class="app-shot-ico">${iconSvg(a)}</span>`}</span></span>
-          <figcaption>${!live ? "" : tag ? `<code>${tag}</code> · <span data-sent="${tag}"></span>` : "Preview, not on a tag"}</figcaption>
-        </figure>
-        <div class="app-head-text">
-          <h2 id="app-title">${esc(a.title)}</h2>
-          ${a.description ? `<p class="app-desc">${esc(a.description)}</p>` : ""}
-          ${action ? `<div class="app-actions">${action}</div>` : ""}
-        </div>
-        <div class="app-head-side">
-          ${statusPill(a)}
-          <button type="button" id="app-more" class="icon-button" aria-haspopup="menu" aria-label="More for this app">${DOTS}</button>
-        </div>
-      </div>`];
+    const actions = [];
+    actions.push('<button type="button" data-code>Open the code</button>');
+    if (a.disabled) actions.push('<button type="button" class="primary" id="app-enable">Enable app</button>');
+    else if (live) {
+      if (s === "run") actions.push('<button type="button" id="app-stop-all">Stop everywhere</button>');
+      actions.push(`<button type="button" class="primary" data-run>${s === "run" ? "Run on another tag" : "Start on a tag"}</button>`);
+    }
+    actions.push(`<button type="button" id="app-more" class="icon-button" aria-haspopup="menu" aria-label="More for this app">${DOTS}</button>`);
 
+    const main = [];
     if (a.disabled) {
-      parts.push(`<p class="app-note">A disabled app runs on no tag and its code is not loaded. Its files, settings and
+      main.push(`<p class="app-note">A disabled app runs on no tag and its code is not loaded. Its files, settings and
         stored data stay in <code>inkapps/${esc(a.id)}/</code>.</p>`);
     } else if (a.error) {
-      parts.push(`<pre class="app-error">${esc(a.error)}</pre>
+      main.push(`<pre class="app-error">${esc(a.error)}</pre>
         <p class="hint">Fix the app in <code>inkapps/${esc(a.id)}/</code>, then press Reload apps.
         Its tags keep their last picture until then.</p>`);
-    } else {
-      const chips = a.tags.map((hex) => `<button type="button" class="app-chip" data-pick="${hex}"
-          aria-pressed="${hex === tag}"><code>${hex}</code>${tagInfo(hex).alias ? ` ${esc(tagInfo(hex).alias)}` : ""}</button>`).join("");
-      parts.push(appRow("Runs on",
-        a.tags.length ? `<span class="app-chips">${chips}</span>` : "Not on a tag yet",
-        '<button type="button" data-run>Choose tags</button>'));
-      if (a.config_fields.length) {
-        parts.push(appRow("Settings for each tag",
-          a.config_fields.map((f) => esc(f.label) + (f.default !== "" && f.default != null ? ` (default ${esc(f.default)})` : "")).join("<br>"),
-          tag ? '<button type="button" data-edit>Edit</button>' : ""));
-      }
-      const buttons = a.controls.filter((x) => x.kind === "button").map((x) => esc(x.label));
-      const texts = a.controls.filter((x) => x.kind !== "button").map((x) => `A text box: ${esc(x.label)}`);
-      const phone = [buttons.length ? `${quoted(buttons)} button${buttons.length > 1 ? "s" : ""}` : "", ...texts].filter(Boolean);
-      if (phone.length) parts.push(appRow("On the phone page", phone.join("<br>")));
-      if (a.has_on_open) parts.push(appRow("When a phone taps the tag", "Opens the phone page and runs the app"));
-      const timers = (a.timers || []).map((x) => `Every ${plural(x.minutes, "minute", "minutes")}`);
-      parts.push(appRow("Timers", timers.length ? [...new Set(timers)].join("<br>")
-        : "None: redraws when someone uses the phone page"));
     }
-    parts.push(appRow("Files", `<code>inkapps/${esc(a.id)}/</code> · ${a.disabled ? "not loaded"
-      : a.error ? "did not load" : a.layout ? `drawn from ${esc(a.layout)}` : "draws in Python"} · installed ${dateText(a.installed_at)}`));
-
-    if (live) {
-      if (tag) parts.push(tagPanel(a, tag));
-      else parts.push('<p id="app-msg" class="app-msg" role="status"></p>');
-    }
-
-    parts.push(`
+    const cards = live ? cardsHtml(a, tag) : [];
+    cards.push(appCard("Files", `<code>inkapps/${esc(a.id)}/</code><br>${a.disabled ? "Not loaded"
+      : a.error ? "Did not load" : a.layout ? `Drawn from ${esc(a.layout)}` : "Draws in Python"}<br>Installed ${dateText(a.installed_at)}`));
+    main.push(`<div class="app-cards">${cards.join("")}</div>`);
+    if (live) main.push(tag ? tagPanel(a, tag) : '<p id="app-msg" class="app-msg" role="status"></p>');
+    main.push(`
+      <section class="app-activity" aria-labelledby="app-log-title">
+        <div class="app-activity-head"><h3 id="app-log-title">Activity</h3><span class="hint">Since the server started</span></div>
+        <div class="log app-log" id="app-log" tabindex="0" role="log" aria-labelledby="app-log-title"></div>
+      </section>
       <details class="tool" id="app-data-box">
         <summary>Stored data</summary>
         <dl class="facts" id="app-data-facts"></dl>
@@ -416,12 +408,45 @@
         <pre class="json" id="app-shared"></pre>
         <h4 id="app-tagdata-title" hidden></h4>
         <pre class="json" id="app-tagdata" hidden></pre>
-      </details>
-      <details class="tool" open>
-        <summary>Log</summary>
-        <div class="log app-log" id="app-log" tabindex="0" role="log" aria-label="App log"></div>
       </details>`);
-    return parts.join("");
+
+    const k = A.scale;
+    const glass = `
+      <aside class="app-glass" aria-label="Screen preview">
+        <div class="app-glass-head">
+          <span class="app-glass-title">On the glass</span>
+          <span class="apps-seg" role="group" aria-label="Preview size">
+            <button type="button" data-scale="1" aria-pressed="${k === 1}">1×</button>
+            <button type="button" data-scale="2" aria-pressed="${k === 2}">2×</button>
+          </span>
+        </div>
+        <span class="tag-case" id="app-glass-case" style="--glass-w: ${152 * k}px; --glass-h: ${296 * k}px"><span class="glass">${live
+    ? `<img data-preview="${shown}" alt="${esc(tag ? `What ${a.title} draws for ${tagName(tag)}` : `Preview of ${a.title}`)}">`
+    : `<span class="app-glass-ico">${iconSvg(a)}</span>`}</span></span>
+        <span class="app-glass-cap">${!live ? (a.disabled ? "Disabled: nothing drawn" : "Didn't load: nothing drawn")
+    : tag ? `<code>${tag}</code>${tagInfo(tag).alias ? ` ${esc(tagInfo(tag).alias)}` : ""} · <span data-sent="${tag}"></span>`
+      : "Preview · not on a tag"} · 152 × 296, 3 colours</span>
+        ${live ? `<div class="app-glass-actions">
+          ${tag ? `<button type="button" data-refresh="${tag}"
+            title="Fetch fresh data, draw the screen again, and send it if it changed">Refresh now</button>`
+    : '<button type="button" data-redraw title="Draw the preview again">Draw again</button>'}
+          ${tag && a.has_on_open ? '<button type="button" data-open title="Runs what an NFC tap runs">Simulate NFC tap</button>' : ""}
+        </div>` : ""}
+      </aside>`;
+
+    return `
+      <div class="app-head">
+        <div class="app-tile is-${s} app-head-ico" aria-hidden="true"><span class="app-ico">${iconSvg(a)}</span></div>
+        <div class="app-head-text">
+          <div class="app-head-title"><h2 id="app-title">${esc(a.title)}</h2>${statusPill(a)}</div>
+          ${a.description ? `<p class="app-desc">${esc(a.description)}</p>` : ""}
+        </div>
+        <div class="app-actions">${actions.join("")}</div>
+      </div>
+      <div class="app-body">
+        <div class="app-main">${main.join("")}</div>
+        ${glass}
+      </div>`;
   }
 
   function tagPanel(a, tag) {
@@ -443,24 +468,38 @@
         <div class="row">
           <h3 id="app-tag-title">On ${esc(tagLabel(tag))}</h3>
           <span class="grow"></span>
-          <button type="button" data-refresh="${tag}"
-            title="Fetch fresh data, draw the screen again, and send it if it changed">Refresh now</button>
           <button type="button" data-stop="${tag}"
-            title="The tag keeps its last picture until something else is sent">Stop</button>
+            title="The tag keeps its last picture until something else is sent">Stop on this tag</button>
         </div>
         <p id="app-msg" class="app-msg" role="status"></p>
-        ${fields ? `<form id="app-config" class="app-fields" novalidate>
-          <h4>Settings for this tag</h4>${fields}
-          <button type="submit">Save settings</button></form>` : ""}
-        ${controls || a.has_on_open ? `<div class="app-controls">
-          <h4>Try the phone page</h4>
-          <div class="row">${controls}
-            ${a.has_on_open ? '<button type="button" data-open title="Runs what an NFC tap runs">Simulate NFC tap</button>' : ""}
-          </div></div>` : ""}
+        <div class="app-tagpanel-cols">
+          ${fields ? `<form id="app-config" class="app-fields" novalidate>
+            <h4>Settings for this tag</h4>${fields}
+            <button type="submit">Save settings</button></form>` : ""}
+          ${controls ? `<div class="app-controls">
+            <h4>Try the phone page</h4>
+            <div class="row">${controls}</div></div>` : ""}
+        </div>
         <p class="hint">${phone}${A.list.phone_base_local ? "" : `
           <button type="button" data-nfc="${tag}"
             title="Write this link to the tag's NFC chip over the radio, at its next check-in. It is read back afterwards.">Write to the tag</button>`}</p>
       </section>`;
+  }
+
+  async function showCode(app) {
+    const a = appOf(app);
+    try {
+      const src = await api(`/api/inkapps/source?app=${encodeURIComponent(app)}`);
+      const files = src.files.map((f, i) => `<details class="tool" ${i === 0 ? "open" : ""}>
+        <summary>${esc(f.name)}</summary><pre class="json wiz-code">${esc(f.text)}</pre></details>`).join("")
+        || '<p class="hint">No text files in the folder.</p>';
+      sheet(`<h3>The code of ${esc(a ? a.title : app)}</h3>
+        <p class="hint">Read-only. Edit the files in <code>${esc(src.folder)}</code>, then press Reload apps.</p>
+        <div class="apps-code">${files}</div>
+        <div class="apps-sheet-actions"><button type="button" data-x>Close</button></div>`, () => {});
+    } catch (err) {
+      toast(err.message, true);
+    }
   }
 
   const json = (value) => JSON.stringify(value, null, 2);
@@ -1257,6 +1296,18 @@
     else if (b.id === "app-stop-all") askStop(app);
     else if (b.id === "app-enable") enable(app);
     else if (b.matches("[data-run]")) askRun(app);
+    else if (b.matches("[data-code]")) showCode(app);
+    else if (b.dataset.scale) {
+      A.scale = Number(b.dataset.scale);
+      store("apps.glass.scale", String(A.scale));
+      const box = $("app-glass-case");
+      box.style.setProperty("--glass-w", `${152 * A.scale}px`);
+      box.style.setProperty("--glass-h", `${296 * A.scale}px`);
+      for (const x of b.parentElement.children) x.setAttribute("aria-pressed", x === b);
+    } else if (b.matches("[data-redraw]")) {
+      A.bump += 1;
+      renderLive(appOf(app));
+    }
     else if (b.matches("[data-edit]")) {
       const input = $("app-config")?.querySelector("input");
       input?.scrollIntoView({ block: "center", behavior: "smooth" });
