@@ -253,6 +253,7 @@
     }
     $("apps-home").hidden = Boolean(A.view);
     $("apps-detail").hidden = !A.view;
+    $("apps").classList.toggle("is-detail", Boolean(A.view));
     if (A.view) { renderRail(); renderPage(); }
   }
 
@@ -261,8 +262,9 @@
     const a = appOf(id);
     if (!a) return "";
     const s = state(a);
-    const sub = s === "run" ? `<span class="app-dot"></span>${plural(a.tags.length, "tag", "tags")}`
-      : s === "bad" ? "Didn't load" : s === "off" ? "Disabled" : "Idle";
+    const n = a.tags.length;
+    const sub = s === "run" ? `<span class="app-dot"></span>On ${plural(n, "tag", "tags")}`
+      : s === "bad" ? "Didn't load" : s === "off" ? "Disabled" : "Not on a tag yet";
     const here = id === A.view;
     return `<button type="button" class="rail-app is-${s}" data-rail="${esc(id)}"
       ${here ? 'aria-current="page"' : ""} title="${esc(a.description || a.title)}">
@@ -282,12 +284,12 @@
     const left = rail.scrollLeft;
     const loose = A.items.filter((x) => !isGroup(x));
     const groups = A.items.filter(isGroup);
-    rail.innerHTML = `<button type="button" class="rail-home" data-rail-home>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>All apps</button>
+    const live = A.list.apps.length - off.length;
+    rail.innerHTML = `<div class="rail-title">Installed · ${live}</div>
       <div class="rail-list">${loose.map(railItem).join("")}</div>
       ${groups.map((g) => `<div class="rail-title">${esc(g.name)}</div>
         <div class="rail-list">${g.apps.map(railItem).join("")}</div>`).join("")}
-      ${off.length ? `<div class="rail-title">Disabled</div>
+      ${off.length ? `<div class="rail-title">Disabled · ${off.length}</div>
         <div class="rail-list">${off.map((a) => railItem(a.id)).join("")}</div>` : ""}`;
     rail.scrollTop = top;
     rail.scrollLeft = left;
@@ -322,66 +324,86 @@
     renderLive(a);
   }
 
+  const CHECK = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
+  const DOTS = '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>';
+
   function statusPill(a) {
     const s = state(a);
-    if (s === "run") return `<span class="app-pill is-run"><span class="app-dot"></span>Running on ${plural(a.tags.length, "tag", "tags")}</span>`;
-    if (s === "bad") return '<span class="app-pill is-bad">Didn\'t load</span>';
-    if (s === "off") return '<span class="app-pill is-off">Disabled</span>';
-    return '<span class="app-pill is-idle">Not running</span>';
+    if (s === "run") return `<span class="pill ok"><span class="app-dot"></span>Running on ${plural(a.tags.length, "tag", "tags")}</span>`;
+    if (s === "bad") return '<span class="pill bad">Didn\'t load</span>';
+    if (s === "off") return '<span class="pill">Disabled</span>';
+    return `<span class="pill ok">${CHECK}Loaded</span>`;
   }
+
+  // One line of the app's page: a label, what it is, and maybe a button.
+  const appRow = (label, value, button) => `
+    <div class="app-row">
+      <div class="app-row-text"><span class="app-row-label">${label}</span><span class="app-row-value">${value}</span></div>
+      ${button || ""}
+    </div>`;
+
+  const quoted = (list) => list.length === 1 ? `“${list[0]}”`
+    : `${list.slice(0, -1).map((x) => `“${x}”`).join(", ")} and “${list[list.length - 1]}”`;
 
   function pageHtml(a) {
     const s = state(a);
     const tag = A.tag[a.id];
-    const kind = a.disabled ? "not loaded" : a.error ? "did not load" : a.layout ? `drawn from ${esc(a.layout)}` : "draws in Python";
-    const timer = (a.timers || []).length ? ` · updates itself every ${Math.min(...a.timers.map((t) => t.minutes))} min` : "";
+    const shown = tag || (A.list.tags[0] ? A.list.tags[0].id : "0000");
+    const live = !a.disabled && !a.error;
+    const action = a.disabled ? '<button type="button" class="primary" id="app-enable">Enable app</button>'
+      : !live ? ""
+        : `<button type="button" class="primary" data-run>${s === "run" ? "Run on another tag" : "Start on a tag"}</button>
+           ${s === "run" ? '<button type="button" id="app-stop-all">Stop everywhere</button>' : ""}`;
     const parts = [`
-      <div class="app-bar">
-        <span class="grow"></span>
-        ${s === "run" ? '<button type="button" id="app-stop-all">Stop everywhere</button>' : ""}
-        <button type="button" id="app-more" aria-haspopup="menu" aria-label="More for this app">···</button>
-      </div>
-      <div class="app-hero">
-        <div class="app-tile is-${s} is-big" aria-hidden="true"><span class="app-ico">${iconSvg(a)}</span></div>
-        <div class="app-hero-text">
+      <div class="app-head">
+        <figure class="app-shot">
+          <span class="tag-case"><span class="glass">${live
+    ? `<img data-preview="${shown}" alt="${esc(tag ? `What ${a.title} draws for ${tagName(tag)}` : `Preview of ${a.title}`)}">`
+    : `<span class="app-shot-ico">${iconSvg(a)}</span>`}</span></span>
+          <figcaption>${!live ? "" : tag ? `<code>${tag}</code> · <span data-sent="${tag}"></span>` : "Preview, not on a tag"}</figcaption>
+        </figure>
+        <div class="app-head-text">
           <h2 id="app-title">${esc(a.title)}</h2>
           ${a.description ? `<p class="app-desc">${esc(a.description)}</p>` : ""}
-          <p class="app-meta">${statusPill(a)} <span class="hint"><code>inkapps/${esc(a.id)}/</code> · ${kind}${timer}
-            · installed ${dateText(a.installed_at)}</span></p>
+          ${action ? `<div class="app-actions">${action}</div>` : ""}
+        </div>
+        <div class="app-head-side">
+          ${statusPill(a)}
+          <button type="button" id="app-more" class="icon-button" aria-haspopup="menu" aria-label="More for this app">${DOTS}</button>
         </div>
       </div>`];
 
     if (a.disabled) {
-      parts.push(`<div class="app-note">
-        <p>A disabled app runs on no tag and its code is not loaded. Its files, settings and stored
-          data stay in <code>inkapps/${esc(a.id)}/</code>.</p>
-        <button type="button" class="primary" id="app-enable">Enable app</button></div>`);
-      return parts.join("");
-    }
-    if (a.error) {
+      parts.push(`<p class="app-note">A disabled app runs on no tag and its code is not loaded. Its files, settings and
+        stored data stay in <code>inkapps/${esc(a.id)}/</code>.</p>`);
+    } else if (a.error) {
       parts.push(`<pre class="app-error">${esc(a.error)}</pre>
         <p class="hint">Fix the app in <code>inkapps/${esc(a.id)}/</code>, then press Reload apps.
         Its tags keep their last picture until then.</p>`);
     } else {
-      const cards = a.tags.map((hex) => `
-        <button type="button" class="app-tagcard" data-pick="${hex}" aria-pressed="${hex === tag}">
-          <span class="tag-case"><span class="glass"><img data-preview="${hex}" alt=""></span></span>
-          <span class="app-tagcard-name"><code>${hex}</code>${tagInfo(hex).alias ? ` · ${esc(tagInfo(hex).alias)}` : ""}</span>
-          <span class="app-tagcard-sent" data-sent="${hex}"></span>
-        </button>`).join("");
-      const preview = a.tags.length ? "" : `
-        <div class="app-tagcard is-preview">
-          <span class="tag-case"><span class="glass"><img data-preview="${A.list.tags[0] ? A.list.tags[0].id : "0000"}" alt="Preview of ${esc(a.title)}"></span></span>
-          <span class="app-tagcard-name">Preview</span><span class="app-tagcard-sent">Not on a tag</span>
-        </div>`;
-      parts.push(`
-        <section class="app-section" aria-labelledby="app-tags-title">
-          <h3 id="app-tags-title">Tags</h3>
-          <div class="app-tagcards">${cards}${preview}
-            <button type="button" class="app-tagcard is-add" id="app-run">
-              <span class="app-add-plus" aria-hidden="true">+</span>Run on a tag</button>
-          </div>
-        </section>`);
+      const chips = a.tags.map((hex) => `<button type="button" class="app-chip" data-pick="${hex}"
+          aria-pressed="${hex === tag}"><code>${hex}</code>${tagInfo(hex).alias ? ` ${esc(tagInfo(hex).alias)}` : ""}</button>`).join("");
+      parts.push(appRow("Runs on",
+        a.tags.length ? `<span class="app-chips">${chips}</span>` : "Not on a tag yet",
+        '<button type="button" data-run>Choose tags</button>'));
+      if (a.config_fields.length) {
+        parts.push(appRow("Settings for each tag",
+          a.config_fields.map((f) => esc(f.label) + (f.default !== "" && f.default != null ? ` (default ${esc(f.default)})` : "")).join("<br>"),
+          tag ? '<button type="button" data-edit>Edit</button>' : ""));
+      }
+      const buttons = a.controls.filter((x) => x.kind === "button").map((x) => esc(x.label));
+      const texts = a.controls.filter((x) => x.kind !== "button").map((x) => `A text box: ${esc(x.label)}`);
+      const phone = [buttons.length ? `${quoted(buttons)} button${buttons.length > 1 ? "s" : ""}` : "", ...texts].filter(Boolean);
+      if (phone.length) parts.push(appRow("On the phone page", phone.join("<br>")));
+      if (a.has_on_open) parts.push(appRow("When a phone taps the tag", "Opens the phone page and runs the app"));
+      const timers = (a.timers || []).map((x) => `Every ${plural(x.minutes, "minute", "minutes")}`);
+      parts.push(appRow("Timers", timers.length ? [...new Set(timers)].join("<br>")
+        : "None: redraws when someone uses the phone page"));
+    }
+    parts.push(appRow("Files", `<code>inkapps/${esc(a.id)}/</code> · ${a.disabled ? "not loaded"
+      : a.error ? "did not load" : a.layout ? `drawn from ${esc(a.layout)}` : "draws in Python"} · installed ${dateText(a.installed_at)}`));
+
+    if (live) {
       if (tag) parts.push(tagPanel(a, tag));
       else parts.push('<p id="app-msg" class="app-msg" role="status"></p>');
     }
@@ -418,31 +440,26 @@
         reverse proxy and enter its address under <a href="#settings">Settings</a>.` : "");
     return `
       <section class="app-tagpanel" aria-labelledby="app-tag-title">
-        <div class="tag-case small-case"><div class="glass">
-          <img id="app-preview" alt="What ${esc(a.title)} draws for ${tag}">
-        </div></div>
-        <div class="app-tag-side">
-          <div class="row">
-            <h3 id="app-tag-title">${esc(tagLabel(tag))}</h3>
-            <span class="grow"></span>
-            <button type="button" data-refresh="${tag}"
-              title="Fetch fresh data, draw the screen again, and send it if it changed">Refresh now</button>
-            <button type="button" data-stop="${tag}"
-              title="The tag keeps its last picture until something else is sent">Stop</button>
-          </div>
-          <p id="app-msg" class="app-msg" role="status"></p>
-          ${fields ? `<form id="app-config" class="app-fields" novalidate>
-            <h4>Settings for this tag</h4>${fields}
-            <button type="submit">Save settings</button></form>` : ""}
-          ${controls || a.has_on_open ? `<div class="app-controls">
-            <h4>What the phone page offers</h4>
-            <div class="row">${controls}
-              ${a.has_on_open ? '<button type="button" data-open title="Runs what an NFC tap runs">Simulate NFC tap</button>' : ""}
-            </div></div>` : ""}
-          <p class="hint">${phone}${A.list.phone_base_local ? "" : `
-            <button type="button" data-nfc="${tag}"
-              title="Write this link to the tag's NFC chip over the radio, at its next check-in. It is read back afterwards.">Write to the tag</button>`}</p>
+        <div class="row">
+          <h3 id="app-tag-title">On ${esc(tagLabel(tag))}</h3>
+          <span class="grow"></span>
+          <button type="button" data-refresh="${tag}"
+            title="Fetch fresh data, draw the screen again, and send it if it changed">Refresh now</button>
+          <button type="button" data-stop="${tag}"
+            title="The tag keeps its last picture until something else is sent">Stop</button>
         </div>
+        <p id="app-msg" class="app-msg" role="status"></p>
+        ${fields ? `<form id="app-config" class="app-fields" novalidate>
+          <h4>Settings for this tag</h4>${fields}
+          <button type="submit">Save settings</button></form>` : ""}
+        ${controls || a.has_on_open ? `<div class="app-controls">
+          <h4>Try the phone page</h4>
+          <div class="row">${controls}
+            ${a.has_on_open ? '<button type="button" data-open title="Runs what an NFC tap runs">Simulate NFC tap</button>' : ""}
+          </div></div>` : ""}
+        <p class="hint">${phone}${A.list.phone_base_local ? "" : `
+          <button type="button" data-nfc="${tag}"
+            title="Write this link to the tag's NFC chip over the radio, at its next check-in. It is read back afterwards.">Write to the tag</button>`}</p>
       </section>`;
   }
 
@@ -452,17 +469,15 @@
     const tag = A.tag[a.id];
     for (const cell of document.querySelectorAll("#apps-page [data-sent]")) {
       const b = binding(cell.dataset.sent);
-      cell.textContent = b && b.last_push_at ? `Sent ${ageText(Date.now() / 1000 - b.last_push_at)} ago` : "Not sent yet";
+      cell.textContent = b && b.last_push_at ? `sent ${ageText(Date.now() / 1000 - b.last_push_at)} ago` : "not sent yet";
     }
     // previews, fetched again only when they could differ
     const imgs = [...document.querySelectorAll("#apps-page img[data-preview]")];
-    const big = $("app-preview");
-    if (big) { big.dataset.preview = tag; imgs.push(big); }
     for (const img of imgs) {
       const hex = img.dataset.preview;
       const b = binding(hex);
       const key = [a.id, hex, b && b.last_push_at, A.bump].join("|");
-      const slot = img.id || `card-${hex}`;
+      const slot = `shot-${hex}`;
       if (A.previewKeys[slot] !== key) {
         A.previewKeys[slot] = key;
         img.src = `/api/inkapps/preview.png?app=${encodeURIComponent(a.id)}&tag=${hex}&v=${A.bump}-${Date.now()}`;
@@ -1219,11 +1234,10 @@
   });
 
   $("apps-rail").addEventListener("click", (event) => {
-    const b = event.target.closest("button");
-    if (!b) return;
-    if (b.matches("[data-rail-home]")) goHome();
-    else if (b.dataset.rail) openApp(b.dataset.rail, true);
+    const b = event.target.closest("button[data-rail]");
+    if (b) openApp(b.dataset.rail, true);
   });
+  $("apps-all").addEventListener("click", goHome);
   $("apps-rail").addEventListener("keydown", (event) => {
     const keys = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 };
     if (!(event.key in keys)) return;
@@ -1242,7 +1256,12 @@
     if (b.id === "app-more") { const r = b.getBoundingClientRect(); showMenu(app, r.right - 200, r.bottom + 4); }
     else if (b.id === "app-stop-all") askStop(app);
     else if (b.id === "app-enable") enable(app);
-    else if (b.id === "app-run") askRun(app);
+    else if (b.matches("[data-run]")) askRun(app);
+    else if (b.matches("[data-edit]")) {
+      const input = $("app-config")?.querySelector("input");
+      input?.scrollIntoView({ block: "center", behavior: "smooth" });
+      input?.focus({ preventScroll: true });
+    }
     else if (b.dataset.pick) {
       A.tag[app] = b.dataset.pick;
       A.msg = null;

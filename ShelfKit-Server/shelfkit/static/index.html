@@ -488,9 +488,10 @@
 
     <!-- Apps (drawn by apps.js) -->
     <section class="screen" data-screen="apps" id="apps" aria-labelledby="apps-title" hidden>
-      <div id="apps-home">
-        <div class="screen-head">
-          <h1 id="apps-title">Apps</h1>
+      <div class="screen-head apps-head">
+        <button type="button" id="apps-all" class="quiet apps-all" aria-label="All apps">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg></button>
+        <h1 id="apps-title">Apps</h1>
           <span class="apps-legend" aria-hidden="true">
             <span><i class="key is-run"></i>Running</span>
             <span><i class="key is-idle"></i>Not running</span>
@@ -499,8 +500,10 @@
           <a class="button quiet" href="/inkapps.html">Layout playground</a>
           <button id="apps-reload" type="button"
                   title="Import every app in inkapps/ again, to pick up changes to their files">Reload apps</button>
-          <button id="apps-new" type="button" class="primary">New app</button>
-        </div>
+          <button id="apps-new" type="button" class="primary">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>New app</button>
+      </div>
+      <div id="apps-home">
         <p class="screen-note">Small programs that draw a tag's screen and answer its NFC link. A tag
           runs one app at a time, and every change reaches it at its next check-in. Drag to
           rearrange, drop an app on another to group them, and right-click or hold an app for options.</p>
@@ -522,7 +525,7 @@
         </section>
       </div>
       <div class="apps-detail" id="apps-detail" hidden>
-        <nav class="apps-rail" id="apps-rail" aria-label="Switch app"></nav>
+        <nav class="apps-rail" id="apps-rail" aria-label="Installed apps"></nav>
         <div class="apps-page" id="apps-page"></div>
       </div>
 
