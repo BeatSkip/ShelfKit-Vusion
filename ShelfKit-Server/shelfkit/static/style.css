@@ -1982,4 +1982,11 @@ body.apps-dragging, body.apps-dragging * { cursor: grabbing !important; }
   .dev-set-row, .dev-set-add { grid-template-columns: minmax(0, 1fr) auto; }
   .dev-set-row input { grid-column: 1 / -1; }
 }
+.dev-sett { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border-radius: 8px; background: var(--ground); border: 1px solid var(--rule-soft); }
+.dev-sett-title { font-size: var(--t-small); font-weight: 600; color: var(--ink-2); }
+.dev-sett ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.dev-sett li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: var(--t-small); }
+.dev-sett-kind { font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-2); min-width: 58px; }
+.dev-sett-val { overflow-wrap: anywhere; }
+.dev-sett-secret { flex: 1 1 180px; min-height: 30px; font-family: var(--mono); font-size: 0.8125rem; }
 

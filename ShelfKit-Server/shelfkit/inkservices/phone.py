@@ -77,6 +77,14 @@ button { width:100%; min-height:48px; font:inherit; font-weight:600; border-radi
               border-radius:6px; border:1px solid var(--rule); background:var(--card); color:var(--ink); }
 .text button { width:auto; padding:0 16px; }
 .foot { color:var(--ink2); font-size:.85rem; margin-top:18px; }
+h2 { font-size:1.05rem; margin:18px 0 6px; }
+.p { margin:0 0 10px; }
+.note { color:var(--ink2); font-size:.85rem; margin:0 0 10px; }
+.facts { width:100%; border-collapse:collapse; margin:0 0 12px; }
+.facts th, .facts td { text-align:left; padding:6px 0; border-bottom:1px solid var(--rule); }
+.facts th { font-weight:400; color:var(--ink2); padding-right:12px; }
+.facts td { text-align:right; font-weight:600; }
+.link { display:block; margin:0 0 10px; color:var(--ink); }
 """
 
 
@@ -220,18 +228,51 @@ def _view(handler, host, tag: str, message: str, kind: str) -> None:
 
     app = item.app
     sub = f"{esc(info['alias'])} · tag {tag}" if info.get("alias") else f"Tag {tag}"
-    body = page_body(app, sub, f"screen.png?t={int(time.time())}", message, kind)
+    try:
+        blocks = host.phone_blocks(app, tag)
+    except Exception:  # noqa: BLE001 - the page still works without them
+        blocks = []
+    body = page_body(app, sub, f"screen.png?t={int(time.time())}", message, kind, blocks)
     _send(handler, HTTPStatus.OK, _page(app.title, body), "text/html; charset=utf-8")
 
 
-def page_body(app, sub: str, screen_src: str, message: str = "", kind: str = "") -> str:
+def _blocks_html(blocks) -> str:
+    esc = html.escape
+    out, facts = [], []
+
+    def flush():
+        if facts:
+            out.append("<table class='facts'>" + "".join(
+                f"<tr><th>{esc(b['text'])}</th><td>{esc(b['value'])}</td></tr>" for b in facts) + "</table>")
+            facts.clear()
+    for b in blocks or []:
+        if b["kind"] == "fact":
+            facts.append(b)
+            continue
+        flush()
+        if b["kind"] == "heading":
+            out.append(f"<h2>{esc(b['text'])}</h2>")
+        elif b["kind"] == "note":
+            out.append(f"<p class='note'>{esc(b['text'])}</p>")
+        elif b["kind"] == "link":
+            out.append(f"<a class='link' href='{esc(b['url'])}' rel='noopener noreferrer'>{esc(b['text'])}</a>")
+        else:
+            out.append(f"<p class='p'>{esc(b['text'])}</p>")
+    flush()
+    return "".join(out)
+
+
+def page_body(app, sub: str, screen_src: str, message: str = "", kind: str = "",
+              blocks: list | None = None) -> str:
     """The app's phone page (also shown, as is, in Develop's Phone tab)."""
     esc = html.escape
-    parts = [f"<h1>{esc(app.title)}</h1><p class='sub'>{sub}</p>",
-             f"<div class='tag'><img src='{esc(screen_src)}' alt='What the tag shows'></div>"]
+    parts = [f"<h1>{esc(app.title)}</h1><p class='sub'>{sub}</p>"]
+    if getattr(app, "phone_screen", True):
+        parts.append(f"<div class='tag'><img src='{esc(screen_src)}' alt='What the tag shows'></div>")
     if message:
         parts.append(f"<p class='msg{' err' if kind == 'err' else ''}' role='status'>"
                      f"{esc(message)}</p>")
+    parts.append(_blocks_html(blocks))
     for c in app.controls:
         hidden = f'<input type="hidden" name="action" value="{esc(c.id)}">'
         if c.kind == "button":
@@ -248,9 +289,9 @@ def page_body(app, sub: str, screen_src: str, message: str = "", kind: str = "")
     return "".join(parts)
 
 
-def preview_page(app, screen_src: str, message: str = "", kind: str = "") -> str:
+def preview_page(app, screen_src: str, message: str = "", kind: str = "", blocks: list | None = None) -> str:
     """The whole phone page for the virtual tag, for an iframe's srcdoc."""
-    return _page(app.title, page_body(app, "Virtual tag FFF0", screen_src, message, kind)).decode("utf-8")
+    return _page(app.title, page_body(app, "Virtual tag FFF0", screen_src, message, kind, blocks)).decode("utf-8")
 
 
 # ── POST ───────────────────────────────────────────────────────────────────

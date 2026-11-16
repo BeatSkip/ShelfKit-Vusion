@@ -14,7 +14,8 @@ an AI agent that proposes changes.
                                phone (the phone page's HTML, if the app has one)}
     POST /api/dev/agent    {app, prompt, provider?, context?}  -> {job}
     GET  /api/dev/agent?job=              the job: steps so far, the proposal, a question
-    POST /api/dev/agent/apply   {job}     checkpoint, write the proposal, reload
+    POST /api/dev/agent/apply   {job, secrets?}  checkpoint, write the files, apply the settings
+                                (secrets: values the owner typed for the ones the AI asked for)
     POST /api/dev/agent/reject  {job}
     GET  /api/dev/agent/history?app=      the conversation so far (for a page reload)
     POST /api/dev/agent/forget  {app}     start the conversation again
@@ -163,10 +164,22 @@ def revert(host, app_id: str, cid: str) -> dict:
     source = _checkpoint_root(folder) / cid
     if not (source / "checkpoint.json").is_file():
         raise AppError("no such checkpoint")
-    restored = {f.name: f.read_text(encoding="utf-8") for f in source.iterdir()
-                if f.is_file() and EDITABLE.match(f.name)}
     meta = json.loads((source / "checkpoint.json").read_text(encoding="utf-8"))
-    return save(host, app_id, restored, note=f"revert to {meta.get('label') or cid}")
+    names = [n for n in meta.get("files", []) if n != "checkpoint.json" and EDITABLE.match(n)
+             and (source / n).is_file()]                   # never the checkpoint's own record
+    restored = {n: (source / n).read_text(encoding="utf-8") for n in names}
+    if "app.py" not in restored:
+        raise AppError("that checkpoint has no app.py")
+    clean = _check_files(restored)
+    now = checkpoint(host, app_id, f"before: revert to {meta.get('label') or cid}")
+    for name, text in clean.items():
+        (folder / name).write_text(text, encoding="utf-8", newline="\n")
+    for f in folder.iterdir():                              # files added since go (they are in `now`)
+        if f.is_file() and EDITABLE.match(f.name) and f.name not in clean:
+            f.unlink()
+    host.reload()
+    item = host.loaded.get(app_id)
+    return {"ok": True, "checkpoint": now, "error": item.error if item else None}
 
 
 # ── the virtual tag ───────────────────────────────────────────────────────────
@@ -240,13 +253,22 @@ def virtual(host, app_id: str, do: str = "draw", action: str | None = None,
     if calls and not error:
         host._log(app_id, f"[{VIRTUAL}] {calls[0][0] if len(calls) == 1 else 'timers'} (virtual tag)")
     phone_page = None
-    if app.controls or app.on_open_fn is not None:     # the app has a phone page: show it as a phone would
+    if app.controls or app.on_open_fn is not None or app.page_fn is not None:   # it has a phone page
         if do in ("action", "open"):
             message, kind = (error, "err") if error else ("Done. On a real tag the screen follows "
                                                         "at its next check-in.", "ok")
         else:
             message, kind = "", ""
-        phone_page = phone.preview_page(app, "data:image/png;base64," + png if png else "", message, kind)
+        with host._app_lock(app_id):
+            ptag = host._context(app, VIRTUAL, host.store_of(app_id))
+            ptag.shared = host.store_of(app_id).state(VIRTUAL_SHARED)
+            if when is not None:
+                ptag.now = when
+            try:
+                blocks = host.page_blocks(app, ptag)
+            finally:
+                host._flush_logs(app_id, ptag)
+        phone_page = phone.preview_page(app, "data:image/png;base64," + png if png else "", message, kind, blocks)
     return {"phone": phone_page, "ok": error is None, "error": error, "png": png, "ms": ms, "diagnostics": diagnostics,
             "data": _jsonable(data), "state": _jsonable(tag.data), "config": tag.config,
             "now": tag.now.isoformat(timespec="minutes")}
@@ -256,13 +278,19 @@ def _jsonable(value):
     return json.loads(json.dumps(value, default=str))
 
 
-def _virtual_view(host, app_id: str):
-    """(layout data, tag view, shared, now, display) the virtual tag's screen is drawn from."""
+def _virtual_view(host, app_id: str, var_preview: dict | None = None):
+    """(layout data, tag view, shared, now, display) the virtual tag's screen is drawn from;
+    var_preview: variables as a proposal would set them (None = remove)."""
     app = host._app(app_id)
     with host._app_lock(app_id):
         st = host.store_of(app_id)
         tag = host._context(app, VIRTUAL, st)
         tag.shared = st.state(VIRTUAL_SHARED)
+        for k, v in (var_preview or {}).items():
+            if v is None:
+                tag.vars.pop(k, None)
+            else:
+                tag.vars[k] = str(v)
         try:
             data = app.data_fn(tag) if app.data_fn is not None else tag.data
         except Exception:  # noqa: BLE001 - app code; the draft is still worth a look
@@ -301,18 +329,21 @@ HOW AN APP RUNS (the host, shelfkit/inkservices/host.py)
   owner's settings for this tag (always strings; declare them with app.config_field(key,
   label=, default=)). tag.now: the time to draw for (the owner may pretend another time).
   tag.log(msg): a line in the app's log. tag.db: the app's own SQLite connection.
-- Input: @app.button("Label") and @app.text_input("Label", placeholder=) become the phone
-  page that an NFC tap opens (the host builds that page; there is no HTML to write).
-  @app.on_open runs when a phone taps the tag. After any of these the screen is redrawn and
-  sent if it changed.
+- The phone page (what a phone opens when it taps the tag) is built by the host from:
+  @app.page (fn(tag) -> a list of "text", ("Label", "value") facts, {"heading": ...},
+  {"note": ...}, {"link": "...", "url": "https://..."}; shown under the tag's screen; it runs
+  on every view, so it only reads), then @app.button("Label") and @app.text_input("Label",
+  placeholder=) as big buttons and fields, then the app's description. There is no HTML,
+  CSS or script to write. InkApp(..., phone_screen=False) hides the screen on the page.
+  @app.on_open runs when a phone taps the tag. After a button, a text input or on_open the
+  screen is redrawn and sent if it changed.
 - Fresh data: @app.every(minutes=N) runs for every tag on a schedule (N >= 15 unless asked);
   tag.fetch_json(url, params) is the only network access; put results in tag.data.
-- Settings the owner sets for the whole app (Develop > Settings): tag.var("name", default)
-  for plain values (a city, a URL; always strings) and tag.secret("name") for keys and
-  passwords (falls back to the global API token of that name; None when missing). Never write
-  a key into app.py. The ones that exist are listed in the context; if the app needs a new one,
-  read it with a default and tell the owner its name. Per-tag settings are
-  app.config_field(...) and read from tag.config.
+- App settings (Develop > Settings, the same for every tag): tag.var("name", "default") for
+  plain values (a city, a URL, a threshold; always strings) and tag.secret("name") for keys
+  and passwords (it falls back to the global API token of that name; None when missing, so
+  handle None). Never write a key or a password into a file. You can add, change and remove
+  them in "settings" (below). Per-tag settings are app.config_field(...) and tag.config.
 - Imports: the Python standard library and shelfkit.inkservices only.
 - Files you may write: app.py, layout.xml and other .py .xml .md .json .txt .toml files in the
   app folder (plain names, no folders).
@@ -328,12 +359,18 @@ ANSWER with one JSON object and nothing else:
   "summary": "one sentence: what you changed, or what you need to know",
   "plan": ["short step", ...],
   "files": {"layout.xml": "<the complete new file>", "app.py": "<the complete new file>"},
+  "settings": {"vars": {"city": "Utrecht", "old_name": null},
+               "secrets": {"weather_key": "", "unused_key": null}},
   "question": "only if you cannot go on without the owner's choice, else null",
   "answers": ["2-4 short answers the owner can click", ...],
   "suggestions": ["2-3 short next requests the owner might make", ...]
 }
 "files" holds only the files you change, each complete (never a diff or an excerpt). If you
-ask a question, leave "files" empty. Write plain, short English."""
+ask a question, leave "files" empty. "settings" (leave it out if nothing changes): a variable
+set to a string adds or changes it, null removes it. A secret set to "" asks the owner to type
+its value when they accept; set a secret's value only when the owner wrote it in their request
+(never invent one); null removes it. Every tag.secret/tag.var name your code reads must exist
+or be in "settings". Write plain, short English."""
 
 REFERENCE_APPS = ("pill", "weather", "hello")     # working apps shown to the AI as examples
 REFERENCE_MAX = 16000                             # characters of example code
@@ -459,7 +496,9 @@ def _run_agent(host, store, job: dict, provider: str | None, ctx: dict) -> None:
         rounds = 0
         while True:
             proposed = answer.get("files") or {}
-            problems = _propose(host, job, current, proposed) if proposed else []
+            sett = answer.get("settings") if isinstance(answer.get("settings"), dict) else {}
+            var_preview = sett.get("vars") if isinstance(sett.get("vars"), dict) else None
+            problems = _propose(host, job, current, proposed, var_preview) if proposed else []
             if not problems or rounds >= REPAIR_ROUNDS:
                 break
             rounds += 1
@@ -479,9 +518,19 @@ def _run_agent(host, store, job: dict, provider: str | None, ctx: dict) -> None:
             _asked(job, reply)
             answer = ai.parse_json(reply["text"])
 
+        merged = {**current, **((job["proposal"] or {}).get("files") or {})}
+        notes = _settings_proposal(host, store, job, answer, merged)
+        if notes:
+            _step(job, "Note", "; ".join(notes)[:400])
         with _LOCK:   # the conversation keeps the ask (without the bulky context) and the answer
             hist = _HISTORY.setdefault(app_id, [])
-            hist += [{"role": "user", "content": job["prompt"]}, {"role": "assistant", "content": reply["text"][:20000]}]
+            said = reply["text"][:20000]
+            for v in job.get("_secret_values", {}).values():
+                said = said.replace(v, "(secret)")
+            asked = job["prompt"]
+            for v in job.get("_secret_values", {}).values():
+                asked = asked.replace(v, "(secret)")
+            hist += [{"role": "user", "content": asked}, {"role": "assistant", "content": said}]
             del hist[:-HISTORY_KEEP]
         job["summary"] = str(answer.get("summary") or "")[:500]
         job["suggestions"] = [str(s)[:120] for s in (answer.get("suggestions") or [])][:3]
@@ -543,7 +592,80 @@ def _contract(app_id: str, source: str, all_files: dict) -> list[str]:
     return problems[:8]
 
 
-def _propose(host, job: dict, current: dict, proposed: dict) -> list[str]:
+def _reads(sources: dict) -> dict:
+    """{"secret": {names}, "var": {names}, "var_nodefault": {names}} the code reads."""
+    found = {"secret": set(), "var": set(), "var_nodefault": set()}
+    for name, text in sources.items():
+        if not name.endswith(".py"):
+            continue
+        try:
+            tree = ast.parse(text)
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                    and node.func.attr in ("secret", "token", "var") and node.args
+                    and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str)):
+                key = "var" if node.func.attr == "var" else "secret"
+                found[key].add(node.args[0].value)
+                if key == "var" and len(node.args) < 2 and not node.keywords:
+                    found["var_nodefault"].add(node.args[0].value)
+    return found
+
+
+def _settings_proposal(host, store, job: dict, answer: dict, sources: dict) -> list[str]:
+    """Turn the answer's "settings" into a change the owner accepts with the files; secrets the
+    code reads but nobody has are added as ones to ask for. Returns notes for the check step."""
+    raw = answer.get("settings") if isinstance(answer.get("settings"), dict) else {}
+    mine = appsettings.public(store, job["app"]) if store is not None else {"vars": [], "secrets": []}
+    old_vars = {v["name"]: v["value"] for v in mine["vars"]}
+    old_secrets = {x["name"] for x in mine["secrets"]}
+    tokens = {t["name"] for t in ai.tokens_public(store)} if store is not None else set()
+    vars_out, secrets_out, values, notes = [], [], {}, []
+    for name, value in list((raw.get("vars") or {}).items())[:30]:
+        name = str(name)
+        if not appsettings.NAME.fullmatch(name):
+            notes.append(f"ignored the variable name {name!r}")
+            continue
+        if value is None:
+            if name in old_vars:
+                vars_out.append({"name": name, "old": old_vars[name], "new": None})
+        elif str(value) != old_vars.get(name):
+            vars_out.append({"name": name, "old": old_vars.get(name), "new": str(value)[:appsettings.MAX_VALUE]})
+    for name, value in list((raw.get("secrets") or {}).items())[:30]:
+        name = str(name)
+        if not appsettings.NAME.fullmatch(name):
+            notes.append(f"ignored the secret name {name!r}")
+            continue
+        if value is None:
+            if name in old_secrets:
+                secrets_out.append({"name": name, "action": "remove"})
+        elif str(value):
+            secrets_out.append({"name": name, "action": "set", "exists": name in old_secrets})
+            values[name] = str(value)[:appsettings.MAX_VALUE]
+        elif name not in old_secrets:
+            secrets_out.append({"name": name, "action": "ask", "token": name in tokens})
+    reads = _reads(sources)
+    named = {x["name"] for x in secrets_out}
+    for name in sorted(reads["secret"] - old_secrets - tokens - named):
+        secrets_out.append({"name": name, "action": "ask", "token": False, "why": "the code reads it"})
+    gone_vars = {v["name"] for v in vars_out if v["new"] is None}
+    have_vars = (set(old_vars) | {v["name"] for v in vars_out}) - gone_vars
+    for name in sorted(reads["var_nodefault"] - have_vars):
+        notes.append(f'tag.var("{name}") has no default and no such variable is set (it reads None)')
+    job["_secret_values"] = values
+    if vars_out or secrets_out:
+        if not job["proposal"]:
+            job["proposal"] = {"files": {}, "stats": [], "before": {}}
+            _step(job, "Proposed a settings change", "not saved until you accept", change=True, files="settings")
+        job["proposal"]["settings"] = {"vars": vars_out, "secrets": secrets_out}
+        parts = [f"{v['name']} = {v['new']!r}" if v["new"] is not None else f"remove {v['name']}" for v in vars_out]
+        parts += [f"{x['action']} secret {x['name']}" for x in secrets_out]
+        _step(job, "Settings", "; ".join(parts)[:400])
+    return notes
+
+
+def _propose(host, job: dict, current: dict, proposed: dict, var_preview: dict | None = None) -> list[str]:
     """Check a proposal without running it and keep it on the job. Returns the problems that
     should go back to the AI (errors only; layout warnings are the owner's call)."""
     try:
@@ -582,7 +704,7 @@ def _propose(host, job: dict, current: dict, proposed: dict) -> list[str]:
     layout_name = next((n for n in clean if n.endswith(".xml")), None)
     if layout_name:
         try:
-            data, tagv, shared, now, display = _virtual_view(host, job["app"])
+            data, tagv, shared, now, display = _virtual_view(host, job["app"], var_preview)
             result = inklayout.render(clean[layout_name], data, tag=tagv, display=display,
                                       now=now, shared=shared)
             buf = io.BytesIO()
@@ -607,27 +729,48 @@ def job_view(job_id: str) -> dict:
     job = _JOBS.get(job_id or "")
     if job is None:
         raise AppError("no such agent job (the server may have restarted)")
-    view = {k: v for k, v in job.items() if k != "proposal"}
+    view = {k: v for k, v in job.items() if k != "proposal" and not k.startswith("_")}
     if job["proposal"]:
         p = job["proposal"]
         view["proposal"] = {"stats": p["stats"], "files": p["files"], "before": p["before"],
-                            "broken": p.get("broken", False), "diagnostics": p.get("diagnostics", [])}
+                            "broken": p.get("broken", False), "diagnostics": p.get("diagnostics", []),
+                            "settings": p.get("settings")}
     return view
 
 
-def apply(host, job_id: str) -> dict:
+def apply(host, job_id: str, secrets: dict | None = None) -> dict:
     job = _JOBS.get(job_id or "")
     if job is None or not job["proposal"]:
         raise AppError("nothing to accept")
     if job.get("applied"):
         raise AppError("already accepted")
-    result = save(host, job["app"], job["proposal"]["files"], note=f"the AI's change for \"{job['prompt'][:120]}\"",
-                  label="AI")
+    p = job["proposal"]
+    if p["files"]:
+        result = save(host, job["app"], p["files"], note=f"the AI's change for \"{job['prompt'][:120]}\"",
+                      label="AI")
+    else:
+        result = {"ok": True, "checkpoint": None, "error": None}
+    missing = []
+    sett = p.get("settings") or {}
+    for v in sett.get("vars", []):
+        appsettings.save(host.store, job["app"], "var", v["name"], v["new"], remove=v["new"] is None)
+    typed = {str(k): str(v) for k, v in (secrets or {}).items() if v}
+    for x in sett.get("secrets", []):
+        if x["action"] == "remove":
+            appsettings.save(host.store, job["app"], "secret", x["name"], remove=True)
+        else:
+            value = typed.get(x["name"]) or job.get("_secret_values", {}).get(x["name"])
+            if value:
+                appsettings.save(host.store, job["app"], "secret", x["name"], value)
+            elif not x.get("token"):
+                missing.append(x["name"])
+    job.pop("_secret_values", None)
+    result["missing_secrets"] = missing
     job["applied"] = True
     job["status"] = "accepted"
     with _LOCK:
         _HISTORY.setdefault(job["app"], []).append(
-            {"role": "user", "content": "(I accepted that change; the files are now as you proposed.)"})
+            {"role": "user", "content": "(I accepted that change; the files and settings are now as you proposed.)"})
         _HISTORY.setdefault(job["app"], []).append({"role": "assistant", "content": '{"summary": "Noted."}'})
     return result
 
@@ -715,7 +858,7 @@ def handle_post(handler, path: str, body: dict) -> bool:
                               body.get("provider") or None, body.get("context") or {})
             handler._json({"job": job["id"]})
         elif path == "/api/dev/agent/apply":
-            handler._json(apply(host, str(body.get("job") or "")))
+            handler._json(apply(host, str(body.get("job") or ""), body.get("secrets") or {}))
         elif path == "/api/dev/agent/reject":
             handler._json(reject(str(body.get("job") or "")))
         elif path == "/api/dev/agent/forget":

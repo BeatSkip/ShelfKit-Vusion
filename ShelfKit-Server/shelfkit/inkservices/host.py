@@ -46,7 +46,7 @@ from . import scaffold
 from .loader import INKAPPS_DIR, LoadedApp, load_app, load_apps
 from .screen import AppError, LayoutError, draw_screen
 from . import appsettings
-from .sdk import InkApp, TagContext, http_json
+from .sdk import InkApp, TagContext, http_json, page_blocks
 
 LOG_LINES = 200
 DISABLED_KEY = "inkapps.disabled"     # main store settings: {app_id: {title, description, icon, at}}
@@ -404,6 +404,27 @@ class AppHost:
                 if d["level"] != "info":
                     self._log(app.id, f"[{tag.hex_id}] layout {d['level']}: {d['at']}: {d['msg']}")
         return image, result
+
+    def page_blocks(self, app: InkApp, tag: TagContext) -> list[dict]:
+        """@app.page for one tag; a failure is logged and shown as a note, not a broken page."""
+        if app.page_fn is None:
+            return []
+        try:
+            return page_blocks(app.page_fn(tag))
+        except Exception as exc:  # noqa: BLE001 - app code
+            err = self._failed(app.id, tag.hex_id, "page", exc)["error"]
+            return [{"kind": "note", "text": f"Part of this page failed to load ({err})."}]
+
+    def phone_blocks(self, app: InkApp, hex_id: str) -> list[dict]:
+        """The phone page's own content for a real tag (phone.py)."""
+        if app.page_fn is None:
+            return []
+        with self._app_lock(app.id):
+            tag = self._context(app, hex_id)
+            try:
+                return self.page_blocks(app, tag)
+            finally:
+                self._flush_logs(app.id, tag)
 
     def _flush_logs(self, app_id: str, tag: TagContext) -> None:
         for _, line in tag.logs:

@@ -153,6 +153,43 @@ class TagContext:
         return self.token(name)
 
 
+PAGE_LIMIT = 60          # blocks on a phone page
+
+
+def page_blocks(items) -> list[dict]:
+    """What @app.page returns, checked and made uniform: [{kind, text, value?, url?}].
+
+        "a paragraph"                          kind text
+        ("Label", "value")                     kind fact (a row of a small table)
+        {"heading": "This week"}               kind heading
+        {"note": "small, grey"}                kind note
+        {"link": "Forecast", "url": "https://..."}   kind link (http and https only)
+    """
+    if items is None:
+        return []
+    if isinstance(items, (str, tuple, dict)):
+        items = [items]
+    out = []
+    for item in list(items)[:PAGE_LIMIT]:
+        if isinstance(item, str):
+            out.append({"kind": "text", "text": item})
+        elif isinstance(item, tuple) and len(item) == 2:
+            out.append({"kind": "fact", "text": str(item[0]), "value": str(item[1])})
+        elif isinstance(item, dict) and "heading" in item:
+            out.append({"kind": "heading", "text": str(item["heading"])})
+        elif isinstance(item, dict) and "note" in item:
+            out.append({"kind": "note", "text": str(item["note"])})
+        elif isinstance(item, dict) and "link" in item:
+            url = str(item.get("url") or "")
+            if not re.match(r"https?://", url):
+                raise ValueError(f"page link {item['link']!r}: the url must start with http:// or https://")
+            out.append({"kind": "link", "text": str(item["link"]), "url": url})
+        else:
+            raise ValueError(f"@app.page: cannot show {item!r} (use a string, a (label, value) pair, "
+                             "or a dict with heading, note or link)")
+    return out
+
+
 class InkApp:
     """An app. Its screen comes from one of two places:
 
@@ -165,7 +202,8 @@ class InkApp:
     """
 
     def __init__(self, app_id: str, title: str = "", description: str = "",
-                 layout: str | None = None, icon: str | None = None) -> None:
+                 layout: str | None = None, icon: str | None = None,
+                 phone_screen: bool = True) -> None:
         if not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", app_id):
             raise ValueError(f"app id {app_id!r}: use lower-case letters, digits, - and _")
         self.id = app_id
@@ -177,6 +215,8 @@ class InkApp:
         self.render_fn: Callable | None = None
         self.data_fn: Callable | None = None
         self.on_open_fn: Callable | None = None
+        self.page_fn: Callable | None = None
+        self.phone_screen = bool(phone_screen)  # the phone page shows the tag's screen at the top
         self.controls: list[Control] = []
         self.config_fields: list[ConfigField] = []
         self.timers: list[Timer] = []
@@ -208,6 +248,20 @@ class InkApp:
             return None
         from pathlib import Path
         return Path(self.folder) / self.layout
+
+    def page(self, fn: Callable) -> Callable:
+        """@app.page: fn(tag) returns extra content for the phone page (what an NFC tap
+        opens), shown under the tag's screen and above the buttons. Return a list of:
+            "a paragraph"                          plain text
+            ("Label", "value")                     a row of a small table of facts
+            {"heading": "This week"}               a heading
+            {"note": "small, grey text"}
+            {"link": "Forecast", "url": "https://..."}
+        It runs on every page view, so it only reads (tag.data, tag.var...); never fetch.
+        The page has no scripts and no HTML of the app's own: this is all it can add.
+        InkApp(..., phone_screen=False) leaves the tag's screen off the page."""
+        self.page_fn = fn
+        return fn
 
     def on_open(self, fn: Callable) -> Callable:
         """@app.on_open: fn(tag) runs when a phone opens the tag's page (an NFC tap)."""
@@ -260,4 +314,5 @@ class InkApp:
                 "has_render": self.render_fn is not None or bool(self.layout),
                 "layout": self.layout if self.render_fn is None else None,
                 "has_on_open": self.on_open_fn is not None,
+                "has_page": self.page_fn is not None,
                 "timers": [t.as_dict() for t in self.timers]}

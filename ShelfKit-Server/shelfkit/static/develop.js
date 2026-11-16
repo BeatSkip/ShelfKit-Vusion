@@ -281,6 +281,20 @@
     const open = j.status === "proposed";
     const stats = p.stats.map((s) => `<span class="dev-stat"><code>${esc(s.name)}</code>${s.new ? " new" : ""}
       <span class="dev-add">+${s.added}</span> <span class="dev-del">−${s.removed}</span></span>`).join("");
+    const sett = p.settings || { vars: [], secrets: [] };
+    const settRows = [
+      ...sett.vars.map((v) => `<li><span class="dev-sett-kind">variable</span><code>${esc(v.name)}</code>
+        ${v.new === null ? '<span class="dev-del">remove</span>'
+    : `${v.old != null ? `<s>${esc(v.old)}</s> → ` : '<span class="dev-add">new</span> '}<code class="dev-sett-val">${esc(v.new)}</code>`}</li>`),
+      ...sett.secrets.map((x) => `<li><span class="dev-sett-kind">secret</span><code>${esc(x.name)}</code>
+        ${x.action === "remove" ? '<span class="dev-del">remove</span>'
+    : x.action === "set" ? `<span class="dev-add">${x.exists ? "new value" : "new"}</span> <span class="hint">(the value you gave in your request)</span>`
+      : open ? `<input type="password" class="dev-sett-secret" data-secret-for="${esc(x.name)}" autocomplete="new-password" value="${esc((D.secretDraft || {})[x.name] || "")}"
+          placeholder="${x.token ? "optional: the API token of this name is used" : "type its value"}" aria-label="Value for the secret ${esc(x.name)}">
+          ${x.why ? `<span class="hint">${esc(x.why)}</span>` : ""}`
+        : '<span class="hint">asked for</span>'}</li>`),
+    ].join("");
+    const settHtml = settRows ? `<div class="dev-sett"><span class="dev-sett-title">Settings</span><ul>${settRows}</ul></div>` : "";
     const diff = D.diff ? `<div class="dev-diff">${p.stats.map((s) =>
       `<div class="dev-diff-file"><div class="dev-diff-name">${esc(s.name)}</div>${diffHtml(p.before[s.name] || "", p.files[s.name], s.name)}</div>`).join("")}</div>` : "";
     return `<li class="dev-step dev-change ${p.broken ? "is-broken" : ""}">
@@ -288,13 +302,14 @@
         <span class="dev-change-title">${p.broken ? "Proposed change, with problems" : "Proposed change"}</span>
         ${stats}
       </div>
+      ${settHtml}
       ${open && j.preview ? `<button type="button" class="dev-change-shot" data-vtab title="Open it on the Virtual tag tab">
         <img src="data:image/png;base64,${j.preview}" alt="The proposed screen"></button>` : ""}
-      <p class="dev-change-note">${open ? "Not saved. The Virtual tag tab shows it; accept to write the files (a checkpoint is saved first)."
+      <p class="dev-change-note">${open ? `Not saved. ${j.preview ? "The Virtual tag tab shows it. " : ""}Accept writes ${p.stats.length ? "the files (a checkpoint is saved first)" : ""}${p.stats.length && p.settings ? " and " : ""}${p.settings ? "the settings" : ""}.`
         : j.status === "accepted" ? "Accepted and saved." : "Rejected: the files did not change."}</p>
       <div class="dev-change-actions">
-        <button type="button" data-diff aria-pressed="${D.diff}">${D.diff ? "Hide diff" : "Show diff"}</button>
-        ${open ? `<button type="button" data-take title="Put the proposed files in the editor as unsaved edits">Edit first</button>
+        ${p.stats.length ? `<button type="button" data-diff aria-pressed="${D.diff}">${D.diff ? "Hide diff" : "Show diff"}</button>` : ""}
+        ${open ? `${p.stats.length ? `<button type="button" data-take title="Put the proposed files in the editor as unsaved edits${settRows ? " (the settings change waits for Accept)" : ""}">Edit first</button>` : ""}
         <span class="spacer"></span>
         <button type="button" data-reject>Reject</button>
         <button type="button" class="primary" data-accept>${p.broken ? "Accept anyway" : "Accept"}</button>` : ""}
@@ -337,12 +352,19 @@
     if (!D.job) return;
     D.busy = true;
     try {
-      const r = await api("/api/dev/agent/apply", { job: D.job.id });
+      const secrets = {};
+      for (const i of document.querySelectorAll(".dev-sett-secret")) if (i.value) secrets[i.dataset.secretFor] = i.value;
+      D.secretDraft = {};
+      const r = await api("/api/dev/agent/apply", { job: D.job.id, secrets });
       D.job.status = "accepted";
       D.edits = {};
       D.msg = r.error ? { text: `Saved, but the app didn't load: ${r.error}`, bad: true }
         : { text: "Saved and reloaded. A checkpoint of the old files is under Versions." };
       if (r.error) D.job.suggestions = [`Fix this load error: ${r.error}`.slice(0, 300)];
+      if ((r.missing_secrets || []).length && !r.error) {
+        D.msg = { text: `Saved. Still to fill in on the Settings tab: the secret${r.missing_secrets.length > 1 ? "s" : ""} ${r.missing_secrets.join(", ")}.`, bad: true };
+      }
+      D.settings = null;           // the Settings tab reads them again
       await loadApps();
       await loadApp();
     } catch (e) {
@@ -375,7 +397,7 @@
   }
 
   // ── tabs: code, versions, debug ──────────────────────────────────────────
-  const hasPhone = (a) => !!a && ((a.controls || []).length > 0 || !!a.has_on_open);
+  const hasPhone = (a) => !!a && ((a.controls || []).length > 0 || !!a.has_on_open || !!a.has_page);
 
   function setTab(tab) {
     D.tab = tab;
@@ -1239,6 +1261,9 @@
     grip.addEventListener("dblclick", () => setChatWidth(420));
     // the agent's feed follows new steps while you are at its bottom, like a chat
     const feed = $("dev-agent");
+    feed.addEventListener("input", (e) => {
+      if (e.target.matches(".dev-sett-secret")) (D.secretDraft ||= {})[e.target.dataset.secretFor] = e.target.value;
+    });
     let stick = true;
     feed.addEventListener("scroll", () => { stick = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 60; });
     new MutationObserver(() => { if (stick) feed.scrollTop = feed.scrollHeight; })

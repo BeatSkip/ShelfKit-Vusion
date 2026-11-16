@@ -1133,6 +1133,11 @@ def add(tag):
 def peek(tag):
     tag.data["peek"] = [tag.var("city", "-"), tag.secret("k")]
 
+@app.page
+def page(tag):
+    return [{"heading": "Count"}, ("n", tag.data.get("n", 0)), "hi <b>there</b>",
+            {"link": "Docs", "url": "https://example.org/x"}]
+
 @app.on_open
 def opened(tag):
     tag.data["n"] = tag.data.get("n", 0) + 10
@@ -1210,6 +1215,10 @@ def opened(tag):
         check("virtual tag draws", r.get("ok") and r["png"] and r["data"] == {"n": 0, "who": "you"}, r)
         r = post("/api/dev/virtual", {"app": "lay", "do": "action", "action": "add"})
         check("virtual tag runs a button", r.get("ok") and r["data"]["n"] == 1, r)
+        check("@app.page adds a heading, facts, text and links to the phone page, escaped",
+              "<h2>Count</h2>" in (r.get("phone") or "") and "<th>n</th><td>1</td>" in r["phone"]
+              and "hi &lt;b&gt;there&lt;/b&gt;" in r["phone"] and "href='https://example.org/x'" in r["phone"],
+              (r.get("phone") or "")[-700:])
         check("the phone page comes along, as a phone would show it", "<form" in (r.get("phone") or "")
               and "data:image/png;base64," in r["phone"] and "Done." in r["phone"], (r.get("phone") or "")[:200])
         r = post("/api/dev/virtual", {"app": "lay", "do": "open"})
@@ -1331,6 +1340,47 @@ def opened(tag):
               and not (root / "lay" / "notes.md").exists(), r)
         r = post("/api/dev/delete", {"app": "lay", "file": "app.py"})
         check("app.py cannot be deleted", "error" in r and (root / "lay" / "app.py").exists(), r)
+        cid = get("/api/dev/checkpoints?app=lay")["checkpoints"][0]["id"]
+        post("/api/dev/save", {"app": "lay", "files": {"extra.md": "x"}})
+        post("/api/dev/revert", {"app": "lay", "id": cid})
+        check("revert removes files added since and never copies the checkpoint's record",
+              not (root / "lay" / "extra.md").exists() and not (root / "lay" / "checkpoint.json").exists())
+
+        # the agent changes settings too: variables at once, secrets typed by the owner on accept
+        def settings_ask(store, system, messages, **kw):
+            seen.append((system, messages))
+            app_py = (root / "lay" / "app.py").read_text(encoding="utf-8").replace(
+                'tag.secret("k")', 'tag.secret("k"), tag.secret("forecast_key")')
+            return {"text": json.dumps({"summary": "use a city", "files": {"app.py": app_py},
+                                        "settings": {"vars": {"city": "Delft"},
+                                                     "secrets": {"weather_key": "", "given": "typed-in-prompt-1234"}}}),
+                    "provider": "mistral", "label": "Mistral", "model": "m", "usage": {}, "seconds": 0}
+        ai.ask = settings_ask
+        seen.clear()
+        view = wait(post("/api/dev/agent", {"app": "lay", "prompt": "use Delft; my key is typed-in-prompt-1234"})["job"])
+        sett = (view.get("proposal") or {}).get("settings") or {}
+        check("the agent proposes variables and secrets with its files",
+              view["status"] == "proposed" and sett.get("vars") and sett["vars"][-1]["new"] == "Delft"
+              and {x["name"]: x["action"] for x in sett["secrets"]} == {"weather_key": "ask", "given": "set",
+                                                                        "forecast_key": "ask", "k": "ask"},
+              view.get("proposal"))
+        check("a secret the code reads but nobody has is asked for",
+              any(x["name"] == "forecast_key" and x.get("why") for x in sett.get("secrets", [])), sett)
+        check("secret values never appear in the job the browser sees",
+              "typed-in-prompt-1234" not in json.dumps({k: v for k, v in view.items() if k != "prompt"}))
+        check("the AI is told how to change settings and the phone page",
+              '"settings"' in seen[0][0] and "@app.page" in seen[0][0])
+        r = post("/api/dev/agent/apply", {"job": view["id"], "secrets": {"weather_key": "typed-by-owner-5678"}})
+        st = get("/api/dev/settings?app=lay")
+        check("accept applies the variables and secrets",
+              {v["name"]: v["value"] for v in st["vars"]}.get("city") == "Delft"
+              and {x["name"] for x in st["secrets"]} >= {"weather_key", "given"}
+              and r.get("missing_secrets") == ["forecast_key", "k"], (r, st))
+        check("the conversation history keeps no secret value",
+              "typed-in-prompt-1234" not in json.dumps(develop_mod._HISTORY.get("lay", [])))
+        check("the app reads the secret it was given", a.inkhost._context(a.inkhost._app("lay"), "FFF0")
+              .secret("weather_key") == "typed-by-owner-5678")
+
     finally:
         ai.ask = real_ask
         server.shutdown()
