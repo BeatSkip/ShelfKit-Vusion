@@ -36,6 +36,7 @@
     sortBy: stored("apps.dis.sort", "name"),
     sortAsc: stored("apps.dis.asc", "1") === "1",
     homeShape: "",
+    railShape: "",
     shape: "",
     previewKeys: {},
     bump: 0,
@@ -251,8 +252,53 @@
       }
     }
     $("apps-home").hidden = Boolean(A.view);
-    $("apps-page").hidden = !A.view;
-    if (A.view) renderPage();
+    $("apps-detail").hidden = !A.view;
+    if (A.view) { renderRail(); renderPage(); }
+  }
+
+  // ── drawing: the rail of apps beside an open app ───────────────────────────
+  function railItem(id) {
+    const a = appOf(id);
+    if (!a) return "";
+    const s = state(a);
+    const sub = s === "run" ? `<span class="app-dot"></span>${plural(a.tags.length, "tag", "tags")}`
+      : s === "bad" ? "Didn't load" : s === "off" ? "Disabled" : "Idle";
+    const here = id === A.view;
+    return `<button type="button" class="rail-app is-${s}" data-rail="${esc(id)}"
+      ${here ? 'aria-current="page"' : ""} title="${esc(a.description || a.title)}">
+      <span class="rail-ico">${iconSvg(a)}</span>
+      <span class="rail-text"><span class="rail-name">${esc(a.title)}</span><span class="rail-sub">${sub}</span></span></button>`;
+  }
+
+  function renderRail() {
+    const off = disabledApps();
+    const shape = JSON.stringify([A.view, A.items, A.list.apps.map((a) =>
+      [a.id, a.title, a.icon, a.tags.length, Boolean(a.error), a.disabled]), Boolean(A.icons),
+    A.sortBy, A.sortAsc]);
+    if (shape === A.railShape) return;
+    A.railShape = shape;
+    const rail = $("apps-rail");
+    const top = rail.scrollTop;
+    const left = rail.scrollLeft;
+    const loose = A.items.filter((x) => !isGroup(x));
+    const groups = A.items.filter(isGroup);
+    rail.innerHTML = `<button type="button" class="rail-home" data-rail-home>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>All apps</button>
+      <div class="rail-list">${loose.map(railItem).join("")}</div>
+      ${groups.map((g) => `<div class="rail-title">${esc(g.name)}</div>
+        <div class="rail-list">${g.apps.map(railItem).join("")}</div>`).join("")}
+      ${off.length ? `<div class="rail-title">Disabled</div>
+        <div class="rail-list">${off.map((a) => railItem(a.id)).join("")}</div>` : ""}`;
+    rail.scrollTop = top;
+    rail.scrollLeft = left;
+    const cur = rail.querySelector('[aria-current="page"]');
+    if (cur) {
+      const r = cur.getBoundingClientRect();
+      const box = rail.getBoundingClientRect();
+      if (r.top < box.top || r.bottom > box.bottom || r.left < box.left || r.right > box.right) {
+        cur.scrollIntoView({ block: "nearest", inline: "nearest" });
+      }
+    }
   }
 
   // ── drawing: an app's page ─────────────────────────────────────────────────
@@ -291,7 +337,6 @@
     const timer = (a.timers || []).length ? ` · updates itself every ${Math.min(...a.timers.map((t) => t.minutes))} min` : "";
     const parts = [`
       <div class="app-bar">
-        <button type="button" id="app-back" class="app-back" aria-label="Back to all apps">‹ Apps</button>
         <span class="grow"></span>
         ${s === "run" ? '<button type="button" id="app-stop-all">Stop everywhere</button>' : ""}
         <button type="button" id="app-more" aria-haspopup="menu" aria-label="More for this app">···</button>
@@ -474,7 +519,8 @@
   }
 
   // ── navigation ─────────────────────────────────────────────────────────────
-  function openApp(id) {
+  function openApp(id, fromRail) {
+    if (fromRail && id === A.view) return;
     closeGroup();
     hideMenu();
     A.view = id;
@@ -484,10 +530,10 @@
     A.shape = "";
     renderApps();
     const page = $("apps-page");
-    page.classList.remove("enter");
+    page.classList.remove("enter", "swap");
     void page.offsetWidth;                // restart the slide-in
-    page.classList.add("enter");
-    $("app-back")?.focus();
+    page.classList.add(fromRail ? "swap" : "enter");
+    $("apps-rail").querySelector(`[data-rail="${CSS.escape(id)}"]`)?.focus({ preventScroll: !fromRail });
     load();
   }
 
@@ -1172,13 +1218,28 @@
     act(event.target.querySelector("button"), "/api/inkapps/config", { tag: A.tag[A.view], config });
   });
 
+  $("apps-rail").addEventListener("click", (event) => {
+    const b = event.target.closest("button");
+    if (!b) return;
+    if (b.matches("[data-rail-home]")) goHome();
+    else if (b.dataset.rail) openApp(b.dataset.rail, true);
+  });
+  $("apps-rail").addEventListener("keydown", (event) => {
+    const keys = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 };
+    if (!(event.key in keys)) return;
+    const all = [...$("apps-rail").querySelectorAll("button")];
+    const i = all.indexOf(document.activeElement);
+    if (i < 0) return;
+    event.preventDefault();
+    all[Math.max(0, Math.min(all.length - 1, i + keys[event.key]))].focus();
+  });
+
   $("apps-page").addEventListener("click", (event) => {
     const b = event.target.closest("button");
     if (!b) return;
     const app = A.view;
     const tag = A.tag[app];
-    if (b.id === "app-back") goHome();
-    else if (b.id === "app-more") { const r = b.getBoundingClientRect(); showMenu(app, r.right - 200, r.bottom + 4); }
+    if (b.id === "app-more") { const r = b.getBoundingClientRect(); showMenu(app, r.right - 200, r.bottom + 4); }
     else if (b.id === "app-stop-all") askStop(app);
     else if (b.id === "app-enable") enable(app);
     else if (b.id === "app-run") askRun(app);
