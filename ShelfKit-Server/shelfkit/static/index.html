@@ -611,7 +611,9 @@
           browser that opens the page sees the same values.</p>
       </div>
 
-      <div class="tabs" id="settings-tabs" role="tablist" aria-label="Settings sections">
+      <div class="settings-layout">
+      <div class="tabs settings-nav" id="settings-tabs" role="tablist" aria-label="Settings sections"
+           aria-orientation="vertical">
         <button type="button" role="tab" data-tab="general">General</button>
         <button type="button" role="tab" data-tab="hubs">Hubs</button>
         <button type="button" role="tab" data-tab="ports">Serial ports</button>
@@ -622,6 +624,7 @@
         <button type="button" role="tab" data-tab="ai">AI services</button>
       </div>
 
+      <div class="settings-body">
       <form id="settings-form" class="settings" novalidate>
         <section class="setting-group" data-tab="general" aria-labelledby="set-timing">
           <h2 id="set-timing">When a tag counts as quiet</h2>
@@ -771,6 +774,8 @@
           reads one with <code>tag.token("name")</code>, so the key never has to be in its code.</p>
         <div id="ai-tokens"></div>
       </section>
+      </div>
+      </div>
     </section>
   </main>
   </div>

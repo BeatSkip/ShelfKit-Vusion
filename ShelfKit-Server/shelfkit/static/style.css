@@ -1990,3 +1990,33 @@ body.apps-dragging, body.apps-dragging * { cursor: grabbing !important; }
 .dev-sett-val { overflow-wrap: anywhere; }
 .dev-sett-secret { flex: 1 1 180px; min-height: 30px; font-family: var(--mono); font-size: 0.8125rem; }
 
+/* Settings: the sections as a list in a column beside the content, as in the design
+   mockup (the Settings artboard of "ShelfKit new layout"). Keep it vertical. */
+.settings-layout {
+  display: grid; grid-template-columns: 220px minmax(0, 1fr); align-items: stretch;
+  margin: -20px calc(-1 * var(--gutter)) -88px; min-height: calc(100vh - 64px);
+}
+.settings-layout > .settings-nav {
+  flex-direction: column; align-items: stretch; gap: 2px; margin: 0; padding: 18px 16px;
+  border-bottom: 0; border-right: 1px solid var(--rule-soft); overflow: visible;
+}
+.settings-layout > .settings-nav button {
+  justify-content: flex-start; width: 100%; min-height: 38px; margin: 0; padding: 0 10px;
+  border: 0; border-radius: 8px; background: transparent; color: var(--ink);
+  font-weight: 400; text-align: left;
+}
+.settings-layout > .settings-nav button:hover { background: var(--hover); }
+.settings-layout > .settings-nav button[aria-selected="true"] {
+  background: var(--accent-soft); color: var(--accent); font-weight: 600; border: 0;
+}
+.settings-body { min-width: 0; padding: 26px 40px 88px 24px; }
+@media (max-width: 720px) {
+  .settings-layout { grid-template-columns: minmax(0, 1fr); min-height: 0; margin-bottom: 0; }
+  .settings-layout > .settings-nav {
+    flex-direction: row; flex-wrap: wrap; padding: 12px var(--gutter);
+    border-right: 0; border-bottom: 1px solid var(--rule-soft);
+  }
+  .settings-layout > .settings-nav button { width: auto; min-height: 34px; }
+  .settings-body { padding: 20px var(--gutter) 88px; }
+}
+

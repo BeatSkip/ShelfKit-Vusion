@@ -3383,6 +3383,18 @@ ui.hubTabs.addEventListener("click", (event) => {
   const tab = event.target.closest("[data-tab]");
   if (tab) pickHubsView(hubsView, tab.dataset.tab);
 });
+ui.settingsTabs.addEventListener("keydown", (event) => {
+  const keys = { ArrowDown: 1, ArrowUp: -1, Home: "first", End: "last" };
+  if (!(event.key in keys)) return;
+  const tabs = [...ui.settingsTabs.querySelectorAll("[data-tab]")];
+  const at = tabs.indexOf(document.activeElement);
+  if (at < 0) return;
+  event.preventDefault();
+  const step = keys[event.key];
+  const next = step === "first" ? 0 : step === "last" ? tabs.length - 1 : (at + step + tabs.length) % tabs.length;
+  showSettingsTab(tabs[next].dataset.tab);
+  tabs[next].focus();
+});
 ui.settingsTabs.addEventListener("click", (event) => {
   const tab = event.target.closest("[data-tab]");
   if (tab) showSettingsTab(tab.dataset.tab);
