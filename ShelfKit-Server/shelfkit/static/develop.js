@@ -35,6 +35,9 @@
     msg: null,
     poll: 0,
     layoutSeq: 0,
+    vmode: stored("dev.vt", "show") === "hidden" ? "hidden" : "show",   // show | hidden | popout
+    vbox: null,                 // the virtual tag panel; it moves into its own window when popped out
+    vwin: null,
   };
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -336,6 +339,7 @@
       D.edits = {};
       D.msg = r.error ? { text: `Saved, but the app didn't load: ${r.error}`, bad: true }
         : { text: "Saved and reloaded. A checkpoint of the old files is under Versions." };
+      if (r.error) D.job.suggestions = [`Fix this load error: ${r.error}`.slice(0, 300)];
       await loadApps();
       await loadApp();
     } catch (e) {
@@ -376,6 +380,8 @@
 
   function renderPane() {
     const pane = $("dev-pane");
+    pane.style.minHeight = `${pane.offsetHeight}px`;
+    requestAnimationFrame(() => { pane.style.minHeight = ""; });
     const msg = D.msg ? `<p class="dev-msg ${D.msg.bad ? "bad" : ""}" role="status">${CodeEdit.linkRefs(D.msg.text, fileNames())}</p>` : "";
     if (!D.app) {
       pane.innerHTML = '<p class="hint">No apps yet. Make one with New app on the Apps screen.</p>';
@@ -419,11 +425,9 @@
       const l = CodeEdit.lang(f.name);
       return `<li><button type="button" class="ide-file" data-file="${esc(f.name)}"
         aria-current="${f.name === D.file ? "true" : "false"}" title="${esc(f.name)}">${FILE_ICON[l]}
-        <span class="ide-file-name">${esc(f.name)}</span>${dirty.has(f.name) ? '<span class="dev-dot" title="Unsaved"></span>' : ""}</button></li>`;
+        <span class="ide-file-name">${esc(f.name)}</span>${D.files.indexOf(f) < 9 ? `<kbd class="ide-key" title="Alt+${D.files.indexOf(f) + 1}">${D.files.indexOf(f) + 1}</kbd>` : ""}${dirty.has(f.name) ? '<span class="dev-dot" title="Unsaved"></span>' : ""}</button></li>`;
     }).join("");
-    const isLayout = lang === "xml";
-    const note = isLayout ? "Drawn on the virtual tag as you type, not saved"
-      : lang === "python" ? "Runs in the server only after Save and reload" : "Saved with the app";
+    const note = fileNote(lang);
     return `
       <div class="ide">
         <nav class="ide-side" aria-label="Explorer">
@@ -450,13 +454,51 @@
           </div>
           <div class="ide-status">
             <span id="dev-pos">Ln 1, Col 1</span>
-            <span>${esc(CodeEdit.LANG_NAME[lang])}</span>
-            <span class="ide-status-note">${esc(note)}</span>
+            <span id="dev-lang">${esc(CodeEdit.LANG_NAME[lang])}</span>
+            <span class="ide-status-note" id="dev-note">${esc(note)}</span>
             <span class="ide-status-tip" id="dev-goto-note">Ctrl+click or F12: go to definition</span>
           </div>
           <div class="ide-problems" id="dev-problems">${problemsHtml()}</div>
         </div>
       </div>`;
+  }
+
+  const fileNote = (lang) => (lang === "xml" ? "Drawn on the virtual tag as you type, not saved"
+    : lang === "python" ? "Runs in the server only after Save and reload" : "Saved with the app");
+  const tabHtml = (name) => `${FILE_ICON[CodeEdit.lang(name)]}<span>${esc(name)}</span>${dirtyNames().includes(name) ? '<span class="dev-dot"></span>' : ""}`;
+
+  // another file in the editor, without rebuilding the tab: nothing on the page moves
+  function switchFile(name) {
+    const ed = $("dev-editor");
+    if (!ed || D.tab !== "code" || !D.files.some((f) => f.name === name)) {
+      D.file = name;
+      renderPane();
+      return;
+    }
+    if (name === D.file) return;
+    caretMoved();                       // remembers where the old file's caret and scroll were
+    D.file = name;
+    const lang = CodeEdit.lang(name);
+    for (const b of document.querySelectorAll(".ide-file")) b.setAttribute("aria-current", String(b.dataset.file === name));
+    document.querySelector(".ide-tab").innerHTML = tabHtml(name);
+    document.querySelector(".ide-crumb").textContent = `inkapps / ${D.app} / ${name}`;
+    document.querySelector(".ide-code").dataset.lang = lang;
+    $("dev-lang").textContent = CodeEdit.LANG_NAME[lang];
+    $("dev-note").textContent = fileNote(lang);
+    $("dev-goto-note").textContent = "Ctrl+click or F12: go to definition";
+    $("dev-goto-note").classList.remove("is-miss");
+    ed.setAttribute("aria-label", name);
+    ed.value = textOf(name);
+    const v = (D.view || {})[name] || { pos: 0, end: 0, top: 0, left: 0 };
+    ed.setSelectionRange(Math.min(v.pos, ed.value.length), Math.min(v.end, ed.value.length));
+    ed.scrollTop = v.top;
+    ed.scrollLeft = v.left;
+    D.caretLine = ed.value.slice(0, ed.selectionStart).split("\n").length;
+    $("dev-gutter").dataset.lines = "";
+    paintEditor();
+    $("dev-problems").innerHTML = problemsHtml();
+    ed.focus({ preventScroll: true });
+    layoutDraft();
   }
 
   function problemsHtml() {
@@ -534,7 +576,8 @@
   function goto(file, line, col) {
     if (!D.files.some((f) => f.name === file)) return;
     if (D.tab !== "code") { D.tab = "code"; store("dev.tab", "code"); renderTabs(); }
-    if (file !== D.file || !$("dev-editor")) { D.file = file; renderPane(); }
+    if (!$("dev-editor")) { D.file = file; renderPane(); }
+    else if (file !== D.file) switchFile(file);
     const ed = $("dev-editor");
     const lines = ed.value.split("\n");
     const ln = Math.max(1, Math.min(lines.length, Number(line) || 1));
@@ -695,9 +738,14 @@
   }
 
   function renderVirtual() {
-    const box = $("dev-virtual");
+    const box = D.vbox;
     const a = appOf(D.app);
+    renderVmode();
     if (!a) { box.innerHTML = ""; return; }
+    if (D.vwin && !D.vwin.closed) {
+      D.vwin.document.title = `Virtual tag · ${a.title || a.id}`;
+      D.vwin.document.documentElement.dataset.theme = document.documentElement.dataset.theme || "light";
+    }
     const vt = D.vt || {};
     const prop = D.job && D.job.status === "proposed" && D.job.preview;
     let src = vt.png, cap = "Saved app · nothing is sent to a tag";
@@ -717,7 +765,12 @@
           <button type="button" data-vscale="1" aria-pressed="${k === 1}">1×</button>
           <button type="button" data-vscale="2" aria-pressed="${k === 2}">2×</button>
         </span>
+        ${D.vmode === "popout"
+    ? `<button type="button" class="dev-vt-icon" data-vdock title="Put the virtual tag back in the page" aria-label="Put the virtual tag back in the page"><svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M2.5 3.5h11v9h-11zM9.5 3.5v9" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg></button>`
+    : `<button type="button" class="dev-vt-icon" data-vpop title="Open the virtual tag in its own window" aria-label="Open the virtual tag in its own window"><svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M9.5 2.5h4v4M13.5 2.5 8 8M12 9.5V13a.5.5 0 0 1-.5.5h-8A.5.5 0 0 1 3 13V5a.5.5 0 0 1 .5-.5H7" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        <button type="button" class="dev-vt-icon" data-vhide title="Hide the virtual tag (the Virtual tag button brings it back)" aria-label="Hide the virtual tag"><svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>`}
       </div>
+      <p class="dev-vt-app">${esc(a.title || a.id)}</p>
       ${prop ? `<span class="apps-seg dev-which" role="group" aria-label="Show">
         <button type="button" data-which="now" aria-pressed="${!D.showProposal}">Now</button>
         <button type="button" data-which="prop" aria-pressed="${D.showProposal}">Proposal</button></span>` : ""}
@@ -742,8 +795,106 @@
       <button type="button" class="dev-vt-reset" data-vt="reset" title="Forget the virtual tag's data and settings">Reset the virtual tag</button>`;
   }
 
+  // where the panel is: in the page, hidden, or in its own window
+  function renderVmode() {
+    const box = D.vbox;
+    box.hidden = D.vmode === "hidden";
+    const t = $("dev-vt-toggle");
+    t.setAttribute("aria-pressed", String(D.vmode !== "hidden"));
+    $("dev-vt-toggle-text").textContent = D.vmode === "popout" ? "Virtual tag (own window)" : "Virtual tag";
+    t.title = D.vmode === "popout" ? "Put the virtual tag back in the page"
+      : D.vmode === "hidden" ? "Show the virtual tag" : "Hide the virtual tag";
+    document.querySelector(".dev-body").classList.toggle("vt-away", D.vmode !== "show");
+  }
+
+  function setVmode(mode) {
+    if (mode === "popout") return popOut();
+    if (D.vmode === "popout") dock(false);
+    D.vmode = mode;
+    store("dev.vt", mode);
+    renderVirtual();
+  }
+
+  function popOut() {
+    if (D.vwin && !D.vwin.closed) { D.vwin.focus(); return; }
+    const w = window.open("", "shelfkit-virtual-tag", "popup,width=460,height=900");
+    if (!w) { D.msg = { text: "The browser blocked the new window: allow pop-ups for this page.", bad: true }; renderPane(); return; }
+    const sheets = [...document.querySelectorAll('link[rel="stylesheet"]')]
+      .map((l) => `<link rel="stylesheet" href="${esc(new URL(l.getAttribute("href"), location.href).href)}">`).join("");
+    w.document.open();
+    w.document.write(`<!doctype html><html lang="en" data-theme="${esc(document.documentElement.dataset.theme || "light")}">
+      <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+      <title>Virtual tag</title>${sheets}</head><body class="vtag-window"></body></html>`);
+    w.document.close();
+    w.document.body.appendChild(w.document.adoptNode(D.vbox));
+    D.vwin = w;
+    D.vmode = "popout";
+    w.addEventListener("pagehide", () => { if (D.vmode === "popout") dock(true); });
+    renderVirtual();
+  }
+
+  // back into the page; closed = the window is going away by itself
+  function dock(closed) {
+    const w = D.vwin;
+    D.vwin = null;
+    if (D.vbox.ownerDocument !== document) {
+      document.querySelector(".dev-body").appendChild(document.adoptNode(D.vbox));
+    }
+    D.vmode = "show";
+    store("dev.vt", "show");
+    if (!closed && w && !w.closed) w.close();
+    renderVirtual();
+  }
+
+  // the panel handles its own events, so they work in the page and in its own window
+  function wireVirtual(box) {
+    const ask = (q) => (box.ownerDocument.defaultView || window).confirm(q);
+    box.addEventListener("click", (e) => {
+      const b = e.target.closest("button, a");
+      if (!b) return;
+      if (b.dataset.goto) {
+        const [file, line, col] = b.dataset.goto.split(":");
+        window.focus();
+        goto(file, Number(line), Number(col) || 1);
+      }
+      else if (b.matches("[data-vpop]")) popOut();
+      else if (b.matches("[data-vhide]")) setVmode("hidden");
+      else if (b.matches("[data-vdock]")) dock(false);
+      else if (b.dataset.vt) {
+        if (b.dataset.vt === "reset" && !ask("Forget the virtual tag's data and settings?")) return;
+        virtual(b.dataset.vt);
+      }
+      else if (b.dataset.which) { D.showProposal = b.dataset.which === "prop"; renderVirtual(); }
+      else if (b.dataset.vscale) { store("dev.scale", b.dataset.vscale); renderVirtual(); }
+      else if (b.matches("[data-now]")) { D.pretend = ""; virtual("draw"); }
+      else if (b.dataset.ctl && b.tagName === "BUTTON" && !b.closest("form")) virtual("action", { action: b.dataset.ctl });
+    });
+    box.addEventListener("submit", (e) => {
+      const f = e.target;
+      if (f.matches(".dev-ctl")) {
+        e.preventDefault();
+        virtual("action", { action: f.dataset.ctl, value: f.elements.v.value });
+      } else if (f.id === "dev-config") {
+        e.preventDefault();
+        const config = {};
+        for (const input of f.querySelectorAll("input[name]")) config[input.name] = input.value;
+        virtual("config", { config });
+      }
+    });
+    box.addEventListener("change", (e) => {
+      if (e.target.id === "dev-pretend") { D.pretend = e.target.value; virtual("draw"); }
+    });
+  }
+
   // ── events ───────────────────────────────────────────────────────────────
   function wire() {
+    D.vbox = $("dev-virtual");
+    wireVirtual(D.vbox);
+    $("dev-vt-toggle").addEventListener("click", () => {
+      if (D.vmode === "popout") dock(false);
+      else setVmode(D.vmode === "hidden" ? "show" : "hidden");
+    });
+    window.addEventListener("pagehide", () => { if (D.vwin && !D.vwin.closed) D.vwin.close(); });
     $("dev-app").addEventListener("change", (e) => openApp(e.target.value));
     $("dev-save").addEventListener("click", saveFiles);
     $("dev-discard").addEventListener("click", () => {
@@ -757,6 +908,15 @@
       if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); send(); }
     });
     document.addEventListener("keydown", (e) => {
+      if (screenIs("develop") && e.altKey && !e.ctrlKey && !e.metaKey && /^Digit[1-9]$/.test(e.code)) {
+        const f = D.files[Number(e.code.slice(5)) - 1];
+        if (f) {
+          e.preventDefault();
+          if (D.tab !== "code") { D.tab = "code"; store("dev.tab", "code"); renderTabs(); D.file = f.name; renderPane(); }
+          else switchFile(f.name);
+        }
+        return;
+      }
       if (screenIs("develop") && e.key.toLowerCase() === "k" && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
         $("dev-ask").focus();
@@ -774,6 +934,7 @@
 
     const screenEl = document.querySelector('.screen[data-screen="develop"]');
     screenEl.addEventListener("click", (e) => {
+      if (e.target.closest("#dev-virtual")) return;     // the panel handles its own (wireVirtual)
       const dl = e.target.closest("[data-diff-goto]");
       if (dl && !e.target.closest("button")) {
         const [file, line] = dl.dataset.diffGoto.split(":");
@@ -802,37 +963,9 @@
       else if (b.matches("[data-accept]")) accept();
       else if (b.matches("[data-reject]")) reject();
       else if (b.matches("[data-take]")) takeProposal();
-      else if (b.dataset.file) {
-        D.file = b.dataset.file;
-        renderPane();
-        layoutDraft();
-        $("dev-editor")?.focus({ preventScroll: true });
-      }
+      else if (b.dataset.file) switchFile(b.dataset.file);
       else if (b.dataset.revert) revert(b.dataset.revert);
       else if (b.matches("[data-relog]")) refreshSide();
-      else if (b.dataset.vt) {
-        if (b.dataset.vt === "reset" && !confirm("Forget the virtual tag's data and settings?")) return;
-        virtual(b.dataset.vt);
-      }
-      else if (b.dataset.which) { D.showProposal = b.dataset.which === "prop"; renderVirtual(); }
-      else if (b.dataset.vscale) { store("dev.scale", b.dataset.vscale); renderVirtual(); }
-      else if (b.matches("[data-now]")) { D.pretend = ""; virtual("draw"); }
-      else if (b.dataset.ctl && b.tagName === "BUTTON" && !b.closest("form")) virtual("action", { action: b.dataset.ctl });
-    });
-    screenEl.addEventListener("submit", (e) => {
-      const f = e.target;
-      if (f.matches(".dev-ctl")) {
-        e.preventDefault();
-        virtual("action", { action: f.dataset.ctl, value: f.elements.v.value });
-      } else if (f.id === "dev-config") {
-        e.preventDefault();
-        const config = {};
-        for (const input of f.querySelectorAll("input[name]")) config[input.name] = input.value;
-        virtual("config", { config });
-      }
-    });
-    screenEl.addEventListener("change", (e) => {
-      if (e.target.id === "dev-pretend") { D.pretend = e.target.value; virtual("draw"); }
     });
     screenEl.addEventListener("input", (e) => {
       if (e.target.id !== "dev-editor") return;

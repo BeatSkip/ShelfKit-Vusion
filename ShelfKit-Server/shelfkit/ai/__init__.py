@@ -227,7 +227,10 @@ def _ask_anthropic(acc, model, system, messages, json_mode, max_tokens, timeout)
     client = anthropic.Anthropic(api_key=acc["api_key"], base_url=acc.get("base_url") or None,
                                  timeout=timeout, max_retries=2)
     sys_text = system + ("\n\nAnswer with one JSON object and nothing else." if json_mode else "")
-    params = dict(model=model, max_tokens=max_tokens, system=sys_text, messages=messages)
+    # the system prompt (rules, SDK, InkLayout reference, example apps) is the same on every
+    # request and repair round: cache it, so later requests read it at a fraction of the price
+    params = dict(model=model, max_tokens=max_tokens, messages=messages,
+                  system=[{"type": "text", "text": sys_text, "cache_control": {"type": "ephemeral"}}])
     if model.startswith(("claude-opus-5", "claude-sonnet-5", "claude-fable-5", "claude-haiku-5")):
         params["output_config"] = {"effort": "high"}     # coding work: more than the default
     try:
@@ -256,7 +259,8 @@ def _ask_anthropic(acc, model, system, messages, json_mode, max_tokens, timeout)
     text = "".join(b.text for b in message.content if b.type == "text")
     if message.stop_reason == "max_tokens":
         raise AIError("the reply was cut off (too long); ask for a smaller change")
-    usage = {"input": message.usage.input_tokens, "output": message.usage.output_tokens}
+    usage = {"input": message.usage.input_tokens, "output": message.usage.output_tokens,
+             "cached": getattr(message.usage, "cache_read_input_tokens", None)}
     return text, usage
 
 

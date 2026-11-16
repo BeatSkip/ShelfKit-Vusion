@@ -1835,3 +1835,21 @@ body.apps-dragging, body.apps-dragging * { cursor: grabbing !important; }
   .ide-side { max-height: 180px; border-right: 0; border-bottom: 1px solid var(--ide-rule); }
 }
 @media (prefers-reduced-motion: reduce) { .ide-curline.flash { animation: none; } }
+
+/* the virtual tag: hide it, or give it its own window */
+.dev-virtual[hidden] { display: none; }
+.dev-virtual .app-glass-head { gap: 6px; }
+.dev-vt-icon { width: 30px; min-height: 30px; padding: 0; justify-content: center; color: var(--ink-2); }
+.dev-vt-app { display: none; margin: -6px 0 0; align-self: stretch; font-size: var(--t-small); color: var(--ink-2); }
+.dev-vt-toggle { gap: 7px; }
+.dev-vt-toggle svg { flex: none; }
+.dev-vt-toggle[aria-pressed="false"] { color: var(--ink-2); }
+.vtag-window { margin: 0; padding: 14px; background: var(--ground); color: var(--ink); font-family: var(--font); }
+.vtag-window .dev-virtual { position: static; max-width: none; margin: 0 auto; }
+.vtag-window .dev-vt-app { display: block; }
+
+.ide-key {
+  flex: none; font-family: var(--mono); font-size: 0.625rem; line-height: 1; padding: 2px 4px; border-radius: 3px;
+  color: var(--ide-dim); border: 1px solid var(--ide-rule); opacity: 0; transition: opacity 0.12s;
+}
+.ide-side:hover .ide-key, .ide-file[aria-current="true"] .ide-key { opacity: 1; }

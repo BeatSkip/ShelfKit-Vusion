@@ -27,8 +27,10 @@ data. Python the AI wrote runs only after the owner presses Accept.
 
 from __future__ import annotations
 
+import ast
 import base64
 import difflib
+import importlib.util
 import inspect
 import io
 import json
@@ -242,23 +244,51 @@ _JOBS: dict[str, dict] = {}
 _HISTORY: dict[str, list[dict]] = {}
 _LOCK = threading.Lock()
 
-RULES = """You build and change apps for ShelfKit: small Python programs that draw the screen of
-an e-paper shelf tag (152 x 296 pixels, portrait, black / white / red only, no grey) and answer
-the tag's NFC link with a phone page of buttons and text boxes. An app is a folder with app.py
-(an InkApp, see the SDK source below) and usually layout.xml (an InkLayout screen, see the
-InkLayout reference below), filled from @app.data.
+RULES = """You build and change apps for ShelfKit: small Python programs that own the screen of
+an e-paper shelf tag and answer the tag's NFC link with a phone page. You work on ONE app, in
+its folder inkapps/<id>/. The owner sees your proposal drawn on a virtual tag and accepts or
+rejects it; nothing you write runs before they accept.
 
-Rules that matter on these tags:
-- Every screen change costs battery and reaches the glass only at the tag's next check-in
-  (up to ~5 minutes). Never draw a clock or seconds; redraw only when something the owner
-  cares about changed. The host never sends a picture identical to the last one.
-- Use @app.every(minutes=N) for fetching data (N >= 15 unless asked), never fetch in
-  @app.data or @app.render. tag.fetch_json() is the only network call.
-- Keep per-tag state in tag.data, settings in app.setting/config_field, shared state in
-  tag.shared. Use tag.now for the time (the owner may pretend another time).
-- Text must fit its box: prefer fit="shrink" or max lines over overflowing.
+THE HARDWARE
+- 2.6" e-paper, 152 x 296 pixels, portrait by default; black, white and red only (no grey:
+  use the dot/hatch patterns InkLayout offers). Text is drawn 1-bit.
+- A coin-cell battery. Every screen change costs battery and takes ~15 s with a flash, and it
+  only reaches the glass at the tag's next check-in (up to ~5 minutes; seconds after an NFC tap).
+  So: never draw a clock or seconds, and only change what is on screen when something the owner
+  cares about changed. The host never re-sends an identical picture.
 
-Answer with one JSON object:
+HOW AN APP RUNS (the host, shelfkit/inkservices/host.py)
+- app.py is imported when the server starts or reloads apps. It must define, at module level,
+  app = InkApp("<id>", title=..., layout="layout.xml", ...) where <id> is the folder name.
+  Importing must be quick and have no side effects: no network, no threads, no sleep.
+- The screen: InkApp(layout="layout.xml") renders that InkLayout file with what @app.data
+  returns (a dict; default tag.data). @app.data and @app.render run on EVERY redraw, so they
+  only read and compute; they never fetch. (@app.render draws with Python on a Canvas instead
+  of a layout; prefer a layout.)
+- tag.data: this tag's state (a dict, JSON-serialisable values only), saved by the host after
+  every callback. tag.shared: one dict shared by every tag running the app. tag.config: the
+  owner's settings for this tag (always strings; declare them with app.config_field(key,
+  label=, default=)). tag.now: the time to draw for (the owner may pretend another time).
+  tag.log(msg): a line in the app's log. tag.db: the app's own SQLite connection.
+- Input: @app.button("Label") and @app.text_input("Label", placeholder=) become the phone
+  page that an NFC tap opens (the host builds that page; there is no HTML to write).
+  @app.on_open runs when a phone taps the tag. After any of these the screen is redrawn and
+  sent if it changed.
+- Fresh data: @app.every(minutes=N) runs for every tag on a schedule (N >= 15 unless asked);
+  tag.fetch_json(url, params) is the only network access; put results in tag.data.
+- Secrets: tag.token("name") returns an API token the owner saved in Settings (None if not);
+  never write a key into app.py. Tokens that exist are listed in the context.
+- Imports: the Python standard library and shelfkit.inkservices only.
+- Files you may write: app.py, layout.xml and other .py .xml .md .json .txt .toml files in the
+  app folder (plain names, no folders).
+
+GOOD HABITS
+- Text must fit its box: fit="shrink", lines= and | default:"-" in the layout.
+- Keep the layout's names in step with what @app.data returns; when you add a value to the
+  layout, return it from @app.data.
+- Make small, complete changes that do what was asked; keep the owner's code and comments.
+
+ANSWER with one JSON object and nothing else:
 {
   "summary": "one sentence: what you changed, or what you need to know",
   "plan": ["short step", ...],
@@ -267,25 +297,66 @@ Answer with one JSON object:
   "answers": ["2-4 short answers the owner can click", ...],
   "suggestions": ["2-3 short next requests the owner might make", ...]
 }
-"files" holds only the files you change, each complete (never a diff or an excerpt). Keep the
-app's id and folder. If you ask a question, leave "files" empty. Write plain, short English."""
+"files" holds only the files you change, each complete (never a diff or an excerpt). If you
+ask a question, leave "files" empty. Write plain, short English."""
+
+REFERENCE_APPS = ("pill", "weather", "hello")     # working apps shown to the AI as examples
+REFERENCE_MAX = 16000                             # characters of example code
+REPAIR_ROUNDS = 2                                 # times the AI may fix its own errors
 
 
 def _sdk_reference() -> str:
     return inspect.getsource(sdk_module)
 
 
-def _context_text(host, app_id: str, ctx: dict) -> str:
-    parts = []
+def _reference_apps(host, app_id: str) -> str:
+    """Up to two of the bundled apps, whole, as worked examples."""
+    out, used = [], 0
+    for ref in REFERENCE_APPS:
+        if ref == app_id or len(out) >= 2:
+            continue
+        folder = host.root / ref
+        parts = []
+        for name in ("app.py", "layout.xml"):
+            f = folder / name
+            if f.is_file():
+                parts.append(f"--- inkapps/{ref}/{name} ---\n{f.read_text(encoding='utf-8')}")
+        text = "\n".join(parts)
+        if not text or used + len(text) > REFERENCE_MAX:
+            continue
+        out.append(text)
+        used += len(text)
+    return "\n\n".join(out)
+
+
+def _system_prompt(host, app_id: str) -> str:
+    from ..inklayout import skill
+    refs = _reference_apps(host, app_id)
+    return (RULES
+            + "\n\n=== SDK source (shelfkit/inkservices/sdk.py) ===\n" + _sdk_reference()
+            + "\n\n=== InkLayout reference ===\n" + skill.skill_markdown(None, "portrait")
+            + (f"\n\n=== Working apps to learn from (not the app you change) ===\n{refs}" if refs else ""))
+
+
+def _context_text(host, store, app_id: str, ctx: dict) -> str:
+    parts = [f"=== the app you work on: inkapps/{app_id}/ ==="]
     for f in files(host, app_id)["files"]:
         parts.append(f"=== {f['name']} ===\n{f['text']}")
+    item = host.loaded.get(app_id)
+    if item and item.error:
+        parts.append(f"=== the app does not load right now ===\n{item.error}")
     try:
         data, tagv, shared, now, _ = _virtual_view(host, app_id)
-        parts.append("=== the virtual tag's layout data (what @app.data returns) ===\n"
+        parts.append("=== the virtual tag's layout data (what @app.data returns now) ===\n"
                      + json.dumps(_jsonable(data), indent=1)[:6000])
-        parts.append(f"=== now ===\n{now.isoformat(timespec='minutes')}")
+        parts.append(f"=== the virtual tag ===\n{json.dumps(_jsonable(tagv))[:1500]}\nnow: "
+                     f"{now.isoformat(timespec='minutes')}")
     except AppError as exc:
-        parts.append(f"=== the app does not load ===\n{exc}")
+        parts.append(f"=== the virtual tag could not draw ===\n{exc}")
+    tokens = [t["name"] for t in ai.tokens_public(store)] if store is not None else []
+    parts.append("=== API tokens the owner saved (read with tag.token(name)) ===\n"
+                 + (", ".join(tokens) if tokens else "none yet; if the app needs a key, say which "
+                    "name to save it under in Settings > AI services > API tokens"))
     log = host.log(app_id)[-30:]
     if log:
         parts.append("=== the app's recent log ===\n" + "\n".join(line for _, line in log))
@@ -319,34 +390,62 @@ def start_agent(host, store, app_id: str, prompt: str, provider: str | None = No
     return job
 
 
+def _asked(job, reply):
+    u = reply["usage"]
+    job["steps"][-1].update(state="done", detail=f"{reply['model']} · {reply['seconds']} s"
+                            + (f" · {u.get('output')} tokens out" if u.get("output") else "")
+                            + (f" · {u.get('cached')} read from cache" if u.get("cached") else ""))
+
+
 def _run_agent(host, store, job: dict, provider: str | None, ctx: dict) -> None:
     app_id = job["app"]
     try:
         current = {f["name"]: f["text"] for f in files(host, app_id)["files"]}
-        from ..inklayout import skill
-        system = (RULES + "\n\n=== SDK source (shelfkit/inkservices/sdk.py) ===\n" + _sdk_reference()
-                  + "\n\n=== InkLayout reference ===\n" + skill.skill_markdown(None, "portrait"))
-        _step(job, f"Read {', '.join(current)} and the InkLayout reference", f"{len(current)} files")
+        system = _system_prompt(host, app_id)
+        refs = [r for r in REFERENCE_APPS if r != app_id and (host.root / r / "app.py").is_file()][:2]
+        _step(job, f"Read {', '.join(current)}, the SDK and the InkLayout reference",
+              f"{len(current)} files" + (f"; examples: {', '.join(refs)}" if refs else ""))
         history = list(_HISTORY.get(app_id, []))
-        user = f"{_context_text(host, app_id, ctx)}\n\n=== the owner asks ===\n{job['prompt']}"
+        user = f"{_context_text(host, store, app_id, ctx)}\n\n=== the owner asks ===\n{job['prompt']}"
         messages = history + [{"role": "user", "content": user}]
         _step(job, f"Asking {job['who']['label']}", job["who"]["model"], state="running")
         reply = ai.ask(store, system, messages, provider=provider, json_mode=True)
-        job["steps"][-1].update(state="done", detail=f"{reply['model']} · {reply['seconds']} s"
-                                + (f" · {reply['usage'].get('output')} tokens out" if reply["usage"].get("output") else ""))
+        _asked(job, reply)
         answer = ai.parse_json(reply["text"])
+        plan = [str(s)[:200] for s in (answer.get("plan") or [])][:8]
+        if plan:
+            _step(job, "Plan", "; ".join(plan))
+
+        # the AI's own errors go back to it, a couple of times, before the owner sees them
+        rounds = 0
+        while True:
+            proposed = answer.get("files") or {}
+            problems = _propose(host, job, current, proposed) if proposed else []
+            if not problems or rounds >= REPAIR_ROUNDS:
+                break
+            rounds += 1
+            job["proposal"] = None
+            job["preview"] = None
+            for s in job["steps"]:            # the earlier proposal is no longer the one to accept
+                if s.get("change"):
+                    s.update(change=False, title="Proposed a change (with errors)", state="error",
+                             detail="sent back to the AI to fix")
+            _step(job, f"Fixing its own errors (round {rounds})", "; ".join(problems)[:400], state="running")
+            messages = messages + [
+                {"role": "assistant", "content": reply["text"][:30000]},
+                {"role": "user", "content": "Your change was checked (not run) and has these problems:\n- "
+                 + "\n- ".join(problems) + "\nAnswer again with the same JSON, with the complete "
+                 "corrected files."}]
+            reply = ai.ask(store, system, messages, provider=provider, json_mode=True)
+            _asked(job, reply)
+            answer = ai.parse_json(reply["text"])
+
         with _LOCK:   # the conversation keeps the ask (without the bulky context) and the answer
             hist = _HISTORY.setdefault(app_id, [])
             hist += [{"role": "user", "content": job["prompt"]}, {"role": "assistant", "content": reply["text"][:20000]}]
             del hist[:-HISTORY_KEEP]
         job["summary"] = str(answer.get("summary") or "")[:500]
         job["suggestions"] = [str(s)[:120] for s in (answer.get("suggestions") or [])][:3]
-        plan = [str(s)[:200] for s in (answer.get("plan") or [])][:8]
-        if plan:
-            _step(job, "Plan", "; ".join(plan))
-        proposed = answer.get("files") or {}
-        if proposed:
-            _propose(host, job, current, proposed)
         if answer.get("question"):
             job["question"] = str(answer["question"])[:300]
             job["answers"] = [str(a)[:80] for a in (answer.get("answers") or [])][:4]
@@ -366,15 +465,56 @@ def _run_agent(host, store, job: dict, provider: str | None, ctx: dict) -> None:
     job["seconds"] = round(time.time() - job["started"])
 
 
-def _propose(host, job: dict, current: dict, proposed: dict) -> None:
+# everything an app may use on `app`: InkApp's methods and the attributes __init__ sets
+_INKAPP_NAMES = set(dir(sdk_module.InkApp)) | set(re.findall(r"self\.(\w+)\s*[:=]",
+                                                              inspect.getsource(sdk_module.InkApp)))
+
+
+def _contract(app_id: str, source: str, all_files: dict) -> list[str]:
+    """What the loader and host need from app.py, read from its syntax tree (never run)."""
+    try:
+        tree = ast.parse(source, "app.py")
+    except SyntaxError as exc:
+        return [f"syntax error in app.py line {exc.lineno}: {exc.msg}"]
+    problems = []
+    made = None
+    for node in tree.body:
+        if (isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "app" for t in node.targets)
+                and isinstance(node.value, ast.Call) and getattr(node.value.func, "id", None) == "InkApp"):
+            made = node.value
+    if made is None:
+        problems.append('app.py must define  app = InkApp("%s", ...)  at module level' % app_id)
+    else:
+        first = made.args[0] if made.args else None
+        if not (isinstance(first, ast.Constant) and first.value == app_id):
+            problems.append(f'app.py line {made.lineno}: the app id must be "{app_id}" (the folder name)')
+        for kw in made.keywords:
+            if kw.arg == "layout" and isinstance(kw.value, ast.Constant) and kw.value.value not in all_files:
+                problems.append(f"app.py line {made.lineno}: layout={kw.value.value!r} but there is no such file")
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "app" \
+                and node.attr not in _INKAPP_NAMES:
+            problems.append(f"app.py line {node.lineno}: InkApp has no {node.attr!r}")
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            names = [a.name for a in node.names] if isinstance(node, ast.Import) else [node.module or ""]
+            for name in names:
+                top = name.split(".")[0]
+                if top and top != "shelfkit" and importlib.util.find_spec(top) is None:
+                    problems.append(f"app.py line {node.lineno}: there is no module {top!r} on this server")
+    return problems[:8]
+
+
+def _propose(host, job: dict, current: dict, proposed: dict) -> list[str]:
+    """Check a proposal without running it and keep it on the job. Returns the problems that
+    should go back to the AI (errors only; layout warnings are the owner's call)."""
     try:
         clean = _check_files({k: v for k, v in proposed.items() if v != current.get(k)})
     except AppError as exc:
         _step(job, "The proposal was not usable", str(exc), state="error")
-        return
+        return [str(exc)]
     if not clean:
         _step(job, "No file changes", "the proposal matched the files as they are")
-        return
+        return []
     stats = []
     for name, text in clean.items():
         old = current.get(name, "").splitlines()
@@ -388,33 +528,40 @@ def _propose(host, job: dict, current: dict, proposed: dict) -> None:
     _step(job, "Proposed a change", "not saved until you accept", change=True,
           files=" · ".join(f"{s['name']} +{s['added']} −{s['removed']}" for s in stats))
 
-    checks = []
-    if "app.py" in clean:
+    merged = {**current, **clean}
+    problems, checks = [], []
+    if "app.py" in clean or "layout.xml" in clean:
+        contract = _contract(job["app"], merged.get("app.py", ""), merged)
+        problems += contract
+        checks.append("app.py checked: " + ("ok (it runs only after you accept)" if not contract
+                                            else "; ".join(contract)))
+    for name in [n for n in clean if n.endswith(".py") and n != "app.py"]:
         try:
-            compile(clean["app.py"], "app.py", "exec")
-            checks.append("app.py compiles (it runs only after you accept)")
+            compile(clean[name], name, "exec")
         except SyntaxError as exc:
-            checks.append(f"syntax error in app.py line {exc.lineno}: {exc.msg}")
-            job["proposal"]["broken"] = True
-    if "layout.xml" in clean:
+            problems.append(f"syntax error in {name} line {exc.lineno}: {exc.msg}")
+    layout_name = next((n for n in clean if n.endswith(".xml")), None)
+    if layout_name:
         try:
             data, tagv, shared, now, display = _virtual_view(host, job["app"])
-            result = inklayout.render(clean["layout.xml"], data, tag=tagv, display=display,
+            result = inklayout.render(clean[layout_name], data, tag=tagv, display=display,
                                       now=now, shared=shared)
             buf = io.BytesIO()
             result.image.save(buf, format="PNG")
             job["preview"] = base64.b64encode(buf.getvalue()).decode("ascii")
             job["proposal"]["diagnostics"] = result.diagnostics
             errors = [d for d in result.diagnostics if d["level"] == "error"]
-            warnings = [d for d in result.diagnostics if d["level"] == "warning"]
-            checks.append(f"layout drawn on the virtual tag: {len(errors)} errors, {len(warnings)} warnings")
-            if errors:
-                job["proposal"]["broken"] = True
+            warnings = [d for d in result.diagnostics if d["level"] in ("warn", "warning")]
+            note = " (drawn with the data the saved app.py returns)" if "app.py" in clean else ""
+            checks.append(f"{layout_name} drawn on the virtual tag: {len(errors)} errors, "
+                          f"{len(warnings)} warnings{note}")
+            problems += [f"{layout_name} at {d['at']}: {d['msg']}" for d in errors[:6]]
         except AppError as exc:
             checks.append(f"layout not drawn: {exc}")
+    job["proposal"]["broken"] = bool(problems)
     if checks:
-        _step(job, "Checked without running it", "; ".join(checks),
-              state="error" if job["proposal"].get("broken") else "done")
+        _step(job, "Checked without running it", "; ".join(checks), state="error" if problems else "done")
+    return problems
 
 
 def job_view(job_id: str) -> dict:

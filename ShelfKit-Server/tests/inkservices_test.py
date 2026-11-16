@@ -1109,6 +1109,7 @@ def test_develop(tmp: Path) -> None:
     import urllib.request
 
     from shelfkit import ai, webapp
+    from shelfkit.inkservices import develop as develop_mod
     from shelfkit.app import App
     from shelfkit.serial_link import PortSpec
 
@@ -1267,6 +1268,32 @@ def opened(tag):
               and "syntax error" in view["steps"][-1]["detail"], view["steps"])
         check("reject leaves the files", post("/api/dev/agent/reject", {"job": job}).get("ok")
               and "def (:" not in (root / "lay" / "app.py").read_text(encoding="utf-8"))
+        # the AI's own errors go back to it: a broken first answer, a fixed second one
+        calls = []
+
+        def fixing_ask(store, system, messages, **kw):
+            calls.append(messages)
+            bad = '<screen><txt>{{ data.n }}</txt></screen>'
+            good = '<screen><text size="30">{{ data.n }}</text></screen>'
+            return {"text": json.dumps({"summary": "s", "files": {"layout.xml": good if len(calls) > 1 else bad}}),
+                    "provider": "mistral", "label": "Mistral", "model": "m", "usage": {}, "seconds": 0}
+        ai.ask = fixing_ask
+        view = wait(post("/api/dev/agent", {"app": "lay", "prompt": "bigger"})["job"])
+        check("layout errors go back to the AI to fix", len(calls) == 2
+              and "<txt>" in calls[1][-1]["content"] and view["status"] == "proposed"
+              and not view["proposal"]["broken"] and 'size="30"' in view["proposal"]["files"]["layout.xml"],
+              [st["title"] for st in view["steps"]])
+        check("the superseded proposal is not offered", sum(1 for st in view["steps"] if st.get("change")) == 1)
+        sys_prompt, first = seen[0][0], seen[0][1][-1]["content"]
+        check("the AI gets the runtime rules and the API token names", "HOW AN APP RUNS" in sys_prompt
+              and "API tokens the owner saved" in first)
+        bad_src = ("import nosuchmodule" + chr(10) + "from shelfkit.inkservices import InkApp" + chr(10)
+                   + 'app = InkApp("other", layout="x.xml")' + chr(10) + "app.evry(1)" + chr(10))
+        found = develop_mod._contract("lay", bad_src, {})
+        check("bad app ids, layout files and imports are caught without running app.py",
+              len(found) == 4 and any("nosuchmodule" in x for x in found)
+              and any("evry" in x for x in found), found)
+        post("/api/dev/agent/reject", {"job": view["id"]})
         r = post("/api/dev/agent", {"app": "lay", "prompt": ""})
         check("an empty prompt is refused", "say what" in r.get("error", ""), r)
         check("parse_json reads a fenced reply",
