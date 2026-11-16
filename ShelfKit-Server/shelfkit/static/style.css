@@ -1853,3 +1853,60 @@ body.apps-dragging, body.apps-dragging * { cursor: grabbing !important; }
   color: var(--ide-dim); border: 1px solid var(--ide-rule); opacity: 0; transition: opacity 0.12s;
 }
 .ide-side:hover .ide-key, .ide-file[aria-current="true"] .ide-key { opacity: 1; }
+
+/* Develop › Side by side: code left, the agent in a column on the right, nothing but the
+   editor (and the agent's feed and the virtual tag's controls) scrolls */
+.dev-chat { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.dev-grip { display: none; }
+.dev-layout-btn { gap: 7px; }
+.dev-layout-btn svg { flex: none; }
+.dev-layout-btn[aria-pressed="false"] { color: var(--ink-2); }
+@media (max-width: 1000px) { .dev-layout-btn { display: none; } }
+@media (min-width: 1001px) {
+  html:has(.screen.dev-split:not([hidden])), html:has(.screen.dev-split:not([hidden])) body { overflow: hidden; }
+  main:has(> .screen.dev-split:not([hidden])) {
+    height: 100vh; box-sizing: border-box; padding-bottom: 16px; display: flex; flex-direction: column;
+  }
+  .dev-split { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .dev-split .screen-head { margin-bottom: 0; }
+  .dev-split .dev-body {
+    flex: 1; min-height: 0; display: grid; gap: 0; margin-top: 12px; align-items: stretch;
+    grid-template-columns: minmax(0, 1fr) 14px min(var(--dev-chat-w, 420px), 32vw) 20px auto;
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-areas: "tabs grip chat . vt" "pane grip chat . vt";
+  }
+  .dev-split .dev-body.vt-away {
+    grid-template-columns: minmax(0, 1fr) 14px min(var(--dev-chat-w, 420px), 32vw);
+    grid-template-areas: "tabs grip chat" "pane grip chat";
+  }
+  .dev-split .dev-main { display: contents; }
+  .dev-split #dev-tabs { grid-area: tabs; margin-bottom: 10px; }
+  .dev-split .dev-pane { grid-area: pane; min-height: 0; overflow: auto; }
+  .dev-split .dev-pane > .ide { flex: 1 1 auto; min-height: 0; grid-template-rows: minmax(0, 1fr); }
+  .dev-split .ide-main { min-height: 0; }
+  .dev-split .ide-code { height: auto; min-height: 0; }
+  .dev-split .dev-pane:has(> .ide) { overflow: hidden; }
+  .dev-split .dev-chat { grid-area: chat; min-height: 0; gap: 12px; }
+  .dev-split .dev-agent { order: 1; flex: 1 1 auto; min-height: 0; overflow: auto; padding-right: 4px; overscroll-behavior: contain; }
+  .dev-split .dev-prompt { order: 2; flex: none; }
+  .dev-split .dev-prompt textarea { max-height: 30vh; }
+  .dev-split .dev-virtual {
+    grid-area: vt; position: static; align-self: stretch; min-height: 0; overflow: auto;
+    width: max-content; max-width: 400px; overscroll-behavior: contain;
+  }
+  .dev-split .dev-grip {
+    grid-area: grip; display: block; position: relative; cursor: col-resize; touch-action: none;
+  }
+  .dev-split .dev-grip::after {
+    content: ""; position: absolute; top: 0; bottom: 0; left: 6px; width: 2px; border-radius: 2px;
+    background: var(--rule-soft); transition: background 0.12s;
+  }
+  .dev-split .dev-grip:hover::after, .dev-split .dev-grip:focus-visible::after,
+  body.dev-resizing .dev-split .dev-grip::after { background: var(--accent); }
+  body.dev-resizing { cursor: col-resize; user-select: none; }
+}
+@media (min-width: 1001px) and (max-width: 1499px) {
+  .dev-split .ide { grid-template-columns: 150px minmax(0, 1fr); }
+  .dev-split .dev-virtual { width: 260px; padding: 14px; }
+  .dev-split .dev-virtual .apps-seg[aria-label="Preview size"] { display: none; }
+}

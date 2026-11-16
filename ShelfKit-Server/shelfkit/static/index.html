@@ -566,6 +566,8 @@
           <select id="dev-app" aria-label="App to work on"></select></label>
         <span class="dev-dirty" id="dev-dirty" role="status"></span>
         <span class="spacer"></span>
+        <button id="dev-layout" type="button" class="dev-layout-btn" aria-pressed="false"
+                title="Agent beside the code; only the editor scrolls"><svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M2.5 3h11v10h-11zM9.5 3v10M11 6h1.2M11 8h1.2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Side by side</span></button>
         <button id="dev-vt-toggle" type="button" class="dev-vt-toggle" aria-pressed="true"
                 title="Show or hide the virtual tag"><svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M2.5 3.5h11v9h-11zM9.5 3.5v9" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg><span id="dev-vt-toggle-text">Virtual tag</span></button>
         <button id="dev-discard" type="button" disabled>Discard</button>
@@ -574,6 +576,7 @@
       <p class="dev-bad dev-app-error" id="dev-app-error" hidden></p>
       <div class="dev-body">
         <div class="dev-main">
+          <div class="dev-chat" id="dev-chat">
           <form class="dev-prompt" id="dev-prompt">
             <textarea id="dev-ask" rows="2" placeholder="Describe what to build or change…"
               aria-label="Describe what to build or change"></textarea>
@@ -586,6 +589,7 @@
             </div>
           </form>
           <section class="dev-agent" id="dev-agent" aria-label="Agent" aria-live="polite"></section>
+          </div>
           <div class="tabs" id="dev-tabs" role="tablist" aria-label="Develop sections">
             <button type="button" role="tab" data-tab="code">Code</button>
             <button type="button" role="tab" data-tab="versions">Versions</button>
@@ -593,6 +597,8 @@
           </div>
           <div id="dev-pane" class="dev-pane"></div>
         </div>
+        <div class="dev-grip" id="dev-grip" role="separator" aria-orientation="vertical" tabindex="0"
+             aria-label="Width of the agent column (drag, or arrow keys)"></div>
         <aside class="app-glass dev-virtual" id="dev-virtual" aria-label="Virtual tag"></aside>
       </div>
     </section>

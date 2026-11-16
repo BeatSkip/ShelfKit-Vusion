@@ -751,7 +751,10 @@
     let src = vt.png, cap = "Saved app · nothing is sent to a tag";
     if (prop && D.showProposal) { src = D.job.preview; cap = "The AI's proposal · not saved"; }
     else if (D.draft && D.draft.png) { src = D.draft.png; cap = "Your unsaved layout"; }
-    const k = Number(stored("dev.scale", "2")) === 1 ? 1 : 2;
+    // side by side on a narrower screen leaves no room for the 2× tag (its own window has)
+    const tight = D.vbox.ownerDocument === document && innerWidth < 1500
+      && document.querySelector(".dev-split") && innerWidth > 1000;
+    const k = tight || Number(stored("dev.scale", "2")) === 1 ? 1 : 2;
     const controls = (a.controls || []).map((c) => c.kind === "text"
       ? `<form class="dev-ctl" data-ctl="${esc(c.id)}"><input name="v" placeholder="${esc(c.placeholder || c.label)}"
           aria-label="${esc(c.label)}"><button type="submit">${esc(c.label)}</button></form>`
@@ -887,7 +890,72 @@
   }
 
   // ── events ───────────────────────────────────────────────────────────────
+  // Side by side: the agent is a column right of the code and the page itself never scrolls
+  const CHAT_W = { min: 300, max: 760 };
+  function applyLayout() {
+    const split = stored("dev.layout", "stacked") === "split";
+    document.querySelector('.screen[data-screen="develop"]').classList.toggle("dev-split", split);
+    $("dev-layout").setAttribute("aria-pressed", String(split));
+    const w = Number(stored("dev.chatw", "420")) || 420;
+    document.querySelector(".dev-body").style.setProperty("--dev-chat-w", `${w}px`);
+    $("dev-grip").setAttribute("aria-valuenow", String(w));
+    if (split) window.scrollTo(0, 0);
+    if (D.vbox) renderVirtual();
+  }
+
+  function setChatWidth(w) {
+    const body = document.querySelector(".dev-body");
+    const room = body.getBoundingClientRect().width - 420;        // leave the code at least this much
+    w = Math.round(Math.max(CHAT_W.min, Math.min(CHAT_W.max, room, w)));
+    body.style.setProperty("--dev-chat-w", `${w}px`);
+    $("dev-grip").setAttribute("aria-valuenow", String(w));
+    store("dev.chatw", String(w));
+  }
+
+  function wireLayout() {
+    $("dev-layout").addEventListener("click", () => {
+      store("dev.layout", stored("dev.layout", "stacked") === "split" ? "stacked" : "split");
+      applyLayout();
+    });
+    const grip = $("dev-grip");
+    grip.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      grip.setPointerCapture(e.pointerId);
+      const right = $("dev-chat").getBoundingClientRect().right;
+      const move = (ev) => setChatWidth(right - ev.clientX);
+      const up = () => {
+        grip.removeEventListener("pointermove", move);
+        grip.removeEventListener("pointerup", up);
+        grip.removeEventListener("pointercancel", up);
+        document.body.classList.remove("dev-resizing");
+      };
+      document.body.classList.add("dev-resizing");
+      grip.addEventListener("pointermove", move);
+      grip.addEventListener("pointerup", up);
+      grip.addEventListener("pointercancel", up);
+    });
+    grip.addEventListener("keydown", (e) => {
+      const step = e.shiftKey ? 80 : 20;
+      const w = $("dev-chat").getBoundingClientRect().width;
+      if (e.key === "ArrowLeft") { e.preventDefault(); setChatWidth(w + step); }
+      else if (e.key === "ArrowRight") { e.preventDefault(); setChatWidth(w - step); }
+    });
+    grip.addEventListener("dblclick", () => setChatWidth(420));
+    let wasTight = innerWidth < 1500;
+    window.addEventListener("resize", () => {
+      if ((innerWidth < 1500) !== wasTight) { wasTight = innerWidth < 1500; if (D.vbox) renderVirtual(); }
+    });
+    // the agent's feed follows new steps while you are at its bottom, like a chat
+    const feed = $("dev-agent");
+    let stick = true;
+    feed.addEventListener("scroll", () => { stick = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 60; });
+    new MutationObserver(() => { if (stick) feed.scrollTop = feed.scrollHeight; })
+      .observe(feed, { childList: true, subtree: true, characterData: true });
+    applyLayout();
+  }
+
   function wire() {
+    wireLayout();
     D.vbox = $("dev-virtual");
     wireVirtual(D.vbox);
     $("dev-vt-toggle").addEventListener("click", () => {
