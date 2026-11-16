@@ -2020,3 +2020,15 @@ body.apps-dragging, body.apps-dragging * { cursor: grabbing !important; }
   .settings-body { padding: 20px var(--gutter) 88px; }
 }
 
+/* the categories stay in view; only the settings scroll */
+.settings-layout {
+  background: linear-gradient(var(--rule-soft), var(--rule-soft)) 219px 0 / 1px 100% no-repeat;
+}
+.settings-layout > .settings-nav {
+  position: sticky; top: 0; align-self: start; max-height: 100vh; box-sizing: border-box;
+  overflow-y: auto; border-right: 0;
+}
+@media (max-width: 720px) {
+  .settings-layout { background: none; }
+  .settings-layout > .settings-nav { position: static; max-height: none; overflow: visible; border-bottom: 1px solid var(--rule-soft); }
+}
