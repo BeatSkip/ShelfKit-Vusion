@@ -981,7 +981,7 @@
       ${prop ? `<span class="apps-seg dev-which" role="group" aria-label="Show">
         <button type="button" data-which="now" aria-pressed="${!D.showProposal}">Now</button>
         <button type="button" data-which="prop" aria-pressed="${D.showProposal}">Proposal</button></span>` : ""}
-      <span class="tag-case" style="--glass-w: ${152 * k}px; --glass-h: ${296 * k}px"><span class="glass">${src
+      <span class="tag-case" style="--glass-w: ${(/^landscape/.test(a.screen_orientation || "") ? 296 : 152) * k}px; --glass-h: ${(/^landscape/.test(a.screen_orientation || "") ? 152 : 296) * k}px"><span class="glass">${src
     ? `<img src="data:image/png;base64,${src}" alt="The virtual tag's screen">`
     : `<span class="dev-glass-err">${esc(vt.error || "Drawing…")}</span>`}</span></span>
       <span class="app-glass-cap">${esc(cap)}${vt.ms != null && src === vt.png ? ` · ${vt.ms} ms` : ""}</span>

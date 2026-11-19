@@ -10,6 +10,8 @@
     POST /api/inkapps/grid     {grid}         save the Apps grid: order and groups
     POST /api/inkapps/disable  {app}          stop it everywhere and stop importing it
     POST /api/inkapps/enable   {app}
+    POST /api/inkapps/orientation {app, orientation}  portrait, landscape, portrait-flipped,
+                                         landscape-flipped, or "" for what the app says
     POST /api/inkapps/create   {id, title, ..., dry_run?}   the New app wizard
     GET  /api/layout/icons                    InkLayout's pixel icons, as rows of '#' and '.'
     POST /api/inkapps/bind     {tag, app, config?}
@@ -158,6 +160,10 @@ def handle_post(handler, path: str, body: dict) -> bool:
     if path in ("/api/inkapps/disable", "/api/inkapps/enable"):
         app_id = str(body.get("app") or "")
         handler._json(host.disable(app_id) if path.endswith("disable") else host.enable(app_id))
+        return True
+    if path == "/api/inkapps/orientation":
+        handler._json(host.set_orientation(str(body.get("app") or ""),
+                                           str(body.get("orientation") or "") or None))
         return True
     if path == "/api/inkapps/create":
         handler._json(host.create(body, dry_run=bool(body.get("dry_run"))))

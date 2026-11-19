@@ -35,6 +35,20 @@ class SpecError(ValueError):
     """The wizard sent something that cannot become an app; the message says what."""
 
 
+from .sdk import ORIENTATIONS  # noqa: E402
+
+MAX_TIMER_MINUTES = 30 * 24 * 60
+
+
+def every_args(minutes: int) -> str:
+    """@app.every's argument in the plainest unit: 2880 -> days=2, 120 -> hours=2."""
+    if minutes % 1440 == 0:
+        return f"days={minutes // 1440}"
+    if minutes % 60 == 0:
+        return f"hours={minutes // 60}"
+    return f"minutes={minutes}"
+
+
 def _slug(label: str, used: set[str], fallback: str) -> str:
     s = re.sub(r"[^a-z0-9]+", "_", label.lower()).strip("_") or fallback
     if s[0].isdigit() or keyword.iskeyword(s):
@@ -81,12 +95,17 @@ def check(spec: dict) -> dict:
         minutes = int(spec.get("timer_minutes") or 0)
     except (TypeError, ValueError):
         raise SpecError("timer_minutes is a whole number") from None
-    if minutes < 0 or minutes > 7 * 24 * 60:
-        raise SpecError("timer_minutes is between 1 and 10080 (a week), or 0 for none")
+    if minutes < 0 or minutes > MAX_TIMER_MINUTES:
+        raise SpecError(f"timer_minutes is between 1 and {MAX_TIMER_MINUTES} (30 days), "
+                        "or 0 for none")
+    orientation = spec.get("orientation") or "portrait"
+    if orientation not in ORIENTATIONS:
+        raise SpecError(f"orientation is one of {', '.join(ORIENTATIONS)}")
     return {"id": app_id, "title": title,
             "description": str(spec.get("description") or "").strip()[:200],
             "icon": icon, "draw": draw, "timer_minutes": minutes,
             "on_open": bool(spec.get("on_open")),
+            "orientation": orientation,
             "fields": _labels(spec, "fields", "settings"),
             "buttons": _labels(spec, "buttons", "buttons")}
 
@@ -109,6 +128,8 @@ def files(spec: dict) -> dict[str, str]:
         head.append(f"             icon={_q(s['icon'])},")
     if layout:
         head.append('             layout="layout.xml",')
+    if s["orientation"] != "portrait":
+        head.append(f"             orientation={_q(s['orientation'])},")
     head[-1] = head[-1].rstrip(",") + ")"
 
     lines = [f'"""{s["id"]} - {s["description"] or s["title"]}', "",
@@ -147,7 +168,7 @@ def files(spec: dict) -> dict[str, str]:
         if buttons:
             lines.append("    canvas.text((6, y), d[\"last\"], size=12)")
     if s["timer_minutes"]:
-        lines += ["", "", f"@app.every(minutes={s['timer_minutes']})", "def refresh(tag):",
+        lines += ["", "", f"@app.every({every_args(s['timer_minutes'])})", "def refresh(tag):",
                   "    \"\"\"Fetch fresh data here, for example with tag.fetch_json(url), and keep",
                   "    it in tag.data. The screen is sent only if it changed.\"\"\"",
                   "    pass"]

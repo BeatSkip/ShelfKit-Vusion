@@ -868,8 +868,9 @@ def _collect(node: Node, out: list, lines: list, depth: int = 0) -> None:
 # ── entry point ────────────────────────────────────────────────────────────
 def render(source: str, data: dict | None = None, *, tag: dict | None = None,
            display: str | None = None, now: datetime | None = None,
-           shared: dict | None = None) -> LayoutResult:
-    """Render a <screen> document. Never raises on bad input: see .diagnostics."""
+           shared: dict | None = None, orientation: str | None = None) -> LayoutResult:
+    """Render a <screen> document. Never raises on bad input: see .diagnostics.
+    `orientation` (portrait/landscape), when given, wins over <screen orientation=>."""
     scope = {"data": data if data is not None else {}, "tag": tag or {},
              "shared": shared or {}, "now": now or datetime.now()}
     preset = displays.preset(display)
@@ -884,7 +885,8 @@ def render(source: str, data: dict | None = None, *, tag: dict | None = None,
         preset = ctx.preset = displays.preset(wanted)
 
     width, height = preset.width, preset.height
-    orientation = root.attrib.get("orientation", "portrait") if root is not None else "portrait"
+    orientation = orientation or (root.attrib.get("orientation", "portrait")
+                                  if root is not None else "portrait")
     if orientation not in ("portrait", "landscape"):
         ctx.diag("warn", "screen", f"orientation=\"{orientation}\": use portrait or landscape")
         orientation = "portrait"

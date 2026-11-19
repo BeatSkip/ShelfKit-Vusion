@@ -15,7 +15,8 @@ All on the server's one port. The admin routes are meant for `127.0.0.1` only. A
 | `POST /api/inkapps/grid` | `{grid}` | Saves the Apps grid: `["app_id", {id, name, apps: [...]}, ...]` (order and groups). Returned as `grid` by `GET /api/inkapps`. |
 | `POST /api/inkapps/disable` | `{app}` | Stops the app on every tag and stops importing it; files and data stay. Returns `{ok, stopped}`. |
 | `POST /api/inkapps/enable` | `{app}` | Imports it again. Returns `{ok, error}` (error: it did not load). |
-| `POST /api/inkapps/create` | `{id, title, description, icon, draw, timer_minutes, on_open, fields, buttons, dry_run?}` | The New app wizard (`inkservices/scaffold.py`): writes `inkapps/<id>/app.py` (+ `layout.xml`) and loads it. With `dry_run`: only returns `{files}`. |
+| `POST /api/inkapps/create` | `{id, title, description, icon, draw, orientation, timer_minutes (1..43200), on_open, fields, buttons, dry_run?}` | The New app wizard (`inkservices/scaffold.py`): writes `inkapps/<id>/app.py` (+ `layout.xml`) and loads it. With `dry_run`: only returns `{files}`. |
+| `POST /api/inkapps/orientation` | `{app, orientation}` | The Apps page's Screen card: `portrait`, `landscape`, `portrait-flipped`, `landscape-flipped`, or `""` for what the app says. Redraws the app's tags. |
 | `POST /api/inkapps/bind` | `{tag, app, config?}` | Puts the app on the tag: runs its timers, renders, pushes. Returns `{ok, pushed, skipped}` or `{ok:false, error}`. |
 | `POST /api/inkapps/unbind` | `{tag}` | Stops the app on that tag (its data is kept) |
 | `POST /api/inkapps/config` | `{tag, config}` | Saves the tag's settings, then refreshes |

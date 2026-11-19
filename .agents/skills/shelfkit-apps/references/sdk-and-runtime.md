@@ -16,7 +16,7 @@ ShelfKit-Server/inkapps/
 - Folders starting with `_` or `.` are ignored, which leaves room for templates and scratch work.
 - **Loading:** each app is imported on server start and on **Reload apps** (`POST /api/inkapps/reload`), as a new module object every time.
 - **Load errors:** a syntax error, an exception at import or a missing `app` is recorded against that app, as `"<Type>: <msg> (app.py line N)"`. The other apps and the server keep running.
-- **No metadata file:** there is no manifest, version, author, icon or dependency list. The only metadata is the `InkApp(...)` arguments: `title`, `description`, `layout`.
+- **No metadata file:** there is no manifest, version, author, icon or dependency list. The only metadata is the `InkApp(...)` arguments: `title`, `description`, `layout`, `icon`, `orientation` (`portrait`, `landscape`, `portrait-flipped`, `landscape-flipped`; the owner's pick on the Apps page's Screen card wins, is kept in the server DB under `inkapps.orientation`, and redraws every tag; the app always draws upright, the host turns a flipped one over before sending). `@app.every` takes `minutes=`, `hours=` and `days=`.
 
 ## The SDK (what an author writes)
 

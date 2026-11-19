@@ -382,6 +382,25 @@ def test_host(tmp: Path) -> None:
     check("Simulate NFC tap runs on_tap and on_open", r.get("ok")
           and st0.get("tapped") == 2 and st0.get("opened") == 2, (r, st0))
 
+    # the screen's orientation, per app, from the Apps page
+    from PIL import Image as _Img
+    import io as _io
+    size = lambda: _Img.open(_io.BytesIO(h.preview_png("ctr", "0101"))).size  # noqa: E731
+    check("an app is portrait unless it says otherwise", size() == (152, 296), size())
+    r = h.set_orientation("ctr", "landscape")
+    ctr = {a["id"]: a for a in h.apps()}["ctr"]
+    check("landscape draws 296 x 152 and redraws its tags", r.get("ok") and size() == (296, 152)
+          and ctr["screen_orientation"] == "landscape" and ctr["orientation_set"] == "landscape", r)
+    upright = _Img.open(_io.BytesIO(h.preview_png("ctr", "0101"))).convert("RGB")
+    h.set_orientation("ctr", "landscape-flipped")
+    sent = _Img.open(h.image_dir / "0101.png").convert("RGB")
+    check("upside down: drawn upright, sent turned over",
+          size() == (296, 152) and sent.tobytes() == upright.rotate(180).tobytes())
+    check("an unknown orientation is refused", not h.set_orientation("ctr", "diagonal").get("ok"))
+    r = h.set_orientation("ctr", "")
+    check("back to what the app says", r.get("orientation") == "portrait" and size() == (152, 296)
+          and {a["id"]: a for a in h.apps()}["ctr"]["orientation_set"] is None, r)
+
     before = len(calls)
     h.bind("0102", "bad")
     r = h.refresh("0102", force=True)
@@ -1082,9 +1101,18 @@ def test_manage(tmp: Path) -> None:
     check("duplicate setting labels get distinct keys",
           '"postcode"' in files["app.py"] and '"postcode_2"' in files["app.py"])
     check("a keyword label becomes a valid name", "def button_class(tag)" in files["app.py"])
+    check("an hourly timer is written in hours", "@app.every(hours=1)" in files["app.py"])
+    check("a daily timer is written in days",
+          "@app.every(days=2)" in scaffold.files({**spec, "timer_minutes": 2880})["app.py"])
+    check("the wizard's orientation goes into InkApp(...)", 'orientation="landscape"' in
+          scaffold.files({**spec, "orientation": "landscape"})["app.py"]
+          and "orientation" not in files["app.py"])
+    check("odd minutes stay minutes",
+          "@app.every(minutes=90)" in scaffold.files({**spec, "timer_minutes": 90})["app.py"])
     for bad, why in (({**spec, "id": "Bad Id"}, "id"), ({**spec, "title": " "}, "title"),
                      ({**spec, "icon": "nope"}, "icon"), ({**spec, "draw": "x"}, "draw"),
-                     ({**spec, "timer_minutes": "x"}, "timer")):
+                     ({**spec, "timer_minutes": "x"}, "timer"),
+                     ({**spec, "timer_minutes": 31 * 1440}, "timer over 30 days")):
         try:
             scaffold.files(bad)
             check(f"scaffold rejects a bad {why}", False)

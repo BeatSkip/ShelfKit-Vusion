@@ -44,13 +44,14 @@ from .. import displays
 from .appstore import AppStore, app_db_path
 from . import scaffold
 from .loader import INKAPPS_DIR, LoadedApp, load_app, load_apps
-from .screen import AppError, LayoutError, draw_screen
+from .screen import AppError, LayoutError, draw_screen, screen_orientation
 from . import appsettings
-from .sdk import InkApp, TagContext, http_json, page_blocks
+from .sdk import ORIENTATIONS, InkApp, TagContext, http_json, page_blocks
 
 LOG_LINES = 200
 DISABLED_KEY = "inkapps.disabled"     # main store settings: {app_id: {title, description, icon, at}}
 INSTALLED_KEY = "inkapps.installed"   # {app_id: unix time first seen}
+ORIENT_KEY = "inkapps.orientation"     # {app_id: orientation the owner picked on the Apps page}
 LAYOUT_KEY = "inkapps.layout"         # the Apps grid: order and groups (see set_layout)
 DEFAULT_IMAGE_DIR = Path(__file__).resolve().parents[2] / "data" / "apps"
 
@@ -108,9 +109,47 @@ class AppHost:
                 entry.update({k: v for k, v in (off.get(item.id) or {}).items()
                               if k in ("title", "description", "icon")})
             entry.update(error=item.error, tags=bound.get(item.id, []),
-                         disabled=item.disabled, installed_at=installed.get(item.id))
+                         disabled=item.disabled, installed_at=installed.get(item.id),
+                         orientation_set=self._orientations().get(item.id),
+                         orientation_app=(screen_orientation(item.app) if item.app else "portrait"),
+                         screen_orientation=(screen_orientation(item.app, self._orientations()
+                                                                .get(item.id))
+                                             if item.app else "portrait"))
             out.append(entry)
         return out
+
+    # ── the screen's orientation, per app ─────────────────────────────────────
+    def _orientations(self) -> dict:
+        return self.store.setting(ORIENT_KEY, {}) or {}
+
+    def set_orientation(self, app_id: str, orientation: str | None) -> dict:
+        """The owner's orientation for an app ("" or None: back to what the app says), then
+        every tag running it is redrawn; a changed screen goes out at its next check-in."""
+        if app_id not in self.loaded:
+            return {"ok": False, "error": f"no app {app_id!r}"}
+        if orientation and orientation not in ORIENTATIONS:
+            return {"ok": False, "error": f"orientation is one of {', '.join(ORIENTATIONS)}"}
+        chosen = dict(self._orientations())
+        if orientation:
+            chosen[app_id] = orientation
+        else:
+            chosen.pop(app_id, None)
+        self.store.set_setting(ORIENT_KEY, chosen)
+        pushed, errors = 0, []
+        for b in self.store.app_bindings():
+            if b["app_id"] == app_id:
+                r = self.refresh(b["hex_id"])
+                pushed += bool(r.get("pushed"))
+                if not r.get("ok"):
+                    errors.append(f"{b['hex_id']}: {r.get('error')}")
+        item = self.loaded[app_id]
+        now = screen_orientation(item.app, orientation) if item.app else "portrait"
+        self._log(app_id, f"orientation {now}" + (" (the owner's choice)" if orientation else ""))
+        return {"ok": not errors, "orientation": now, "pushed": pushed,
+                "error": "; ".join(errors) or None}
+
+    def _orientation(self, app: InkApp) -> str | None:
+        return self._orientations().get(app.id) or app.orientation
 
     # ── the Apps tab's own state: disabled apps, install dates, the grid ──────
     def _disabled(self) -> dict:
@@ -394,7 +433,7 @@ class AppHost:
     def _draw(self, app: InkApp, tag: TagContext):
         """(image, layout result or None); layout warnings go to the app's log."""
         try:
-            image, result = draw_screen(app, tag)
+            image, result = draw_screen(app, tag, self._orientation(app))
         except LayoutError as exc:
             for d in exc.result.diagnostics:
                 self._log(app.id, f"[{tag.hex_id}] layout {d['level']}: {d['at']}: {d['msg']}")
@@ -498,6 +537,8 @@ class AppHost:
             finally:
                 self._flush_logs(app_id, tag)
 
+            if (self._orientation(app) or "").endswith("-flipped"):
+                image = image.rotate(180)        # the tag hangs the other way up
             self.image_dir.mkdir(parents=True, exist_ok=True)
             path = self.image_dir / f"{hex_id}.png"
             image.save(path, format="PNG")

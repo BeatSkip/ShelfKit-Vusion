@@ -1330,6 +1330,9 @@ body.apps-dragging, body.apps-dragging * { cursor: grabbing !important; }
 .wiz-cards legend { grid-column: 1 / -1; }
 .wiz-check { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .wiz-check input[type="number"] { width: 84px; }
+.wiz-every { display: inline-flex; gap: 8px; align-items: center; margin: 6px 0 0 26px; }
+.wiz-every input[type="number"] { width: 84px; }
+#app-orient { display: block; margin-bottom: 4px; max-width: 100%; }
 .wiz-list { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
 .wiz-list .row { width: 100%; flex-wrap: nowrap; }
 .wiz-list .row input { flex: 1; min-width: 0; }

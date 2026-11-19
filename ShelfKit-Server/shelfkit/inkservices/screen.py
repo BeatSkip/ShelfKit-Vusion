@@ -11,6 +11,8 @@ than the previous one. Its warnings are returned so the host can log them.
 
 from __future__ import annotations
 
+import re
+
 from PIL import Image
 
 from .. import inklayout
@@ -36,11 +38,31 @@ def tag_view(tag: TagContext) -> dict:
             "display": tag.display.id}
 
 
-def draw_screen(app: InkApp, tag: TagContext) -> tuple[Image.Image, object | None]:
-    """(image, layout result or None). Raises AppError for anything the app got wrong;
-    exceptions from the app's own code pass through for the caller to log."""
+def screen_orientation(app: InkApp, chosen: str | None = None) -> str:
+    """How the app's screen sits: the owner's choice, else InkApp(orientation=), else what
+    the layout's <screen orientation=> says, else portrait."""
+    if chosen or app.orientation:
+        return chosen or app.orientation
+    path = app.layout_path() if app.render_fn is None else None
+    try:
+        if path is not None and re.search(r'<screen\b[^>]*\borientation\s*=\s*"landscape"',
+                                          path.read_text(encoding="utf-8")):
+            return "landscape"
+    except OSError:
+        pass
+    return "portrait"
+
+
+def draw_screen(app: InkApp, tag: TagContext,
+                orientation: str | None = None) -> tuple[Image.Image, object | None]:
+    """(image, layout result or None), drawn upright. `orientation` (any of
+    sdk.ORIENTATIONS) overrides the app's and the layout's; the caller turns a "-flipped"
+    one over for the glass. Raises AppError for anything the app got wrong; exceptions from
+    the app's own code pass through for the caller to log."""
+    chosen = orientation or app.orientation
+    base = chosen.split("-")[0] if chosen else None
     if app.render_fn is not None:
-        canvas = Canvas(tag.display)
+        canvas = Canvas(tag.display, landscape=None if base is None else base == "landscape")
         app.render_fn(tag, canvas)
         return canvas.image, None
 
@@ -53,7 +75,8 @@ def draw_screen(app: InkApp, tag: TagContext) -> tuple[Image.Image, object | Non
     if not isinstance(data, dict):
         raise AppError(f"@app.data must return a dict, not {type(data).__name__}")
     result = inklayout.render(path.read_text(encoding="utf-8"), data, tag=tag_view(tag),
-                              display=tag.display.id, now=tag.now, shared=tag.shared)
+                              display=tag.display.id, now=tag.now, shared=tag.shared,
+                              orientation=base)
     if not result.ok:
         raise LayoutError(result)
     return result.image, result

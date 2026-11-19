@@ -47,9 +47,14 @@ RED = (255, 0, 0)
 
 
 class Canvas:
-    def __init__(self, display: displays.DisplayPreset | None = None) -> None:
+    def __init__(self, display: displays.DisplayPreset | None = None,
+                 landscape: bool | None = None) -> None:
+        """landscape: True = the long side across, False = upright, None = as the preset is."""
         self.display = display or displays.preset(displays.DEFAULT_PRESET)
-        self.width, self.height = self.display.width, self.display.height
+        w, h = self.display.width, self.display.height
+        if landscape is not None:
+            w, h = (max(w, h), min(w, h)) if landscape else (min(w, h), max(w, h))
+        self.width, self.height = w, h
         self.colors = dict(self.display.colors)
         background = self.colors.get("white", WHITE)
         self.image = Image.new("RGB", (self.width, self.height), background)

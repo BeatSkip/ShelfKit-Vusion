@@ -312,7 +312,9 @@ its folder inkapps/<id>/. The owner sees your proposal drawn on a virtual tag an
 rejects it; nothing you write runs before they accept.
 
 THE HARDWARE
-- 2.6" e-paper, 152 x 296 pixels, portrait by default; black, white and red only (no grey:
+- 2.6" e-paper, 152 x 296 pixels, portrait by default (InkApp(..., orientation="landscape")
+  gives 296 x 152; the owner can also pick portrait, landscape or either upside down on the
+  Apps page, which wins and redraws; always draw upright, the host turns it over); black, white and red only (no grey:
   use the dot/hatch patterns InkLayout offers). Text is drawn 1-bit.
 - A coin-cell battery. Every screen change costs battery and takes ~15 s with a flash, and it
   only reaches the glass at the tag's next check-in (up to ~5 minutes; seconds after an NFC tap).

@@ -37,6 +37,9 @@ from typing import Callable, Literal
 from ..displays import DisplayPreset
 
 LOG_KEEP = 200
+# portrait 152x296, landscape 296x152; "-flipped" turns the picture upside down on the
+# glass, for a tag mounted the other way up. The app always draws it upright.
+ORIENTATIONS = ("portrait", "landscape", "portrait-flipped", "landscape-flipped")
 MIN_TIMER_MINUTES = 1          # a timer redraws and may push: never faster than this
 FETCH_LIMIT = 2_000_000        # bytes an app may fetch in one call
 
@@ -203,9 +206,14 @@ class InkApp:
 
     def __init__(self, app_id: str, title: str = "", description: str = "",
                  layout: str | None = None, icon: str | None = None,
-                 phone_screen: bool = True) -> None:
+                 phone_screen: bool = True, orientation: str | None = None) -> None:
         if not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", app_id):
             raise ValueError(f"app id {app_id!r}: use lower-case letters, digits, - and _")
+        if orientation is not None and orientation not in ORIENTATIONS:
+            raise ValueError(f"orientation {orientation!r}: use one of {', '.join(ORIENTATIONS)}")
+        # how the screen sits on the tag; None = what layout.xml says, else portrait. The
+        # owner can change it on the Apps page, which wins over this.
+        self.orientation = orientation
         self.id = app_id
         self.title = title or app_id
         self.description = description
@@ -280,11 +288,12 @@ class InkApp:
         self.on_tap_fn = fn
         return fn
 
-    def every(self, minutes: float):
-        """@app.every(minutes=30): fn(tag) runs every so often for each tag the app runs
-        on, and once when it is put on a tag. The screen is redrawn afterwards and sent
+    def every(self, minutes: float = 0, hours: float = 0, days: float = 0):
+        """@app.every(minutes=30), @app.every(hours=2), @app.every(days=1): fn(tag) runs every
+        so often for each tag the app runs on, and once when it is put on a tag. The screen is redrawn afterwards and sent
         only if it changed, so a timer that changes nothing costs the tag nothing.
         Draw no clock on the screen unless it is the point: it changes every time."""
+        minutes = minutes + hours * 60 + days * 1440
         if minutes < MIN_TIMER_MINUTES:
             raise ValueError(f"@app.every: at least {MIN_TIMER_MINUTES} minute")
 
@@ -327,5 +336,6 @@ class InkApp:
                 "layout": self.layout if self.render_fn is None else None,
                 "has_on_open": self.on_open_fn is not None,
                 "has_on_tap": self.on_tap_fn is not None,
+                "orientation": self.orientation,
                 "has_page": self.page_fn is not None,
                 "timers": [t.as_dict() for t in self.timers]}

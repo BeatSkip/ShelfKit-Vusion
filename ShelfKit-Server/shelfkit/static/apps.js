@@ -364,9 +364,27 @@
     if (phone.length) out.push(appCard("On the phone page", phone.join("<br>")));
     if (a.has_on_tap) out.push(appCard("When the tag is tapped", "The tag reports it over the radio: runs the app, no phone page needed"));
     if (a.has_on_open) out.push(appCard("When a phone opens the page", "Runs the app as the phone page opens"));
-    const timers = [...new Set((a.timers || []).map((x) => `Every ${plural(x.minutes, "minute", "minutes")}`))];
+    const timers = [...new Set((a.timers || []).map((x) => `Every ${everyText(x.minutes)}`))];
     out.push(appCard("Timers", timers.length ? timers.join("<br>") : "None: redraws when someone uses the phone page"));
+    out.push(orientCard(a));
     return out;
+  }
+
+  const ORIENT = [["portrait", "Portrait"], ["landscape", "Landscape"],
+    ["portrait-flipped", "Portrait, upside down"], ["landscape-flipped", "Landscape, upside down"]];
+  const isLandscape = (a) => /^landscape/.test((a && a.screen_orientation) || "");
+  // a landscape tag at 2x would not fit the preview column: it shrinks to fit, keeping its shape
+  const glassSize = (a, k) => (isLandscape(a)
+    ? [`min(${296 * k}px, 340px)`, `calc(min(${296 * k}px, 340px) * 152 / 296)`]
+    : [`${152 * k}px`, `${296 * k}px`]);
+
+  function orientCard(a) {
+    const own = a.orientation_app || "portrait";
+    const label = (ORIENT.find(([v]) => v === own) || [, own])[1];
+    const opts = [`<option value="">As the app says (${esc(label.toLowerCase())})</option>`,
+      ...ORIENT.map(([v, l]) => `<option value="${v}"${v === a.orientation_set ? " selected" : ""}>${l}</option>`)];
+    return appCard("Screen", `<select id="app-orient" aria-label="Orientation of the screen">${opts.join("")}</select>
+      <span class="hint">For every tag it runs on. Upside down is for a tag hung the other way up.</span>`);
   }
 
   function pageHtml(a) {
@@ -421,12 +439,12 @@
             <button type="button" data-scale="2" aria-pressed="${k === 2}">2×</button>
           </span>
         </div>
-        <span class="tag-case" id="app-glass-case" style="--glass-w: ${152 * k}px; --glass-h: ${296 * k}px"><span class="glass">${live
+        <span class="tag-case" id="app-glass-case" style="--glass-w: ${glassSize(a, k)[0]}; --glass-h: ${glassSize(a, k)[1]}"><span class="glass">${live
     ? `<img data-preview="${shown}" alt="${esc(tag ? `What ${a.title} draws for ${tagName(tag)}` : `Preview of ${a.title}`)}">`
     : `<span class="app-glass-ico">${iconSvg(a)}</span>`}</span></span>
         <span class="app-glass-cap">${!live ? (a.disabled ? "Disabled: nothing drawn" : "Didn't load: nothing drawn")
     : tag ? `<code>${tag}</code>${tagInfo(tag).alias ? ` ${esc(tagInfo(tag).alias)}` : ""} · <span data-sent="${tag}"></span>`
-      : "Preview · not on a tag"} · 152 × 296, 3 colours</span>
+      : "Preview · not on a tag"} · ${isLandscape(a) ? "296 × 152" : "152 × 296"}, 3 colours</span>
         ${live ? `<div class="app-glass-actions">
           ${tag ? `<button type="button" data-refresh="${tag}"
             title="Fetch fresh data, draw the screen again, and send it if it changed">Refresh now</button>`
@@ -1051,12 +1069,22 @@
       icon: "check", fields: [], buttons: [], timer: 0, tap: true },
   };
   let W = null;
+  // the wizard's update interval: a whole number of minutes, hours or days
+  const UNIT_MIN = { minutes: 1, hours: 60, days: 1440 };
+  const MAX_TIMER_MIN = 30 * 1440;
+  const splitMinutes = (m) => (m % 1440 === 0 ? { every: m / 1440, unit: "days" }
+    : m % 60 === 0 ? { every: m / 60, unit: "hours" } : { every: m, unit: "minutes" });
+  function everyText(minutes) {
+    const { every, unit } = Number.isInteger(minutes) ? splitMinutes(minutes) : { every: minutes, unit: "minutes" };
+    return plural(every, unit.slice(0, -1), unit);
+  }
+  const wizMinutes = () => W.every * UNIT_MIN[W.unit];
   const slug = (s) => s.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 32);
 
   function openWizard() {
     hideMenu();
     W = { step: 0, title: "", id: "", idTouched: false, description: "", icon: "", template: "blank",
-      draw: "layout", timerOn: false, minutes: 30, tap: false, fields: [], buttons: [], err: "", files: null };
+      draw: "layout", orientation: "portrait", timerOn: false, every: 30, unit: "minutes", tap: false, fields: [], buttons: [], err: "", files: null };
     $("apps-wizard").hidden = false;
     drawWizard();
     $("wiz-title")?.focus();
@@ -1065,7 +1093,7 @@
 
   function spec() {
     return { id: W.id, title: W.title.trim(), description: W.description.trim(), icon: W.icon, draw: W.draw,
-      timer_minutes: W.timerOn ? W.minutes : 0, on_open: W.tap,
+      timer_minutes: W.timerOn ? wizMinutes() : 0, on_open: W.tap, orientation: W.orientation,
       fields: W.fields.filter((x) => x.trim()), buttons: W.buttons.filter((x) => x.trim()) };
   }
 
@@ -1075,8 +1103,8 @@
       if (!/^[a-z0-9][a-z0-9_-]{0,31}$/.test(W.id)) return "Use 1-32 lower-case letters, digits, - and _ for the folder.";
       if (appOf(W.id)) return `inkapps/${W.id}/ already exists. Pick another folder name.`;
     }
-    if (W.step === 2 && W.timerOn && !(Number.isInteger(W.minutes) && W.minutes >= 1 && W.minutes <= 10080)) {
-      return "Updates run every 1 to 10080 minutes.";
+    if (W.step === 2 && W.timerOn && !(Number.isInteger(W.every) && W.every >= 1 && wizMinutes() <= MAX_TIMER_MIN)) {
+      return "Updates run every whole number of minutes, hours or days, at most 30 days apart.";
     }
     return "";
   }
@@ -1118,15 +1146,25 @@
             Easiest to change, and the layout playground can open it.</span></button>
           <button type="button" class="apps-opt" data-draw="python" aria-pressed="${W.draw === "python"}">
             <b>Python</b><span class="hint">Draw the screen yourself on a canvas.</span></button>
+        </fieldset>
+        <fieldset class="wiz-cards"><legend>Screen</legend>
+          ${ORIENT.map(([v, l]) => `<button type="button" class="apps-opt" data-orient="${v}" aria-pressed="${W.orientation === v}">
+            <b>${l}</b><span class="hint">${v.startsWith("landscape") ? "296 × 152" : "152 × 296"}${v.endsWith("flipped") ? ", for a tag hung the other way up" : ""}</span></button>`).join("")}
         </fieldset>`;
     } else if (W.step === 2) {
       body = `
         <label class="wiz-check"><input type="checkbox" id="wiz-timer" ${W.timerOn ? "checked" : ""}>
-          Updates itself every <input type="number" id="wiz-minutes" min="1" max="10080" step="1" value="${W.minutes}"
-            aria-label="Minutes between updates"> minutes</label>
+          Updates itself every</label>
+        <span class="wiz-every">
+          <input type="number" id="wiz-every" min="1" max="${MAX_TIMER_MIN / UNIT_MIN[W.unit]}" step="1" value="${W.every}"
+            aria-label="Time between updates" ${W.timerOn ? "" : "disabled"}>
+          <select id="wiz-unit" aria-label="Unit" ${W.timerOn ? "" : "disabled"}>
+            ${Object.keys(UNIT_MIN).map((u) => `<option value="${u}"${u === W.unit ? " selected" : ""}>${u}</option>`).join("")}
+          </select>
+        </span>
         <p class="hint">Each update that changes the screen costs the tag battery, so pick the longest interval that works.</p>
         <label class="wiz-check"><input type="checkbox" id="wiz-tap" ${W.tap ? "checked" : ""}>
-          Does something when a phone taps the tag</label>
+          Does something when the tag is tapped</label>
         ${listEditor("fields", "Settings for each tag", "Postcode")}
         ${listEditor("buttons", "Buttons on the phone page", "Mark done")}`;
     } else {
@@ -1160,13 +1198,20 @@
       if (!W.idTouched) { W.id = slug(W.title); $("wiz-id").value = W.id; }
     } else if (t.id === "wiz-id") { W.id = t.value.trim(); W.idTouched = true; }
     else if (t.id === "wiz-desc") W.description = t.value;
-    else if (t.id === "wiz-minutes") W.minutes = Number(t.value);
+    else if (t.id === "wiz-every") W.every = Number(t.value);
     else if (t.dataset.list) W[t.dataset.list][Number(t.dataset.i)] = t.value;
     W.err = "";
     $("wiz-err").textContent = "";
   });
   $("apps-wizard").addEventListener("change", (event) => {
-    if (event.target.id === "wiz-timer") W.timerOn = event.target.checked;
+    if (event.target.id === "wiz-timer") {
+      W.timerOn = event.target.checked;
+      $("wiz-every").disabled = $("wiz-unit").disabled = !W.timerOn;
+    }
+    if (event.target.id === "wiz-unit") {
+      W.unit = event.target.value;
+      $("wiz-every").max = String(MAX_TIMER_MIN / UNIT_MIN[W.unit]);
+    }
     if (event.target.id === "wiz-tap") W.tap = event.target.checked;
   });
   $("apps-wizard").addEventListener("keydown", (event) => {
@@ -1184,12 +1229,13 @@
       const k = pick("data-template").dataset.template;
       const tp = TEMPLATES[k];
       Object.assign(W, { template: k, fields: [...tp.fields], buttons: [...tp.buttons], timerOn: Boolean(tp.timer),
-        minutes: tp.timer || W.minutes, tap: tp.tap });
+        ...(tp.timer ? splitMinutes(tp.timer) : {}), tap: tp.tap });
       if (!W.icon) W.icon = tp.icon;
       drawWizard();
       return;
     }
     if (pick("data-draw")) { W.draw = pick("data-draw").dataset.draw; drawWizard(); return; }
+    if (pick("data-orient")) { W.orientation = pick("data-orient").dataset.orient; drawWizard(); return; }
     if (pick("data-add")) {
       const key = pick("data-add").dataset.add;
       W[key].push("");
@@ -1288,6 +1334,24 @@
     all[Math.max(0, Math.min(all.length - 1, i + keys[event.key]))].focus();
   });
 
+  $("apps-page").addEventListener("change", async (event) => {
+    if (event.target.id !== "app-orient") return;
+    const app = A.view;
+    const select = event.target;
+    select.disabled = true;
+    try {
+      const r = await api("/api/inkapps/orientation", { app, orientation: event.target.value });
+      if (r.error) toast(r.error, true);
+      else toast(r.pushed ? `Now ${r.orientation}: ${plural(r.pushed, "tag gets", "tags get")} the new screen at the next check-in`
+        : `Now ${r.orientation}`);
+      A.bump += 1;
+    } catch (err) {
+      toast(err.message, true);
+    }
+    await load();
+    select.disabled = false;           // the page may have kept this same element
+  });
+
   $("apps-page").addEventListener("click", (event) => {
     const b = event.target.closest("button");
     if (!b) return;
@@ -1302,8 +1366,9 @@
       A.scale = Number(b.dataset.scale);
       store("apps.glass.scale", String(A.scale));
       const box = $("app-glass-case");
-      box.style.setProperty("--glass-w", `${152 * A.scale}px`);
-      box.style.setProperty("--glass-h", `${296 * A.scale}px`);
+      const [gw, gh] = glassSize(appOf(app), A.scale);
+      box.style.setProperty("--glass-w", gw);
+      box.style.setProperty("--glass-h", gh);
       for (const x of b.parentElement.children) x.setAttribute("aria-pressed", x === b);
     } else if (b.matches("[data-redraw]")) {
       A.bump += 1;
