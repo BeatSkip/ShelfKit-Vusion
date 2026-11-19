@@ -152,7 +152,7 @@ def files(spec: dict) -> dict[str, str]:
                   "    it in tag.data. The screen is sent only if it changed.\"\"\"",
                   "    pass"]
     if s["on_open"]:
-        lines += ["", "", "@app.on_open", "def tapped(tag):",
+        lines += ["", "", "@app.on_tap", "def tapped(tag):",
                   "    tag.data[\"taps\"] = tag.data.get(\"taps\", 0) + 1",
                   "    tag.log(f\"tapped ({tag.data['taps']})\")"]
     for name, label in buttons:

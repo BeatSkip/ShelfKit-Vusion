@@ -296,6 +296,10 @@ def half(tag):
 @app.on_open
 def opened(tag):
     tag.data["opened"] = tag.data.get("opened", 0) + 1
+
+@app.on_tap
+def tapped(tag):
+    tag.data["tapped"] = tag.data.get("tapped", 0) + 1
 """,
     "bad": """
 from shelfkit.inkservices import InkApp
@@ -369,6 +373,14 @@ def test_host(tmp: Path) -> None:
 
     r = h.opened("0101")
     check("on_open runs", h.store_of("ctr").state("0101").get("opened") == 1, r)
+    r = h.tapped("0101")
+    check("on_tap runs for the tag's own app", h.store_of("ctr").state("0101").get("tapped") == 1
+          and h.store_of("ctr").state("0101").get("opened") == 1, r)
+    check("a tap on an unbound tag reaches no app", h.tapped("0999").get("skipped") == "no app")
+    r = h.simulate_tap("0101")
+    st0 = h.store_of("ctr").state("0101")
+    check("Simulate NFC tap runs on_tap and on_open", r.get("ok")
+          and st0.get("tapped") == 2 and st0.get("opened") == 2, (r, st0))
 
     before = len(calls)
     h.bind("0102", "bad")
@@ -376,6 +388,9 @@ def test_host(tmp: Path) -> None:
     check("render error is contained", r.get("ok") is False and len(calls) == before, r)
     check("error in the app log", any("boom" in line for _, line in h.log("bad")))
     check("other tag still works", h.run_action("0101", "add").get("ok"))
+    r = h.tapped("0102")
+    check("a tap goes only to the app on that tag", r.get("skipped") == "no on_tap"
+          and h.store_of("ctr").state("0101").get("tapped") == 2, r)
 
     check("unbound tag", h.refresh("0999").get("ok") is False)
     check("bind unknown app", h.bind("0103", "missing").get("ok") is False)
@@ -393,7 +408,7 @@ def test_host(tmp: Path) -> None:
     tags = {t["hex_id"]: t for t in d.get("tags", [])}
     check("app data: each tag's settings and data", d.get("ok") and "0101" in tags
           and tags["0101"]["config"].get("label") == "Count"
-          and tags["0101"]["state"].get("opened") == 1 and tags["0101"]["bound"], d)
+          and tags["0101"]["state"].get("opened") == 2 and tags["0101"]["bound"], d)
     check("app data: shared document", d.get("shared", {}).get("total", 0) >= 1, d.get("shared"))
     check("app data: the app's own tables with row counts",
           d.get("tables") == [{"name": "history", "rows": 2}], d.get("tables"))
@@ -588,8 +603,8 @@ def test_pill_app(tmp: Path) -> None:
           d["cells"][6]["n"] == 1 and not d["cells"][5]["n"])
 
     clock[0] = datetime(2026, 11, 12, 8, 2)
-    r = h.opened("0101")
-    check("an NFC tap logs the pill", r.get("ok") and r.get("pushed")
+    r = h.tapped("0101")
+    check("an NFC tap logs the pill, without the phone page", r.get("ok") and r.get("pushed")
           and st.state("0101")["taken"] == ["2026-11-12T08:02"], (r, st.state("0101")))
     clock[0] = datetime(2026, 11, 12, 8, 4)
     h.opened("0101")

@@ -74,6 +74,14 @@ RE_POLL_UP = re.compile(r"\bup=(\d+)s\b")
 # result 1 = done, 0 = the panel never reacted, 2 = still busy when the wait ran out
 RE_POLL_IMG = re.compile(r"\bimg=(\d+)/(\d+)\b")
 REFRESH_RESULT = {0: "panel did not react", 1: "done", 2: "timed out"}
+# A tap on the tag (any phone or NFC reader near it) makes the tag poll at once with the
+# fw= report (Vusion/src/main.c, nfc_info). The only other poll with it is the first after a
+# reset, about a second after boot, so an fw= poll from a tag that has been up a while is a
+# tap. The hub hears it over the radio: apps get it (@app.on_tap) without the phone page.
+TAP_MIN_UPTIME_S = 30
+# one tap can bring two such polls (the 5 s follow-up repeats it when the first went
+# unanswered, and a phone held there can re-trigger the field): count it once
+TAP_DEBOUNCE_S = 20.0
 
 # Average CR2450 (3 V lithium coin cell): voltage is almost flat until the cell
 # is nearly empty, so this is a monotonic estimate, not a coulomb count.
@@ -235,6 +243,9 @@ class App:
         self.tag_vdd: dict[int, tuple[int, float]] = {}  # addr -> (raw*256, seen_at)
         # addr -> what the tag reported on its last tapped poll: firmware, power, when
         self.tag_fw: dict[int, dict] = {}
+        # NFC taps the tags reported: addr -> (last uptime, when), addr -> when last counted
+        self._tap_up: dict[int, tuple[int, float]] = {}
+        self._tap_at: dict[int, float] = {}
         # name, when, render key (the key lets the Fleet show the frame as a thumb)
         self.tag_push: dict[int, tuple[str, float, str | None]] = {}
         # Editable per tag: alias, notes, and fleet-map position
@@ -690,6 +701,7 @@ class App:
         fw_event = None
         fw_store = None
         volt_store = None
+        tap = None
         with self.lock:
             pane = self.panes.get(key)
             if pane is None:
@@ -704,6 +716,10 @@ class App:
                 self.tags[addr] = self.tags.get(addr, 0) + 1
                 self.tag_seen[addr] = time.time()
                 fw = RE_POLL_FW.search(text)
+                up_seen = RE_POLL_UP.search(text)
+                if self._is_tap(addr, fw is not None,
+                                int(up_seen.group(1)) if up_seen else None, " dup" in text):
+                    tap = f"{addr:04X}"
                 if fw:
                     major, minor, patch, build, avg, life = (int(g) for g in fw.groups())
                     up = RE_POLL_UP.search(text)
@@ -764,8 +780,44 @@ class App:
             self._event(*fw_event)
         if installed is not None:
             self._event(*installed)
+        if tap is not None:
+            self._event("tap", tap, "NFC tap, reported by the tag")
+            if self.inkhost is not None:
+                # the app's callback may fetch or draw: not on the serial reader's thread
+                threading.Thread(target=self._tap_app, args=(tap,), name=f"tap-{tap}",
+                                 daemon=True).start()
         if learn:
             self._learn_boot_state(key)
+
+    def _is_tap(self, addr: int, extended: bool, uptime: int | None, dup: bool,
+                now: float | None = None) -> bool:
+        """Whether this poll is the tag reporting an NFC tap (see TAP_MIN_UPTIME_S).
+        Called for every poll, under self.lock."""
+        now = time.time() if now is None else now
+        before = self._tap_up.get(addr)
+        if uptime is not None:
+            self._tap_up[addr] = (uptime, now)
+        if not extended or dup or uptime is None:
+            return False
+        # the uptime went back without its 16 bits wrapping: the tag was reset, and this is
+        # its boot report (late when the hub missed the first ones)
+        reset = uptime < TAP_MIN_UPTIME_S or (
+            before is not None and uptime < before[0]
+            and before[0] + (now - before[1]) < 0xFFFF - 60)
+        if reset:
+            self._tap_at.pop(addr, None)     # a tap before the reset is no repeat of the next
+            return False
+        if now - self._tap_at.get(addr, 0.0) < TAP_DEBOUNCE_S:
+            return False
+        self._tap_at[addr] = now
+        return True
+
+    def _tap_app(self, hex_id: str) -> None:
+        """Hand a tap to the app on that tag (its @app.on_tap), if it has one."""
+        try:
+            self.inkhost.tapped(hex_id)
+        except Exception as exc:  # noqa: BLE001 - never take the serial side down
+            self._event("tap", hex_id, f"the app's on_tap failed: {exc}"[:200])
 
     def combined_log(self) -> str:
         """Both panes' lines merged by arrival time, as one copyable block."""

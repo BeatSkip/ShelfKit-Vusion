@@ -328,6 +328,15 @@ def main() -> int:
         check("a tap report names how the last refresh went",
               any(row[3] == "firmware" and row[4].endswith("last refresh done in 14.6 s")
                   for row in get("/api/events?tag=0100&limit=50")["events"]))
+        # the follow-up that repeats the same tap, and a duplicate frame, count once
+        PORTS["SMOKE1"].feed("POLL src=0100 seq=09 rssi=-30 up=905s att=1 hubrssi=-33 vdd=0300"
+                             " fw=1.1.0-49 avg=60uA life=430d img=1/146\r\n")
+        PORTS["SMOKE1"].feed("POLL src=0100 seq=09 rssi=-30 dup up=905s att=1 hubrssi=-33"
+                             " vdd=0300 fw=1.1.0-49 avg=60uA life=430d img=1/146\r\n")
+        time.sleep(0.3)
+        taps = [row for row in get("/api/events?tag=0100&limit=100")["events"] if row[3] == "tap"]
+        # seq 05 (up an hour) and 08 are taps; 04 and 06 are boot reports, 09 the same tap
+        check("the tag's NFC taps are recognised in its polls", len(taps) == 2, taps)
 
         image = str((REPO / "Resources" / "polyform-eink.png").resolve())
 

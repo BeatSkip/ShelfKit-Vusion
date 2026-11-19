@@ -398,6 +398,7 @@
 
   // ── tabs: code, versions, debug ──────────────────────────────────────────
   const hasPhone = (a) => !!a && ((a.controls || []).length > 0 || !!a.has_on_open || !!a.has_page);
+  const hasTap = (a) => !!a && (!!a.has_on_open || !!a.has_on_tap);
 
   function setTab(tab) {
     D.tab = tab;
@@ -995,7 +996,7 @@
       <div class="app-glass-actions">
         <button type="button" data-vt="draw">Draw again</button>
         ${(a.timers || []).length ? `<button type="button" data-vt="timers" title="Runs every @app.every timer once">Run timers</button>` : ""}
-        ${a.has_on_open ? '<button type="button" data-vt="open" title="Runs what an NFC tap runs">Simulate NFC tap</button>' : ""}
+        ${hasTap(a) ? '<button type="button" data-vt="open" title="Runs what an NFC tap runs">Simulate NFC tap</button>' : ""}
       </div>
       ${controls ? `<div class="dev-vt-group dev-vt-col"><span class="dev-vt-label">Phone page</span>${controls}</div>` : ""}
       ${fields ? `<form class="dev-vt-group dev-vt-col dev-vt-config" id="dev-config"><span class="dev-vt-label">Settings for this tag</span>
@@ -1116,7 +1117,7 @@
       <div class="dev-phone-side">
         <p class="hint">This is the page a phone opens when it taps a tag running <strong>${esc(a ? a.title || a.id : "")}</strong>,
           here for the virtual tag. Its buttons run the app's code for the virtual tag; nothing is sent to a real tag.</p>
-        ${a && a.has_on_open ? `<button type="button" data-vt-open title="Runs @app.on_open, as a tap on the tag does">Simulate NFC tap</button>` : ""}
+        ${hasTap(a) ? `<button type="button" data-vt-open title="Runs @app.on_tap and @app.on_open, as a tap on the tag does">Simulate NFC tap</button>` : ""}
         <p class="hint">A real phone reaches it at <code>/tag/&lt;ID&gt;</code> on this server, through your reverse proxy.</p>
       </div>
     </div>`;

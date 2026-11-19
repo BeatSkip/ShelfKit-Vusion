@@ -183,7 +183,7 @@ def handle_post(handler, path: str, body: dict) -> bool:
         handler._json(host.run_action(tag, str(body.get("action") or ""),
                                       None if value is None else str(value)))
     elif path == "/api/inkapps/open":
-        handler._json(host.opened(tag))
+        handler._json(host.simulate_tap(tag))
     elif path == "/api/inkapps/refresh":
         if body.get("force"):
             handler._json(host.refresh(tag, force=True))

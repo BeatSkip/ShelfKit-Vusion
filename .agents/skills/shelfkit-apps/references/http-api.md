@@ -20,7 +20,7 @@ All on the server's one port. The admin routes are meant for `127.0.0.1` only. A
 | `POST /api/inkapps/unbind` | `{tag}` | Stops the app on that tag (its data is kept) |
 | `POST /api/inkapps/config` | `{tag, config}` | Saves the tag's settings, then refreshes |
 | `POST /api/inkapps/action` | `{tag, action, value?}` | Runs a button or text control as the phone would |
-| `POST /api/inkapps/open` | `{tag}` | Simulates an NFC tap (`on_open`) |
+| `POST /api/inkapps/open` | `{tag}` | Simulates an NFC tap (`on_tap`, then `on_open`) |
 | `POST /api/inkapps/refresh` | `{tag, force?}` | Runs the timers, redraws and sends if changed. With `force`: redraws and sends, without timers. |
 | `POST /api/layout/render` | `{layout, data?, tag?, display?}` | `{ok, png (base64), diagnostics, boxes, layout, display, size}`. Needs no app or AI. |
 | `GET /api/layout/icons` | | `{size: 12, icons: {name: [12 rows of '#'/'.']}}`, the pixel icons, also used as app icons |
@@ -35,7 +35,7 @@ What one entry of `GET /api/inkapps` `apps[]` looks like (from `InkApp.describe(
               {"id": "message", "kind": "text", "label": "Message", "placeholder": "…"}],
  "config_fields": [{"key": "greeting", "label": "Greeting", "default": "Hello!"}],
  "icon": "message", "disabled": false, "installed_at": 1794409966.5,
- "has_render": true, "layout": "layout.xml", "has_on_open": false,
+ "has_render": true, "layout": "layout.xml", "has_on_open": false, "has_on_tap": false,
  "timers": [{"id": "update", "minutes": 30}],
  "error": null, "tags": ["F466"]}
 ```

@@ -214,9 +214,11 @@ def virtual(host, app_id: str, do: str = "draw", action: str | None = None,
             tag.now = when
         calls = []
         if do == "open":
-            if app.on_open_fn is None:
-                raise AppError("this app does nothing on an NFC tap (no @app.on_open)")
-            calls = [("on_open", app.on_open_fn, ())]
+            calls = [(what, fn, ()) for what, fn in (("on_tap", app.on_tap_fn),
+                                                     ("on_open", app.on_open_fn)) if fn]
+            if not calls:
+                raise AppError("this app does nothing on an NFC tap "
+                               "(no @app.on_tap or @app.on_open)")
         elif do == "action":
             control = app.action(action or "")
             if control is None:
@@ -251,7 +253,8 @@ def virtual(host, app_id: str, do: str = "draw", action: str | None = None,
         ms = round((time.perf_counter() - started) * 1000)
         data = app.data_fn(tag) if (app.data_fn is not None and png) else tag.data
     if calls and not error:
-        host._log(app_id, f"[{VIRTUAL}] {calls[0][0] if len(calls) == 1 else 'timers'} (virtual tag)")
+        what = (calls[0][0] if len(calls) == 1 else "NFC tap" if do == "open" else "timers")
+        host._log(app_id, f"[{VIRTUAL}] {what} (virtual tag)")
     phone_page = None
     if app.controls or app.on_open_fn is not None or app.page_fn is not None:   # it has a phone page
         if do in ("action", "open"):
@@ -335,8 +338,11 @@ HOW AN APP RUNS (the host, shelfkit/inkservices/host.py)
   on every view, so it only reads), then @app.button("Label") and @app.text_input("Label",
   placeholder=) as big buttons and fields, then the app's description. There is no HTML,
   CSS or script to write. InkApp(..., phone_screen=False) hides the screen on the page.
-  @app.on_open runs when a phone taps the tag. After a button, a text input or on_open the
-  screen is redrawn and sent if it changed.
+  @app.on_tap runs when the tag reports an NFC tap itself, over the radio through the hub:
+  any phone held to it, whether or not a page opens, and it works when the web address is
+  down. @app.on_open runs when a phone opens the tag's page. A real tap usually runs both,
+  so put what a tap does in on_tap (or guard against counting it twice). After a button, a
+  text input, on_tap or on_open the screen is redrawn and sent if it changed.
 - Fresh data: @app.every(minutes=N) runs for every tag on a schedule (N >= 15 unless asked);
   tag.fetch_json(url, params) is the only network access; put results in tag.data.
 - App settings (Develop > Settings, the same for every tag): tag.var("name", "default") for

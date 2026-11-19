@@ -362,7 +362,8 @@
     const texts = a.controls.filter((x) => x.kind !== "button").map((x) => `A text box: ${esc(x.label)}`);
     const phone = [buttons.length ? `${quoted(buttons)} button${buttons.length > 1 ? "s" : ""}` : "", ...texts].filter(Boolean);
     if (phone.length) out.push(appCard("On the phone page", phone.join("<br>")));
-    if (a.has_on_open) out.push(appCard("When a phone taps the tag", "Opens the phone page and runs the app"));
+    if (a.has_on_tap) out.push(appCard("When the tag is tapped", "The tag reports it over the radio: runs the app, no phone page needed"));
+    if (a.has_on_open) out.push(appCard("When a phone opens the page", "Runs the app as the phone page opens"));
     const timers = [...new Set((a.timers || []).map((x) => `Every ${plural(x.minutes, "minute", "minutes")}`))];
     out.push(appCard("Timers", timers.length ? timers.join("<br>") : "None: redraws when someone uses the phone page"));
     return out;
@@ -430,7 +431,7 @@
           ${tag ? `<button type="button" data-refresh="${tag}"
             title="Fetch fresh data, draw the screen again, and send it if it changed">Refresh now</button>`
     : '<button type="button" data-redraw title="Draw the preview again">Draw again</button>'}
-          ${tag && a.has_on_open ? '<button type="button" data-open title="Runs what an NFC tap runs">Simulate NFC tap</button>' : ""}
+          ${tag && (a.has_on_open || a.has_on_tap) ? '<button type="button" data-open title="Runs what an NFC tap runs">Simulate NFC tap</button>' : ""}
         </div>` : ""}
       </aside>`;
 

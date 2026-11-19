@@ -141,7 +141,8 @@ def _log_pill(tag) -> None:
     tag.log(f"pill logged {now:%H:%M}")
 
 
-@app.on_open
+@app.on_tap        # the tag's own report: works without the phone page
+@app.on_open       # and a phone that opens the page (older firmware); once a day either way
 def tapped(tag):
     _log_pill(tag)
 

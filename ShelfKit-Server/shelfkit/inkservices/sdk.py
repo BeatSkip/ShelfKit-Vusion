@@ -215,6 +215,7 @@ class InkApp:
         self.render_fn: Callable | None = None
         self.data_fn: Callable | None = None
         self.on_open_fn: Callable | None = None
+        self.on_tap_fn: Callable | None = None
         self.page_fn: Callable | None = None
         self.phone_screen = bool(phone_screen)  # the phone page shows the tag's screen at the top
         self.controls: list[Control] = []
@@ -264,8 +265,19 @@ class InkApp:
         return fn
 
     def on_open(self, fn: Callable) -> Callable:
-        """@app.on_open: fn(tag) runs when a phone opens the tag's page (an NFC tap)."""
+        """@app.on_open: fn(tag) runs when a phone opens the tag's page (the link an NFC
+        tap gives it). Needs the phone to reach the server's web address."""
         self.on_open_fn = fn
+        return fn
+
+    def on_tap(self, fn: Callable) -> Callable:
+        """@app.on_tap: fn(tag) runs when the tag itself reports an NFC tap over the radio:
+        any phone or NFC reader held to it, whether or not a page opens. It comes through the
+        hub, so it works without the phone page or the web address, as long as the server
+        runs. Only the app on that tag hears it. The screen is redrawn after, and the tag
+        picks it up at its follow-up poll a few seconds later. A phone that also opens the
+        page runs on_open as well, so an app with both should not count a tap twice."""
+        self.on_tap_fn = fn
         return fn
 
     def every(self, minutes: float):
@@ -314,5 +326,6 @@ class InkApp:
                 "has_render": self.render_fn is not None or bool(self.layout),
                 "layout": self.layout if self.render_fn is None else None,
                 "has_on_open": self.on_open_fn is not None,
+                "has_on_tap": self.on_tap_fn is not None,
                 "has_page": self.page_fn is not None,
                 "timers": [t.as_dict() for t in self.timers]}

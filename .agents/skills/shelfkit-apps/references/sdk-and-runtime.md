@@ -39,8 +39,11 @@ def press(tag): tag.data["n"] = tag.data.get("n", 0) + 1
 @app.text_input("Message", placeholder="Leave a message")   # -> fn(tag, text)
 def message(tag, text): tag.data["msg"] = text.strip()
 
-@app.on_open                    # runs when a phone opens the tag's NFC link (a tap)
-def tapped(tag): ...
+@app.on_tap                     # the tag reported an NFC tap over the radio (via the hub)
+def tapped(tag): ...            # any phone/reader; no page or web address needed
+
+@app.on_open                    # a phone opened the tag's page (/tag/<ID>)
+def opened(tag): ...
 
 @app.every(minutes=30)          # >= 1 min; runs once when bound, then every N min
 def update(tag): tag.data["wx"] = tag.fetch_json("https://api.open-meteo.com/v1/forecast", {...})
@@ -70,7 +73,8 @@ def update(tag): tag.data["wx"] = tag.fetch_json("https://api.open-meteo.com/v1/
 | **Render** | `@app.render`, or `layout.xml` filled with `@app.data` (default `tag.data`). A layout with **errors** is not pushed. Its warnings go to the app log. |
 | **Refresh** (after an action, timer or config change) | Renders, saves `data/apps/<HEX>.png`, thresholds it, and compares the SHA1 of the panel planes with `app_bindings.last_hash`. If it's identical, nothing is pushed (`skipped: "identical"`). Otherwise it queues `kind="image", source="app"` on the server queue, which replaces any pending image for that tag. |
 | **Action** (a phone button or text, or the admin "try" buttons) | Runs the callback under the app's lock, saves `data`/`shared`, then refreshes. |
-| **NFC tap** | `GET /tag/<ID>` runs `on_open`, which is debounced for 10 s. It then redirects to `/tag/<ID>/view`. |
+| **NFC tap (radio)** | The tag polls at once with its `fw=` report. The server (`App._is_tap`) counts an `fw=` poll from a tag up 30 s or more as a tap (the other one is the boot report), once per 20 s, logs a `tap` event and runs `on_tap` of the app bound to that tag only, on its own thread. Needs the server and hub, not the web page. |
+| **NFC tap (phone page)** | `GET /tag/<ID>` runs `on_open`, which is debounced for 10 s. It then redirects to `/tag/<ID>/view`. A phone tap usually runs both. |
 | **Timers** | A scheduler thread checks every 15 s. After a server restart the first pass only learns the timers, so a restart doesn't trigger a burst of fetches. A failing timer waits its full interval. Runs are logged only when they push or fail. |
 | **Unbind** (Stop) | The binding is removed. The tag keeps its last picture, and the app's data for it stays in the app's database. |
 | **Tag renamed or forgotten** | The binding and every app's data for that tag follow the new id or are deleted. |

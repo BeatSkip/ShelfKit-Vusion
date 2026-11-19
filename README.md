@@ -74,7 +74,9 @@ def press(tag):
 The host takes care of the rest:
 - Each app gets its own SQLite file with per-tag settings and data.
 - `@app.every(minutes=30)` runs on a scheduler.
-- `@app.on_open` fires on an NFC tap.
+- `@app.on_tap` fires when the tag is tapped. The tag reports the tap over the radio, so it
+  reaches the app on that tag even when no phone page opens or the web address is down.
+  `@app.on_open` fires when a phone opens the tag's page.
 - A screen identical to the last one is never sent, which saves the battery.
 - An app that crashes logs its error and leaves every other tag alone.
 

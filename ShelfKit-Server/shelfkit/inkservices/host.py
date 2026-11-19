@@ -103,7 +103,7 @@ class AppHost:
             entry = (item.app.describe() if item.app else
                      {"id": item.id, "title": item.id, "description": "", "icon": None,
                       "controls": [], "config_fields": [], "has_render": False,
-                      "has_on_open": False, "timers": []})
+                      "has_on_open": False, "has_on_tap": False, "timers": []})
             if item.disabled:                    # not imported: what it was when disabled
                 entry.update({k: v for k, v in (off.get(item.id) or {}).items()
                               if k in ("title", "description", "icon")})
@@ -580,6 +580,32 @@ class AppHost:
             except AppError as exc:
                 return {"ok": False, "error": str(exc)}
         return self._call(hex_id, "on_open", lambda app: app.on_open_fn)
+
+    def tapped(self, hex_id: str) -> dict:
+        """The tag reported an NFC tap over the radio (the hub heard it, no web page
+        involved). Runs @app.on_tap of the app bound to this tag, and of no other app."""
+        binding = self.store.app_binding(hex_id.upper())
+        if binding is None:
+            return {"ok": True, "pushed": False, "skipped": "no app"}
+        try:
+            if self._app(binding["app_id"]).on_tap_fn is None:
+                return {"ok": True, "pushed": False, "skipped": "no on_tap"}
+        except AppError as exc:
+            return {"ok": False, "error": str(exc)}
+        return self._call(hex_id, "on_tap", lambda app: app.on_tap_fn)
+
+    def simulate_tap(self, hex_id: str) -> dict:
+        """Simulate NFC tap: what a phone's tap runs, @app.on_tap (the tag's own report)
+        then @app.on_open (the page it opens)."""
+        tap = self.tapped(hex_id)
+        if not tap.get("ok"):
+            return tap
+        page = self.opened(hex_id)
+        if page.get("skipped") == "no on_open" and tap.get("skipped") is None:
+            return tap
+        if tap.get("pushed") and page.get("ok"):
+            page = dict(page, pushed=True)
+        return page
 
     # ── timers ─────────────────────────────────────────────────────────────
     def _forget_due(self, hex_id: str) -> None:
