@@ -619,6 +619,7 @@
         <button type="button" role="tab" data-tab="axsdb">USB debugger</button>
         <button type="button" role="tab" data-tab="aliases">Aliases and shelves</button>
         <button type="button" role="tab" data-tab="ai">AI services</button>
+        <button type="button" role="tab" data-tab="develop">Develop</button>
       </div>
 
       <div class="settings-body">
@@ -738,6 +739,13 @@
         <p class="hint">Keys for the web services your apps call (weather, calendars, ...). An app
           reads one with <code>tag.token("name")</code>, so the key never has to be in its code.</p>
         <div id="ai-tokens"></div>
+      </section>
+
+      <section class="setting-group settings dev-config" data-tab="develop" aria-labelledby="set-develop">
+        <h2 id="set-develop">Develop</h2>
+        <p class="hint">How the Develop screen's AI agent works: what it may do, what its proposals
+          may change, and what it reads before it answers. Changes apply to the next request.</p>
+        <div id="dev-config"></div>
       </section>
       </div>
       </div>

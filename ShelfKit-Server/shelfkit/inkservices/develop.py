@@ -50,7 +50,7 @@ from pathlib import Path
 
 from .. import ai, inklayout
 from ..inklayout import sprites
-from . import appsettings, phone
+from . import appsettings, devconfig, phone
 from . import sdk as sdk_module
 from .screen import AppError, tag_view
 
@@ -346,16 +346,14 @@ HOW AN APP RUNS (the host, shelfkit/inkservices/host.py)
   down. @app.on_open runs when a phone opens the tag's page. A real tap usually runs both,
   so put what a tap does in on_tap (or guard against counting it twice). After a button, a
   text input, on_tap or on_open the screen is redrawn and sent if it changed.
-- Fresh data: @app.every(minutes=N) runs for every tag on a schedule (N >= 15 unless asked);
-  tag.fetch_json(url, params) is the only network access; put results in tag.data.
+@@NETWORK@@
 - App settings (Develop > Settings, the same for every tag): tag.var("name", "default") for
   plain values (a city, a URL, a threshold; always strings) and tag.secret("name") for keys
   and passwords (it falls back to the global API token of that name; None when missing, so
   handle None). Never write a key or a password into a file. You can add, change and remove
   them in "settings" (below). Per-tag settings are app.config_field(...) and tag.config.
 - Imports: the Python standard library and shelfkit.inkservices only.
-- Files you may write: app.py, layout.xml and other .py .xml .md .json .txt .toml .sprite files
-  in the app folder (plain names, no folders).
+@@FILES@@
 - Pictures: use a built-in <icon> when one fits (the InkLayout reference lists them). For
   anything else write a small .sprite file (pixel art as text: # black, r red, w white,
   . see-through, ; comments; 8 to 24 px a side) and show it with
@@ -372,8 +370,7 @@ ANSWER with one JSON object and nothing else:
   "summary": "one sentence: what you changed, or what you need to know",
   "plan": ["short step", ...],
   "files": {"layout.xml": "<the complete new file>", "app.py": "<the complete new file>"},
-  "settings": {"vars": {"city": "Utrecht", "old_name": null},
-               "secrets": {"weather_key": "", "unused_key": null}},
+  @@SETTINGS_FIELD@@
   "question": "only if you cannot go on without the owner's choice, else null",
   "answers": ["2-4 short answers the owner can click", ...],
   "suggestions": ["2-3 short next requests the owner might make", ...]
@@ -383,11 +380,39 @@ ask a question, leave "files" empty. "settings" (leave it out if nothing changes
 set to a string adds or changes it, null removes it. A secret set to "" asks the owner to type
 its value when they accept; set a secret's value only when the owner wrote it in their request
 (never invent one); null removes it. Every tag.secret/tag.var name your code reads must exist
-or be in "settings". Write plain, short English."""
+or be in "settings".@@SEARCH@@ Write plain, short English."""
+
+
+def _rules(cfg: dict) -> str:
+    """RULES with the owner's permissions (Settings › Develop) filled in."""
+    types = " ".join("." + t for t in cfg["file_types"])
+    if "py" in cfg["file_types"]:
+        files = (f"- Files you may write: {types} files in the app folder (plain names, no folders).")
+    else:
+        files = (f"- Files you may write: only {types} files in the app folder (plain names, no "
+                 "folders). The owner does not allow Python changes: never write app.py or any .py "
+                 "file; if a request needs new code, say so in \"question\".")
+    if cfg["allow_network"]:
+        network = ("- Fresh data: @app.every(minutes=N) runs for every tag on a schedule (N >= 15 unless asked);\n"
+                   "  tag.fetch_json(url, params) is the only network access; put results in tag.data.")
+    else:
+        network = ("- Fresh data: @app.every(minutes=N) runs for every tag on a schedule (N >= 15 unless asked).\n"
+                   "  The owner does not allow network access: never call tag.fetch_json or any other\n"
+                   "  network code; work with the data the owner types in and what the app stores.")
+    settings_field = ('"settings": {"vars": {"city": "Utrecht", "old_name": null},\n'
+                      '               "secrets": {"weather_key": "", "unused_key": null}},')
+    out = RULES.replace("@@NETWORK@@", network).replace("@@FILES@@", files)
+    out = out.replace("@@SETTINGS_FIELD@@", settings_field)
+    if not cfg["allow_settings"]:
+        out += ("\n\nThe owner does not allow you to change the app's settings: leave \"settings\" "
+                "out and only read names that already exist (they are listed with the app).")
+    search = ("\nYou can search the web (the web_search tool) for API documentation, endpoints and facts "
+              "you are not sure of. Search only when it helps; then answer with the JSON as usual."
+              if cfg.get("web_search") else "")
+    return out.replace("@@SEARCH@@", search)
 
 REFERENCE_APPS = ("pill", "weather", "hello")     # working apps shown to the AI as examples
 REFERENCE_MAX = 16000                             # characters of example code
-REPAIR_ROUNDS = 2                                 # times the AI may fix its own errors
 
 
 def _sdk_reference() -> str:
@@ -414,13 +439,44 @@ def _reference_apps(host, app_id: str) -> str:
     return "\n\n".join(out)
 
 
-def _system_prompt(host, app_id: str) -> str:
+def prompt_part(host, part: str, app_id: str = "", cfg: dict | None = None) -> str:
+    """One built-in skill file, as the agent gets it (Settings › Develop shows them)."""
     from ..inklayout import skill
-    refs = _reference_apps(host, app_id)
-    return (RULES
-            + "\n\n=== SDK source (shelfkit/inkservices/sdk.py) ===\n" + _sdk_reference()
-            + "\n\n=== InkLayout reference ===\n" + skill.skill_markdown(None, "portrait")
-            + (f"\n\n=== Working apps to learn from (not the app you change) ===\n{refs}" if refs else ""))
+    cfg = cfg or devconfig.DEFAULTS
+    if part == "rules":
+        return _rules({**devconfig.DEFAULTS, **cfg})
+    if part == "sdk":
+        return _sdk_reference()
+    if part == "inklayout":
+        return skill.skill_markdown(None, "portrait")
+    if part == "examples":
+        return _reference_apps(host, app_id)
+    raise AppError(f"no built-in skill file {part!r}")
+
+
+def _system_prompt(host, app_id: str, cfg: dict | None = None) -> str:
+    cfg = cfg or devconfig.get(None)
+    on = cfg["parts"]
+    out = [prompt_part(host, "rules", app_id, cfg)]
+    if on.get("sdk", True):
+        out.append("=== SDK source (shelfkit/inkservices/sdk.py) ===\n" + prompt_part(host, "sdk"))
+    if on.get("inklayout", True):
+        out.append("=== InkLayout reference ===\n" + prompt_part(host, "inklayout"))
+    refs = prompt_part(host, "examples", app_id) if on.get("examples", True) else ""
+    if refs:
+        out.append(f"=== Working apps to learn from (not the app you change) ===\n{refs}")
+    for s in cfg["skills"]:
+        if s.get("enabled") and s.get("text", "").strip():
+            out.append(f"=== The owner's skill file: {s['name']} (follow it) ===\n{s['text'].strip()}")
+    return "\n\n".join(out)
+
+
+def prompt_size(host, cfg: dict) -> dict:
+    """{chars, parts: {id: chars}} of the system prompt these settings give."""
+    sizes = {p: len(prompt_part(host, p, "", cfg)) for p, _, _ in devconfig.PARTS}
+    total = sizes["rules"] + sum(n for p, n in sizes.items() if p != "rules" and cfg["parts"].get(p, True))
+    total += sum(len(s.get("text", "")) for s in cfg["skills"] if s.get("enabled"))
+    return {"chars": total, "parts": sizes}
 
 
 def _context_text(host, store, app_id: str, ctx: dict) -> str:
@@ -484,21 +540,33 @@ def _asked(job, reply):
     job["steps"][-1].update(state="done", detail=f"{reply['model']} · {reply['seconds']} s"
                             + (f" · {u.get('output')} tokens out" if u.get("output") else "")
                             + (f" · {u.get('cached')} read from cache" if u.get("cached") else ""))
+    found = reply.get("searches") or []
+    if found:
+        _step(job, f"Searched the web ({len(found)})", "; ".join(f"\u201c{q}\u201d" for q in found)[:400])
 
 
 def _run_agent(host, store, job: dict, provider: str | None, ctx: dict) -> None:
     app_id = job["app"]
     try:
+        cfg = devconfig.get(store)
+        cfg["web_search"] = ai.search_on(store, provider)     # this service's own switch
+        job["_cfg"] = cfg
         current = {f["name"]: f["text"] for f in files(host, app_id)["files"]}
-        system = _system_prompt(host, app_id)
+        system = _system_prompt(host, app_id, cfg)
+        on = cfg["parts"]
         refs = [r for r in REFERENCE_APPS if r != app_id and (host.root / r / "app.py").is_file()][:2]
-        _step(job, f"Read {', '.join(current)}, the SDK and the InkLayout reference",
-              f"{len(current)} files" + (f"; examples: {', '.join(refs)}" if refs else ""))
+        read = [n for n, k in (("the SDK", "sdk"), ("the InkLayout reference", "inklayout")) if on.get(k, True)]
+        mine = [s["name"] for s in cfg["skills"] if s.get("enabled") and s.get("text", "").strip()]
+        _step(job, f"Read {', '.join(current)}" + (f", {' and '.join(read)}" if read else ""),
+              f"{len(current)} files" + (f"; examples: {', '.join(refs)}" if refs and on.get("examples", True) else "")
+              + (f"; your skill files: {', '.join(mine)}" if mine else ""))
+        ask_kw = {"web_search": {"max": cfg["web_search_max"], "domains": cfg["web_domains"]},
+                  "effort": cfg["effort"]}
         history = list(_HISTORY.get(app_id, []))
         user = f"{_context_text(host, store, app_id, ctx)}\n\n=== the owner asks ===\n{job['prompt']}"
         messages = history + [{"role": "user", "content": user}]
         _step(job, f"Asking {job['who']['label']}", job["who"]["model"], state="running")
-        reply = ai.ask(store, system, messages, provider=provider, json_mode=True)
+        reply = ai.ask(store, system, messages, provider=provider, json_mode=True, **ask_kw)
         _asked(job, reply)
         answer = ai.parse_json(reply["text"])
         plan = [str(s)[:200] for s in (answer.get("plan") or [])][:8]
@@ -512,7 +580,7 @@ def _run_agent(host, store, job: dict, provider: str | None, ctx: dict) -> None:
             sett = answer.get("settings") if isinstance(answer.get("settings"), dict) else {}
             var_preview = sett.get("vars") if isinstance(sett.get("vars"), dict) else None
             problems = _propose(host, job, current, proposed, var_preview) if proposed else []
-            if not problems or rounds >= REPAIR_ROUNDS:
+            if not problems or rounds >= cfg["repair_rounds"]:
                 break
             rounds += 1
             job["proposal"] = None
@@ -527,7 +595,7 @@ def _run_agent(host, store, job: dict, provider: str | None, ctx: dict) -> None:
                 {"role": "user", "content": "Your change was checked (not run) and has these problems:\n- "
                  + "\n- ".join(problems) + "\nAnswer again with the same JSON, with the complete "
                  "corrected files."}]
-            reply = ai.ask(store, system, messages, provider=provider, json_mode=True)
+            reply = ai.ask(store, system, messages, provider=provider, json_mode=True, **ask_kw)
             _asked(job, reply)
             answer = ai.parse_json(reply["text"])
 
@@ -630,6 +698,18 @@ def _settings_proposal(host, store, job: dict, answer: dict, sources: dict) -> l
     """Turn the answer's "settings" into a change the owner accepts with the files; secrets the
     code reads but nobody has are added as ones to ask for. Returns notes for the check step."""
     raw = answer.get("settings") if isinstance(answer.get("settings"), dict) else {}
+    cfg = job.get("_cfg") or devconfig.get(None)
+    if not cfg["allow_settings"]:
+        if raw:
+            _step(job, "Left out a settings change", "Settings › Develop does not allow the agent to "
+                  "change app settings", state="error")
+        reads = _reads(sources)
+        mine = appsettings.public(store, job["app"]) if store is not None else {"vars": [], "secrets": []}
+        have = {x["name"] for x in mine["secrets"]} | {t["name"] for t in ai.tokens_public(store)} \
+            if store is not None else set()
+        job["_secret_values"] = {}
+        return [f'the code reads the secret "{n}", which is not set: add it in Develop › Settings'
+                for n in sorted(reads["secret"] - have)]
     mine = appsettings.public(store, job["app"]) if store is not None else {"vars": [], "secrets": []}
     old_vars = {v["name"]: v["value"] for v in mine["vars"]}
     old_secrets = {x["name"] for x in mine["secrets"]}
@@ -681,14 +761,22 @@ def _settings_proposal(host, store, job: dict, answer: dict, sources: dict) -> l
 def _propose(host, job: dict, current: dict, proposed: dict, var_preview: dict | None = None) -> list[str]:
     """Check a proposal without running it and keep it on the job. Returns the problems that
     should go back to the AI (errors only; layout warnings are the owner's call)."""
+    cfg = job.get("_cfg") or devconfig.get(None)
+    allowed = devconfig.editable(cfg)
+    refused = [k for k in proposed if isinstance(k, str) and EDITABLE.match(k) and not allowed.match(k)]
+    if refused:
+        proposed = {k: v for k, v in proposed.items() if k not in refused}
+        _step(job, "Left out files you do not allow", ", ".join(refused)
+              + " (Settings › Develop › what a proposal may change)", state="error")
     try:
-        clean = _check_files({k: v for k, v in proposed.items() if v != current.get(k)})
+        clean = _check_files({k: v for k, v in proposed.items() if v != current.get(k)}) if proposed else {}
     except AppError as exc:
         _step(job, "The proposal was not usable", str(exc), state="error")
         return [str(exc)]
+    refusal = [f"you may not write {k}: the owner only allows {', '.join('.' + t for t in cfg['file_types'])} files"
+               for k in refused]
     if not clean:
-        _step(job, "No file changes", "the proposal matched the files as they are")
-        return []
+        return refusal
     stats = []
     for name, text in clean.items():
         old = current.get(name, "").splitlines()
@@ -703,7 +791,12 @@ def _propose(host, job: dict, current: dict, proposed: dict, var_preview: dict |
           files=" · ".join(f"{s['name']} +{s['added']} −{s['removed']}" for s in stats))
 
     merged = {**current, **clean}
-    problems, checks = [], []
+    problems, checks = list(refusal), []
+    if not cfg["allow_network"]:
+        net = [n for n, t in clean.items() if n.endswith(".py") and re.search(r"\bfetch_json\b|\burllib\b|\bsocket\b|\bhttp\.client\b", t)]
+        if net:
+            problems.append(f"{', '.join(net)} uses the network, which the owner does not allow; remove it")
+            job["proposal"]["blocked"] = "it uses the network, which Settings › Develop does not allow"
     if "app.py" in clean or "layout.xml" in clean:
         contract = _contract(job["app"], merged.get("app.py", ""), merged)
         problems += contract
@@ -760,6 +853,8 @@ def apply(host, job_id: str, secrets: dict | None = None) -> dict:
     if job.get("applied"):
         raise AppError("already accepted")
     p = job["proposal"]
+    if p.get("blocked"):
+        raise AppError(f"this change cannot be accepted: {p['blocked']}")
     if p["files"]:
         result = save(host, job["app"], p["files"], note=f"the AI's change for \"{job['prompt'][:120]}\"",
                       label="AI")
@@ -813,6 +908,15 @@ def forget(app_id: str) -> None:
         _HISTORY.pop(app_id, None)
 
 
+def _config_view(host, store, cfg: dict) -> dict:
+    """Settings › Develop: the settings, the prompt size and which service searches."""
+    acc = ai.public(store)
+    return {**devconfig.public(store), "size": prompt_size(host, cfg), "ai": ai.describe(store),
+            "services": [{"id": p["id"], "label": p["label"], "search": p["search"],
+                          "web_search": p["web_search"], "ready": p["has_key"] and p["enabled"]}
+                         for p in acc["providers"]]}
+
+
 # ── HTTP ──────────────────────────────────────────────────────────────────────
 def handle_get(handler, path: str, query: dict) -> bool:
     if not path.startswith("/api/dev/"):
@@ -835,6 +939,12 @@ def handle_get(handler, path: str, query: dict) -> bool:
             handler._json({**appsettings.public(handler.app.store, app_id),
                            "tokens": [t["name"] for t in ai.tokens_public(handler.app.store)],
                            "fields": [f.as_dict() for f in app.config_fields]})
+        elif path == "/api/dev/config":
+            cfg = devconfig.get(handler.app.store)
+            handler._json(_config_view(host, handler.app.store, cfg))
+        elif path == "/api/dev/config/part":
+            cfg = devconfig.get(handler.app.store)
+            handler._json({"id": q.get("id", ""), "text": prompt_part(host, q.get("id", ""), "", cfg)})
         elif path == "/api/dev/agent/history":
             handler._json({"jobs": history(q.get("app", "")),
                            "ai": ai.describe(handler.app.store)})
@@ -876,6 +986,17 @@ def handle_post(handler, path: str, body: dict) -> bool:
             handler._json(apply(host, str(body.get("job") or ""), body.get("secrets") or {}))
         elif path == "/api/dev/agent/reject":
             handler._json(reject(str(body.get("job") or "")))
+        elif path in ("/api/dev/config", "/api/dev/config/skill"):
+            try:
+                if path == "/api/dev/config":
+                    devconfig.update(handler.app.store, body.get("set") or {})
+                else:
+                    devconfig.skill(handler.app.store, body.get("name"), body.get("text"),
+                                    body.get("enabled"), bool(body.get("remove")), body.get("rename"))
+            except devconfig.ConfigError as exc:
+                raise AppError(str(exc)) from None
+            cfg = devconfig.get(handler.app.store)
+            handler._json(_config_view(host, handler.app.store, cfg))
         elif path == "/api/dev/agent/forget":
             forget(app_id)
             handler._json({"ok": True})

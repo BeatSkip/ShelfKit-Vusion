@@ -1540,6 +1540,10 @@
             <input name="base_url" value="${esc(p.base_url)}" placeholder="${esc(p.default_base_url || "the official API")}"></label>
         </div>
         <label class="ai-enabled"><input type="checkbox" name="enabled" ${p.enabled ? "checked" : ""}> Enabled</label>
+        ${p.search ? `<label class="ai-enabled" title="${esc(p.search_note)}"><input type="checkbox" name="web_search"
+          ${p.web_search ? "checked" : ""}> Web search: the agent may search the web while it works</label>
+          <p class="hint ai-search-note">${esc(p.search_note)} Limits: Settings › Develop.</p>`
+          : '<p class="hint ai-search-note">No web search: this API has none of its own.</p>'}
         <div class="row ai-actions">
           <button type="submit" class="primary">Save</button>
           <button type="button" data-ai="check" ${p.has_key ? "" : "disabled"}>Test the key</button>
@@ -1584,6 +1588,7 @@
       const id = f.dataset.provider;
       const body = { provider: id, model: f.elements.model.value, base_url: f.elements.base_url.value,
         enabled: f.elements.enabled.checked };
+      if (f.elements.web_search) body.web_search = f.elements.web_search.checked;
       if (f.elements.api_key.value) body.api_key = f.elements.api_key.value;
       try {
         AI.data = await api("/api/ai/account", body);
@@ -1631,8 +1636,194 @@
     });
   }
 
+  // ── Settings › Develop ───────────────────────────────────────────────────
+  const DC = { data: null, note: "", bad: false, open: null, edit: null, parts: {} };
+
+  window.devConfigShown = async () => {
+    try {
+      DC.data = await api("/api/dev/config");
+    } catch (e) {
+      $("dev-config").innerHTML = `<p class="dev-bad">${esc(e.message)}</p>`;
+      return;
+    }
+    renderDevConfig();
+  };
+
+  const kb = (n) => (n >= 10240 ? `${Math.round(n / 1024)} KB` : `${(n / 1024).toFixed(1)} KB`);
+
+  function renderDevConfig() {
+    const d = DC.data;
+    const on = d.parts;
+    const searching = d.services.filter((s) => s.search && s.web_search);
+    const services = d.services.filter((s) => s.search).map((s) =>
+      `<span class="pill ${s.web_search ? "ok" : ""}">${esc(s.label)}: ${s.web_search ? "on" : "off"}</span>`).join(" ");
+    const sizes = d.size.parts;
+    const partRow = (p) => {
+      const always = p.id === "rules";
+      const checked = always || on[p.id] !== false;
+      return `<li>
+        <label class="dc-check"><input type="checkbox" data-part="${esc(p.id)}" ${checked ? "checked" : ""}
+          ${always ? "disabled" : ""}> ${esc(p.label)}</label>
+        <span class="hint">${esc(p.about)}</span><span class="spacer"></span>
+        <span class="dc-size">${kb(sizes[p.id] || 0)}</span>
+        <button type="button" data-view="${esc(p.id)}" aria-expanded="${DC.open === p.id}">${DC.open === p.id ? "Hide" : "View"}</button>
+        ${DC.open === p.id ? `<pre class="dc-view">${esc(DC.parts[p.id] ?? "Loading…")}</pre>` : ""}
+      </li>`;
+    };
+    const skillRow = (s) => DC.edit === s.name ? skillForm(s) : `<li>
+        <label class="dc-check"><input type="checkbox" data-skill-on="${esc(s.name)}" ${s.enabled ? "checked" : ""}>
+          ${esc(s.name)}</label>
+        <span class="hint">${esc((s.text || "").trim().split("\n")[0].slice(0, 90) || "empty")}</span>
+        <span class="spacer"></span><span class="dc-size">${kb((s.text || "").length)}</span>
+        <button type="button" data-skill-edit="${esc(s.name)}">Edit</button>
+        <button type="button" data-skill-remove="${esc(s.name)}">Remove</button>
+      </li>`;
+    $("dev-config").innerHTML = `
+      <div class="dc-block">
+        <h3>What the agent may do</h3>
+        <p class="hint">Web search is switched on per service in
+          <a href="#settings" data-settings-tab="ai">AI services</a>: ${services || "none can search"}.
+          ${searching.length ? "" : "None is on now."}</p>
+        <div class="setting-fields">
+          <label>Searches per request
+            <input type="number" min="1" max="20" step="1" data-set="web_search_max" value="${d.web_search_max}"></label>
+          <label>Only search these sites (Claude, OpenAI)
+            <input class="wide" data-set="web_domains" value="${esc(d.web_domains.join(", "))}"
+              placeholder="any site; e.g. docs.python.org, open-meteo.com" spellcheck="false"></label>
+        </div>
+        <div class="setting-fields">
+          <label>Effort (Claude 5 models)
+            <select data-set="effort">${d.efforts.map((e) => `<option ${e === d.effort ? "selected" : ""}>${e}</option>`).join("")}</select></label>
+          <label>Rounds to fix its own errors
+            <input type="number" min="0" max="5" step="1" data-set="repair_rounds" value="${d.repair_rounds}"></label>
+        </div>
+        <p class="hint">Higher effort and more rounds give better first proposals and cost more per request.</p>
+      </div>
+
+      <div class="dc-block">
+        <h3>What a proposal may change</h3>
+        <p class="hint">Nothing is saved until you accept a proposal. These limits also hold when you
+          accept: files of other types are left out, and a change that uses the network when that is
+          off cannot be accepted.</p>
+        <fieldset class="dc-types"><legend>File types it may write</legend>
+          ${d.file_types_all.map((t) => `<label class="dc-check"><input type="checkbox" data-type="${t}"
+            ${d.file_types.includes(t) ? "checked" : ""}> .${t}</label>`).join("")}
+        </fieldset>
+        <p class="hint">Without .py the agent can only change the screen (layout.xml, sprites) and text files.</p>
+        <label class="dc-check"><input type="checkbox" data-set="allow_network" ${d.allow_network ? "checked" : ""}>
+          Apps it writes may use the internet (<code>tag.fetch_json</code>)</label>
+        <label class="dc-check"><input type="checkbox" data-set="allow_settings" ${d.allow_settings ? "checked" : ""}>
+          It may add, change and remove the app's settings (variables and secrets)</label>
+      </div>
+
+      <div class="dc-block">
+        <h3>What the agent reads (skill files)</h3>
+        <p class="hint">Sent with every request, before the app's own files: about
+          <strong>${kb(d.size.chars)}</strong> (~${Math.round(d.size.chars / 3.5 / 1000)}k tokens).
+          Claude keeps it cached between requests, so repeats cost a fraction.</p>
+        <ul class="dc-list">${d.part_info.map(partRow).join("")}</ul>
+        <h3 class="dc-sub">Your own skill files</h3>
+        <p class="hint">Markdown or plain text the agent follows on top of the built-in ones: your
+          code style, the APIs you like, house rules for screens. Up to ${(d.max_skill / 1000).toFixed(0)}k characters each.</p>
+        ${d.skills.length || DC.edit === "" ? `<ul class="dc-list">${d.skills.map(skillRow).join("")}${DC.edit === "" ? skillForm(null) : ""}</ul>`
+          : '<p class="hint">None yet.</p>'}
+        ${DC.edit === null ? '<button type="button" data-skill-new>New skill file</button>' : ""}
+      </div>
+      <p class="hint ${DC.bad ? "dev-bad" : ""}" id="dc-note" role="status">${esc(DC.note)}</p>`;
+  }
+
+  function skillForm(s) {
+    return `<li class="dc-skill-form"><form id="dc-skill-form" autocomplete="off" data-old="${esc(s ? s.name : "")}">
+      <label>Name<input name="name" value="${esc(s ? s.name : "")}" placeholder="house style" spellcheck="false" required></label>
+      <label>Text<textarea name="text" rows="12" spellcheck="false"
+        placeholder="- Always show the date top right&#10;- Prefer open-meteo.com for weather">${esc(s ? s.text : "")}</textarea></label>
+      <div class="row"><button type="submit" class="primary">Save</button>
+        <button type="button" data-skill-cancel>Cancel</button></div>
+    </form></li>`;
+  }
+
+  async function dcSend(path, body, note) {
+    try {
+      DC.data = await api(path, body);
+      DC.note = note || "Saved.";
+      DC.bad = false;
+      return true;
+    } catch (err) {
+      DC.note = err.message;
+      DC.bad = true;
+      return false;
+    } finally {
+      renderDevConfig();
+    }
+  }
+
+  function wireDevConfig() {
+    const root = $("dev-config");
+    root.addEventListener("change", async (e) => {
+      const t = e.target;
+      if (t.closest("#dc-skill-form")) return;
+      if (t.dataset.set) {
+        const v = t.type === "checkbox" ? t.checked : t.value;
+        await dcSend("/api/dev/config", { set: { [t.dataset.set]: v } });
+      } else if (t.dataset.part) {
+        await dcSend("/api/dev/config", { set: { parts: { [t.dataset.part]: t.checked } } });
+      } else if (t.dataset.type) {
+        const types = [...root.querySelectorAll("[data-type]")].filter((c) => c.checked).map((c) => c.dataset.type);
+        await dcSend("/api/dev/config", { set: { file_types: types } });
+      } else if (t.dataset.skillOn) {
+        await dcSend("/api/dev/config/skill", { name: t.dataset.skillOn, enabled: t.checked });
+      }
+    });
+    root.addEventListener("click", async (e) => {
+      const b = e.target.closest("button, a[data-settings-tab]");
+      if (!b) return;
+      if (b.dataset.settingsTab) {
+        e.preventDefault();
+        document.querySelector(`#settings-tabs [data-tab="${b.dataset.settingsTab}"]`)?.click();
+      } else if (b.dataset.view) {
+        const id = b.dataset.view;
+        DC.open = DC.open === id ? null : id;
+        renderDevConfig();
+        if (DC.open && DC.parts[id] === undefined) {
+          try { DC.parts[id] = (await api(`/api/dev/config/part?id=${encodeURIComponent(id)}`)).text; }
+          catch (err) { DC.parts[id] = err.message; }
+          renderDevConfig();
+        }
+      } else if (b.dataset.skillNew !== undefined) {
+        DC.edit = "";
+        renderDevConfig();
+        root.querySelector("#dc-skill-form [name=name]")?.focus();
+      } else if (b.dataset.skillEdit) {
+        DC.edit = b.dataset.skillEdit;
+        renderDevConfig();
+      } else if (b.dataset.skillCancel !== undefined) {
+        DC.edit = null;
+        renderDevConfig();
+      } else if (b.dataset.skillRemove) {
+        if (!confirm(`Remove the skill file "${b.dataset.skillRemove}"?`)) return;
+        await dcSend("/api/dev/config/skill", { name: b.dataset.skillRemove, remove: true }, "Removed.");
+      }
+    });
+    root.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const f = e.target;
+      const name = f.elements.name.value.trim();
+      const old = f.dataset.old;
+      const body = old ? { name: old, text: f.elements.text.value, ...(name !== old ? { rename: name } : {}) }
+        : { name, text: f.elements.text.value, enabled: true };
+      const keep = DC.edit;
+      DC.edit = null;
+      if (!await dcSend("/api/dev/config/skill", body, `Saved "${name}". The agent reads it from the next request.`)) {
+        DC.edit = keep;
+        renderDevConfig();
+      }
+    });
+  }
+
   wire();
   wireAi();
+  wireDevConfig();
+  if (!document.querySelector('section[data-tab="develop"]').hidden) window.devConfigShown();
   // app.js picks the remembered Settings tab before this file loads: fill AI services now if it is the one shown
   if (!document.querySelector('section[data-tab="ai"]').hidden) window.aiSettingsShown();
 })();

@@ -485,6 +485,7 @@ function show(name) {
   if (name === "apps" && window.appsShown) window.appsShown();     // apps.js
   if (name === "develop" && window.developShown) window.developShown();   // develop.js
   if (name === "settings" && settingsTab === "ai" && window.aiSettingsShown) window.aiSettingsShown();
+  if (name === "settings" && settingsTab === "develop" && window.devConfigShown) window.devConfigShown();
   if (name === "diagnostics" && window.diagShown) window.diagShown();   // diag.js
   if (name === "hub") {
     // lines arrive while the screen is hidden, when a log has no height to scroll
@@ -2704,6 +2705,7 @@ function showSettingsTab(name) {
   }
   ui.settingsActions.hidden = !FORM_TABS.has(name);
   if (name === "ai" && window.aiSettingsShown) window.aiSettingsShown();   // develop.js
+  if (name === "develop" && window.devConfigShown) window.devConfigShown(); // develop.js
 }
 
 // ── flash ──────────────────────────────────────────────────────────────────

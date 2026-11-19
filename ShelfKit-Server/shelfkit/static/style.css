@@ -1701,6 +1701,32 @@ body.apps-dragging, body.apps-dragging * { cursor: grabbing !important; }
 .ai-token-hint { font-family: var(--mono); font-size: 0.75rem; color: var(--ink-2); }
 .ai-token-list button { min-height: 28px; }
 .ai-token-add { align-items: flex-end; }
+.ai-search-note { margin: -4px 0 0; }
+
+/* Settings › Develop */
+.dev-config { max-width: 860px; }
+#dev-config { align-self: stretch; display: flex; flex-direction: column; gap: 22px; }
+.dc-block { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.dc-block h3 { margin: 0; font-size: var(--t-h2); }
+.dc-block h3.dc-sub { margin-top: 8px; }
+.dc-block .hint { margin: 0; }
+.dc-block select { min-width: 120px; }
+.dc-check { display: inline-flex; align-items: center; gap: 6px; color: var(--ink); }
+.dc-types { display: flex; flex-wrap: wrap; gap: 6px 16px; border: 1px solid var(--rule); padding: 8px 12px 10px; margin: 0; }
+.dc-types legend { font-size: var(--t-small); color: var(--ink-2); padding: 0 4px; }
+.dc-list { list-style: none; margin: 0; padding: 0; align-self: stretch; display: flex; flex-direction: column; }
+.dc-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 7px 0; border-bottom: 1px solid var(--rule-soft); }
+.dc-list .spacer { flex: 1; }
+.dc-list button { min-height: 28px; }
+.dc-size { font-family: var(--mono); font-size: 0.75rem; color: var(--ink-2); }
+.dc-view { flex-basis: 100%; max-height: 360px; overflow: auto; margin: 4px 0 0; padding: 10px 12px;
+  background: var(--raised); border: 1px solid var(--rule); font-family: var(--mono); font-size: 0.75rem;
+  line-height: 1.45; white-space: pre-wrap; word-break: break-word; }
+.dc-skill-form { display: block !important; }
+#dc-skill-form { display: flex; flex-direction: column; gap: 8px; }
+#dc-skill-form label { display: flex; flex-direction: column; gap: 3px; font-size: var(--t-small); color: var(--ink-2); }
+#dc-skill-form input { width: min(320px, 100%); }
+#dc-skill-form textarea { width: 100%; font-family: var(--mono); font-size: 0.8rem; color: var(--ink); }
 .ai-token-add input { width: 180px; }
 
 @media (max-width: 1000px) {

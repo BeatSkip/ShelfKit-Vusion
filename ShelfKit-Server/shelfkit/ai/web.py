@@ -1,7 +1,7 @@
 """Settings › AI services, over HTTP.
 
     GET  /api/ai                        the providers: key set?, last 4, model, enabled, default
-    POST /api/ai/account  {provider, api_key?, model?, base_url?, enabled?, default?}
+    POST /api/ai/account  {provider, api_key?, model?, base_url?, enabled?, default?, web_search?}
     POST /api/ai/default  {provider}
     POST /api/ai/check    {provider}    a tiny request, to prove the key works
     POST /api/ai/models   {provider}    the provider's model list
@@ -44,7 +44,7 @@ def handle_post(handler, path: str, body: dict) -> bool:
     provider = str(body.get("provider") or "")
     try:
         if path == "/api/ai/account":
-            changes = {k: body[k] for k in ("api_key", "model", "base_url", "enabled", "default") if k in body}
+            changes = {k: body[k] for k in ("api_key", "model", "base_url", "enabled", "default", "web_search") if k in body}
             handler._json(save(store, provider, changes))
         elif path == "/api/ai/default":
             handler._json(set_default(store, provider))

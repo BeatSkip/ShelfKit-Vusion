@@ -1424,6 +1424,82 @@ def opened(tag):
         check("the app reads the secret it was given", a.inkhost._context(a.inkhost._app("lay"), "FFF0")
               .secret("weather_key") == "typed-by-owner-5678")
 
+        # Settings › Develop: capabilities, permissions, skill files
+        cfg = get("/api/dev/config")
+        check("develop settings start as the agent always worked", cfg["file_types"] == cfg["file_types_all"]
+              and cfg["allow_network"] and cfg["allow_settings"] and cfg["repair_rounds"] == 2
+              and all(cfg["parts"].values()) and cfg["size"]["chars"] > 20000, cfg)
+        check("the services that can search are listed",
+              [x["id"] for x in cfg["services"] if x["search"]] == ["anthropic", "openai", "deepseek"], cfg["services"])
+        r = post("/api/dev/config", {"set": {"file_types": ["md"]}})
+        check("refusing both .py and .xml is not allowed", "at least" in r.get("error", ""), r)
+        r = post("/api/dev/config", {"set": {"web_domains": "https://Docs.Python.org/, open-meteo.com"}})
+        check("allowed sites are cleaned", r.get("web_domains") == ["docs.python.org", "open-meteo.com"], r)
+        r = post("/api/dev/config", {"set": {"web_domains": "not a site"}})
+        check("a bad site is refused", "error" in r, r)
+        r = post("/api/dev/config", {"set": {"nope": 1}})
+        check("an unknown setting is refused", "no setting" in r.get("error", ""), r)
+        r = get("/api/dev/config/part?id=rules")
+        check("a built-in skill file can be viewed", "ANSWER with one JSON object" in r.get("text", "")
+              and "@@" not in r["text"], r.get("text", "")[:200])
+        r = post("/api/dev/config/skill", {"name": "house style", "text": "Always put the date top right."})
+        check("an own skill file is added", r.get("skills") == [{"name": "house style",
+              "text": "Always put the date top right.", "enabled": True}], r)
+        r = post("/api/dev/config/skill", {"name": "../x", "text": "y"})
+        check("a bad skill file name is refused", "error" in r, r)
+        post("/api/dev/config", {"set": {"file_types": ["xml", "sprite", "md"], "allow_settings": False,
+                                         "allow_network": False, "parts": {"examples": False},
+                                         "repair_rounds": 0}})
+
+        def py_ask(store, system, messages, **kw):
+            seen.append((system, messages, kw))
+            app_py = (root / "lay" / "app.py").read_text(encoding="utf-8")
+            return {"text": json.dumps({"summary": "both", "files": {
+                "layout.xml": '<screen><text>{{ data.n }}!</text></screen>',
+                "app.py": app_py + "\n# fetch_json\n"},
+                "settings": {"vars": {"city": "Gouda"}}}),
+                "provider": "mistral", "label": "Mistral", "model": "m", "usage": {}, "seconds": 0,
+                "searches": []}
+        ai.ask = py_ask
+        seen.clear()
+        view = wait(post("/api/dev/agent", {"app": "lay", "prompt": "change both"})["job"])
+        system = seen[0][0]
+        check("the agent reads the permissions and the owner's skill file",
+              "only .xml .md .sprite" in system and "does not allow network" in system
+              and "house style" in system and "Always put the date top right." in system
+              and "Working apps to learn from" not in system and '"settings"' in system, system[-1500:])
+        check("the effort and search limits reach the AI call",
+              seen[0][2].get("effort") == "high" and seen[0][2]["web_search"]["domains"] == ["docs.python.org", "open-meteo.com"],
+              seen[0][2])
+        check("files of a type that is not allowed are left out of the proposal",
+              list((view.get("proposal") or {}).get("files", {})) == ["layout.xml"]
+              and any("Left out files" in st["title"] for st in view["steps"]), view.get("steps"))
+        check("a settings change is left out when not allowed",
+              not (view.get("proposal") or {}).get("settings")
+              and any("Left out a settings change" in st["title"] for st in view["steps"]), view.get("steps"))
+
+        def net_ask(store, system, messages, **kw):
+            app_py = (root / "lay" / "app.py").read_text(encoding="utf-8")
+            return {"text": json.dumps({"summary": "net", "files": {"app.py": app_py + "\n# tag.fetch_json\n"}}),
+                    "provider": "mistral", "label": "Mistral", "model": "m", "usage": {}, "seconds": 0}
+        post("/api/dev/config", {"set": {"file_types": ["py", "xml"]}})
+        ai.ask = net_ask
+        view = wait(post("/api/dev/agent", {"app": "lay", "prompt": "fetch"})["job"])
+        r = post("/api/dev/agent/apply", {"job": view["id"]})
+        check("a change that uses the network cannot be accepted when that is off",
+              "network" in r.get("error", "") and "fetch_json" not in (root / "lay" / "app.py").read_text(encoding="utf-8"), r)
+        post("/api/dev/config", {"set": {"file_types": cfg["file_types_all"], "allow_settings": True,
+                                         "allow_network": True, "parts": {"examples": True}, "repair_rounds": 2}})
+        post("/api/dev/config/skill", {"name": "house style", "remove": True})
+
+        # web search: a box on each service whose API searches on its own servers
+        r = post("/api/ai/account", {"provider": "mistral", "web_search": True})
+        check("a service without its own web search cannot switch it on", "no web search" in r.get("error", ""), r)
+        r = post("/api/ai/account", {"provider": "deepseek", "api_key": "sk-deep-00001111", "web_search": True})
+        dp = next(p for p in r["providers"] if p["id"] == "deepseek")
+        check("DeepSeek's web search box is stored", dp["search"] and dp["web_search"], dp)
+        check("search_on follows the box", ai.search_on(s, "deepseek") and not ai.search_on(s, "mistral"))
+
     finally:
         ai.ask = real_ask
         server.shutdown()
