@@ -86,6 +86,7 @@ Every element also takes:
 |---|---|---|
 | `<text>` | A line or paragraph | `size`, `font` (sans/mono/pixel), `bold`, `color`, `align`, `fit` (ellipsis/shrink/wrap), `lines` |
 | `<icon>` | A built-in pixel icon | `name`, `size` (one of the icon's drawn sizes), `color` |
+| `<chart>` | A line, bar, area or dot chart of a list of numbers; the engine scales it and places axis and labels | `type`, `values` (a data path or `3, 5, 2`), `labels`, `min`, `max`, `mark` (one point in red), `axis` (line/full/none), `color`, `width`, `size` |
 | `<bar>` | A horizontal gauge | `value`, `max`, `color`, `bg` |
 | `<line>` | A rule | `color`, `width`, `dash` |
 | `<spacer>` | Empty space | `w`, `h` (`fill` pushes the following content to the end) |
@@ -236,8 +237,8 @@ label keeps using system fonts (Tahoma/Consolas) until it is moved onto InkLayou
 **Built** (`ShelfKit-Server/shelfkit/inklayout/`, tests in `tests/inklayout_test.py`):
 - **L1:**
   - Parse and validation (DOCTYPE/entities refused, size and node caps)
-  - `col`/`row`/`grid`/`stack`/`text`/`icon`/`image`/`bar`/`line`/`spacer`
-  - 54 pixel icons (`inklayout/icons.py`); `<image>` sprites from the app's folder (`inklayout/sprites.py`, tests in `tests/sprites_test.py`)
+  - `col`/`row`/`grid`/`stack`/`text`/`icon`/`image`/`chart`/`bar`/`line`/`spacer`
+  - 74 pixel icons and 31 32 px black-and-red `big-` pictures (`inklayout/icons.py`); `<image>` sprites from the app's folder (`inklayout/sprites.py`, tests in `tests/sprites_test.py`)
   - `w`/`h` as px, %, `fill`, `fill:N`, `auto`; `padding`, `gap`, `align`, `justify`
   - `border`, `radius`, colours, and the `checker`/`dots`/`hatch` patterns
   - Text fit: `ellipsis`, `shrink` and `wrap`, with `lines`

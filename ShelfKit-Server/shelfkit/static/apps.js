@@ -77,14 +77,14 @@
     let d = "";
     rows.forEach((row, y) => {
       for (let x = 0; x < row.length; x++) {
-        if (row[x] !== "#") continue;
+        if (row[x] !== "#" && row[x] !== "r") continue;
         let w = 1;
-        while (row[x + w] === "#") w++;
+        while (row[x + w] === "#" || row[x + w] === "r") w++;
         d += `M${x} ${y}h${w}v1h-${w}z`;
         x += w - 1;
       }
     });
-    return `<svg viewBox="0 0 12 12" shape-rendering="crispEdges" aria-hidden="true"><path d="${d}" fill="currentColor"/></svg>`;
+    return `<svg viewBox="0 0 ${rows.length} ${rows.length}" shape-rendering="crispEdges" aria-hidden="true"><path d="${d}" fill="currentColor"/></svg>`;
   }
 
   // ── fetching ─────────────────────────────────────────────────────────────

@@ -13,7 +13,7 @@
     POST /api/inkapps/orientation {app, orientation}  portrait, landscape, portrait-flipped,
                                          landscape-flipped, or "" for what the app says
     POST /api/inkapps/create   {id, title, ..., dry_run?}   the New app wizard
-    GET  /api/layout/icons                    InkLayout's pixel icons, as rows of '#' and '.'
+    GET  /api/layout/icons                    InkLayout's pixel icons, as rows ('#' ink, 'r' red, 'w' white, '.' nothing; 12 or 32 rows)
     POST /api/inkapps/bind     {tag, app, config?}
     POST /api/inkapps/unbind   {tag}
     POST /api/inkapps/config   {tag, config}

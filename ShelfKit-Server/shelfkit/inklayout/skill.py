@@ -40,7 +40,7 @@ ATTR_DOCS = {
     "justify": "main axis: start (default), center, end, between",
     "cols": "number of equal columns",
     "cell-h": "height of every grid cell in pixels (default: tallest child)",
-    "size": "font size in pixels; snapped to the nearest sharp size",
+    "size": "font size in pixels, snapped to the nearest sharp size (a chart's labels: default 10); an icon's size",
     "font": f"{' or '.join(FONTS)}",
     "bold": "true for bold",
     "color": "a colour of the display",
@@ -49,9 +49,15 @@ ATTR_DOCS = {
     "name": "the icon's name",
     "src": "an <image>'s file in the app's folder: name.png or name.sprite",
     "scale": "an <image>'s whole-number zoom, 1 to 8 (default 1)",
+    "type": "a chart's kind: line (default), bar, area or dots",
+    "values": "a chart's numbers: a data path (data.temps) or a list written out (3, 5, 2)",
+    "labels": "a chart's labels under the points or bars: a data path or a list",
+    "min": "a chart's bottom value (default: the lowest value; 0 for bars)",
+    "mark": "a chart's point or bar shown in red, counted from 1 (e.g. today)",
+    "axis": "a chart's axis: line (default, the base line), full (also the scale on the left) or none",
     "value": "the bar's value",
-    "max": "the bar's full value (default 1)",
-    "width": "line thickness in pixels",
+    "max": "the bar's full value (default 1); a chart's top value (default: the highest)",
+    "width": "line thickness in pixels (a chart's line too)",
     "dash": "dash length in pixels (0 = solid)",
     "each": "a list (or a count) to repeat for, e.g. each=\"data.items\"",
     "as": "the name for the current item (default item); loop.index, loop.first, loop.last also exist",
@@ -65,7 +71,9 @@ ELEMENT_DOCS = {
     "stack": "children on top of each other (align: stretch, center, top-left, top-right, "
              "bottom-left, bottom-right, top, bottom, left, right)",
     "text": "words; the only element that shows text",
-    "icon": f"a built-in pixel icon, size a multiple of {icons.BASE}",
+    "icon": f"a built-in pixel icon, size a multiple of {icons.BASE} (big- pictures: of {icons.BIG})",
+    "chart": "a line, bar, area or dot chart of a list of numbers; the renderer scales it, "
+             "draws the axis and places the labels",
     "image": "a picture from the app's own folder (a .png, or .sprite pixel art), "
              "reduced to the display's colours; color recolours all its ink",
     "bar": "a horizontal gauge, filled value/max",
@@ -219,8 +227,8 @@ draws it pixel-sharp, and tells you in words what did not fit.
 
 ## Elements
 """]
-    for el in ("screen", "col", "row", "grid", "stack", "text", "icon", "image", "bar", "line",
-               "spacer", "repeat"):
+    for el in ("screen", "col", "row", "grid", "stack", "text", "icon", "image", "chart", "bar",
+               "line", "spacer", "repeat"):
         attrs = sorted(ATTRS[el] - {"id"})
         out.append(f"- **`<{el}>`**: {ELEMENT_DOCS[el]}. Attributes: "
                    + ", ".join(f"`{a}`" for a in attrs))
@@ -247,8 +255,34 @@ Fonts: {' and '.join(FONTS)}. How many characters fit across the screen (with 6 
 
 ## Icons
 
-{', '.join(icons.names())}. Sizes: {', '.join(map(str, icons.sizes()))}.
+Small icons, one colour (set it with color=), sizes {', '.join(map(str, icons.sizes()))}:
+{', '.join(icons.small_names())}.
+
+Big pictures, drawn at {icons.BIG} px in black and red (color= makes them one colour), sizes
+{', '.join(map(str, icons.sizes(icons.big_names()[0])))}. Too detailed for 12 px: use them where
+there is room, e.g. one big picture with a number beside it:
+{', '.join(icons.big_names())}.
+
 Prefer an icon when one fits: they are drawn for this panel.
+
+## Charts
+
+`<chart>` draws a list of numbers; you only say which list and what kind. The renderer
+scales it to its box, draws the base line and places the labels. Put the numbers in the
+data (e.g. data.temps = [12, 14, 9, 11]), not in the layout.
+
+```xml
+<chart type="line" values="data.temps" labels="data.days" mark="data.today" h="60"/>
+<chart type="bar" values="data.rain" labels="data.hours" axis="full" color="red" h="50"/>
+<chart type="area" values="3, 5, 4, 8, 6" axis="none" h="30"/>
+```
+
+- `type`: line (default), bar, area, dots. `axis`: line (default), full (adds the top and
+  bottom values on the left), none.
+- `min` / `max` fix the scale (default: the data's own; bars start at 0). `mark` shows
+  one point or bar in red, counted from 1. `width` thickens the line.
+- Give it a height (`h="60"` is the default) and let it take the width. Short labels
+  (Mo, Tu, 12h) fit best; labels that do not fit are left out.
 
 ## Pictures (sprites)
 

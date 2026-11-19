@@ -49,6 +49,8 @@ ATTRS = {
     "text": COMMON | {"size", "font", "bold", "color", "align", "fit", "lines"},
     "icon": COMMON | {"name", "size", "color"},
     "image": COMMON | {"src", "scale", "color"},
+    "chart": COMMON | {"type", "values", "labels", "min", "max", "color", "mark", "axis", "width",
+                       "size"},
     "bar": COMMON | {"value", "max", "color"},
     "line": COMMON | {"color", "width", "dash"},
     "spacer": {"w", "h", "if", "id"},
@@ -73,6 +75,7 @@ class Node:
     shown: list = field(default_factory=list)   # text: the lines actually drawn
     size: int = 0                # text: the size actually used
     ink_y: int | None = None     # text: set when one line is placed by its ink (tight box)
+    series: tuple = ((), ())     # chart: (values, labels) as read from the data
 
 
 @dataclass
@@ -240,6 +243,35 @@ def _parse(source: str, ctx: _Ctx):
     return root
 
 
+def _series(raw, scope: dict, ctx: _Ctx, path: str, attr: str) -> list:
+    """A chart's list: a data path (data.temps), {{ data.temps }}, or numbers "3, 5, 2"."""
+    if raw is None or not raw.strip():
+        return []
+    raw = raw.strip()
+    if re.fullmatch(r"[-+0-9.,\s]+", raw):
+        try:
+            return [float(v) for v in raw.replace(",", " ").split()]
+        except ValueError:
+            pass
+    try:
+        value = interpolate(raw, scope) if "{{" in raw else evaluate(raw, scope)
+    except ExprError as exc:
+        ctx.diag("error", path, f"{attr}=\"{raw}\": {exc}")
+        return []
+    if value is MISSING or value is None:
+        ctx.diag("warn", path, f"{attr}=\"{raw}\": no such data; nothing drawn")
+        return []
+    if isinstance(value, dict):
+        ctx.diag("error", path, f"{attr}=\"{raw}\" is a dict; give a list, e.g. [12, 15, 9]")
+        return []
+    if isinstance(value, str):
+        value = value.replace(",", " ").split()
+    if not isinstance(value, (list, tuple)):
+        ctx.diag("error", path, f"{attr}=\"{raw}\" must be a list")
+        return []
+    return list(value)
+
+
 def _expand(el, ctx: _Ctx, scope: dict, path: str, counters: dict) -> list[Node]:
     tag = el.tag
     if tag not in ATTRS:
@@ -309,6 +341,10 @@ def _expand(el, ctx: _Ctx, scope: dict, path: str, counters: dict) -> list[Node]
         except ExprError as exc:
             ctx.diag("error", my_path, f"{key}=\"{raw}\": {exc}")
     node = Node(tag, attrs, my_path)
+
+    if tag == "chart":
+        node.series = (_series(el.attrib.get("values"), scope, ctx, my_path, "values"),
+                       _series(el.attrib.get("labels"), scope, ctx, my_path, "labels"))
 
     if tag == "text":
         raw = "".join(el.itertext())
@@ -486,6 +522,8 @@ def _measure(node: Node, ctx: _Ctx, max_w: int) -> tuple[int, int]:
         spr = ctx.sprite(node)
         k = ctx.integer(node, "scale", 1, 1, 8)
         w, h = (spr.width * k, spr.height * k) if spr is not None else (0, 0)
+    elif tag == "chart":
+        w, h = min(inner, 120), CHART_H
     elif tag == "bar":
         w, h = min(inner, 40), 8
     elif tag == "line":
@@ -532,11 +570,12 @@ def _measure(node: Node, ctx: _Ctx, max_w: int) -> tuple[int, int]:
 
 
 def _icon_size(node: Node, ctx: _Ctx) -> int:
-    s = ctx.integer(node, "size", icons.BASE, 1, 480)
-    if s % icons.BASE:
-        snapped = max(icons.BASE, round(s / icons.BASE) * icons.BASE)
-        ctx.diag("info", node.path, f"icons are drawn at multiples of {icons.BASE} px to stay "
-                 f"sharp; size {s} became {snapped}")
+    grid = icons.base(node.attrs.get("name", ""))
+    s = ctx.integer(node, "size", grid, 1, 480)
+    if s % grid:
+        snapped = max(grid, round(s / grid) * grid)
+        ctx.diag("info", node.path, f"{node.attrs.get('name')} is drawn at multiples of {grid} px "
+                 f"to stay sharp; size {s} became {snapped}")
         s = snapped
     return s
 
@@ -784,6 +823,8 @@ def _draw(node: Node, ctx: _Ctx, img: Image.Image, ox: int, oy: int) -> None:
         _draw_icon(node, ctx, sub, sx, sy, inner)
     elif tag == "image":
         _draw_image(node, ctx, sub, sx, sy, inner)
+    elif tag == "chart":
+        _draw_chart(node, ctx, sub, sx, sy, inner)
     elif tag == "bar":
         _draw_bar(node, ctx, sub, sx, sy, inner)
     elif tag == "line":
@@ -827,12 +868,20 @@ def _draw_icon(node, ctx, img, ox, oy, inner) -> None:
         ctx.diag("warn", node.path, f"no icon {name!r}; icons: {', '.join(icons.names())}")
         return
     s = _icon_size(node, ctx)
-    colour = ctx.colour(node, "color", tuple(ctx.preset.colors.get("black", (0, 0, 0))))
+    black = tuple(ctx.preset.colors.get("black", (0, 0, 0)))
+    chosen = ctx.colour(node, "color", None)
+    inks = {"#": chosen or black,
+            "r": chosen or tuple(ctx.preset.colors.get("red", black)),
+            "w": tuple(ctx.preset.colors.get("white", (255, 255, 255)))}
     x0, y0, x1, y1 = inner
     x0 += max(0, (x1 - x0 - s) // 2)
     y0 += max(0, (y1 - y0 - s) // 2)
-    pts = [(x0 + px - ox, y0 + py - oy) for px, py in icons.pixels(name, s)]
-    ImageDraw.Draw(img).point(pts, fill=colour)
+    pts: dict[str, list] = {}
+    for px, py, ink in icons.pixels(name, s):
+        pts.setdefault(ink, []).append((x0 + px - ox, y0 + py - oy))
+    draw = ImageDraw.Draw(img)
+    for ink, where in pts.items():
+        draw.point(where, fill=inks[ink])
 
 
 def _draw_image(node, ctx, img, ox, oy, inner) -> None:
@@ -859,6 +908,160 @@ def _draw_image(node, ctx, img, ox, oy, inner) -> None:
     x0 += max(0, (x1 - x0 - spr.width) // 2)
     y0 += max(0, (y1 - y0 - spr.height) // 2)
     img.paste(spr.convert("RGB"), (x0 - ox, y0 - oy), spr.split()[3])
+
+
+CHART_H = 60
+CHART_TYPES = ("line", "bar", "area", "dots")
+
+
+def _num_text(v: float) -> str:
+    return str(int(round(v))) if abs(v - round(v)) < 1e-9 or abs(v) >= 100 else f"{v:.1f}"
+
+
+def _draw_chart(node, ctx, img, ox, oy, inner) -> None:
+    """A line, bar, area or dot chart of `values`, scaled to its box. The model names the
+    data; the engine does every coordinate, the axis and the labels."""
+    kind = (node.attrs.get("type") or "line").strip().lower()
+    if kind not in CHART_TYPES:
+        ctx.diag("error", node.path, f"type=\"{kind}\": use one of {', '.join(CHART_TYPES)}")
+        return
+    raw, labels = node.series
+    values: list = []
+    bad = 0
+    for v in raw:
+        if v is None or v == "":
+            values.append(None)               # a gap: the line breaks there
+            continue
+        try:
+            values.append(float(v))
+        except (TypeError, ValueError):
+            values.append(None)
+            bad += 1
+    if bad:
+        ctx.diag("warn", node.path, f"{bad} of the values are not numbers; they are left out")
+    nums = [v for v in values if v is not None]
+    if not nums:
+        if node.attrs.get("values"):
+            ctx.diag("warn", node.path, "no values to draw")
+        else:
+            ctx.diag("error", node.path, "a <chart> needs values=, e.g. values=\"data.temps\"")
+        return
+    black = tuple(ctx.preset.colors.get("black", (0, 0, 0)))
+    red = tuple(ctx.preset.colors.get("red", black))
+    colour = ctx.colour(node, "color", black)
+    axis = (node.attrs.get("axis") or "line").strip().lower()
+    if axis not in ("none", "line", "full"):
+        ctx.diag("warn", node.path, f"axis=\"{axis}\": use none, line or full")
+        axis = "line"
+    lw = ctx.integer(node, "width", 1, 1, 4)
+    size = min(ALLOWED_SIZES, key=lambda s: abs(s - ctx.integer(node, "size", 10, 8, 24)))
+    f = _load_font(size)
+    lo = ctx.number(node, "min", min(nums) if kind == "line" or kind == "dots" else min(0.0, min(nums)))
+    hi = ctx.number(node, "max", max(nums) if kind != "bar" else max(0.0, max(nums)))
+    if hi <= lo:
+        hi = lo + 1.0
+    n = len(values)
+    mark = ctx.integer(node, "mark", 0, 0, 10000)        # 1-based: this point in red
+
+    x0, y0, x1, y1 = inner
+    draw = ImageDraw.Draw(img)
+    text_h = _line_h(f)
+    left = 0
+    if axis == "full":
+        top_t, low_t = _num_text(hi), _num_text(lo)
+        left = max(_width(f, top_t), _width(f, low_t)) + 3
+    bottom = text_h + 3 if labels else 0
+    pad = 0 if kind == "bar" else 2          # room for the dots and the red mark at the edges
+    px0, px1 = x0 + left + pad, x1 - 1 - pad
+    py0 = y0 + (text_h // 2 if axis == "full" else pad)
+    py1 = y1 - 1 - bottom
+    if px1 - px0 < 4 or py1 - py0 < 4:
+        ctx.diag("warn", node.path, f"the chart has only {x1 - x0}x{y1 - y0} px; give it more room")
+        return
+
+    def ypos(v: float) -> int:
+        v = max(lo, min(hi, v))
+        return py1 - round((v - lo) / (hi - lo) * (py1 - py0))
+
+    if kind == "bar":
+        slot = (px1 - px0 + 1) / n
+        if slot < 1:
+            ctx.diag("warn", node.path, f"{n} bars in {px1 - px0 + 1} px: fewer values, or a wider box")
+            return
+        gap = 1 if slot >= 3 else 0
+        centres = [px0 + i * slot + slot / 2 for i in range(n)]
+    else:
+        centres = ([px0 + i * (px1 - px0) / (n - 1) for i in range(n)] if n > 1
+                   else [(px0 + px1) / 2])
+    base_v = 0.0 if lo < 0 < hi else lo
+    base_y = ypos(base_v)
+
+    def at(x, y):
+        return round(x) - ox, y - oy
+
+    if kind == "bar":
+        bw = max(1, int(slot) - gap)
+        for i, v in enumerate(values):
+            if v is None:
+                continue
+            xa = round(px0 + i * slot)
+            top, bot = sorted((ypos(v), base_y))
+            if top == bot:
+                bot += 1
+            fill = red if mark == i + 1 else colour
+            draw.rectangle([xa - ox, top - oy, xa + bw - 1 - ox, bot - oy], fill=fill)
+    else:
+        runs, run = [], []
+        for x, v in zip(centres, values):
+            if v is None:
+                if run:
+                    runs.append(run)
+                run = []
+            else:
+                run.append((x, ypos(v)))
+        if run:
+            runs.append(run)
+        for run in runs:
+            pts = [at(x, y) for x, y in run]
+            if kind == "area" and len(pts) > 1:
+                draw.polygon(pts + [at(run[-1][0], base_y), at(run[0][0], base_y)], fill=colour)
+            if kind in ("line", "area") and len(pts) > 1:
+                draw.line(pts, fill=colour, width=lw, joint="curve" if lw > 1 else None)
+            if kind == "dots" or len(pts) == 1:
+                for x, y in pts:
+                    draw.rectangle([x - 1, y - 1, x + 1, y + 1], fill=colour)
+        if 0 < mark <= n and values[mark - 1] is not None:
+            x, y = at(centres[mark - 1], ypos(values[mark - 1]))
+            draw.rectangle([x - 2, y - 2, x + 2, y + 2], fill=red)
+
+    if axis != "none":
+        draw.line([(px0 - ox, base_y - oy), (px1 - ox, base_y - oy)], fill=black)
+    if axis == "full":
+        draw.line([(px0 - 1 - ox, py0 - oy), (px0 - 1 - ox, py1 - oy)], fill=black)
+        for t, y in ((_num_text(hi), py0), (_num_text(lo), py1)):
+            tl, tr = _ink(f, t)
+            tt, tb = _ink_v(f, t)
+            ty = max(y0, min(y1 - (tb - tt), y - (tb - tt) // 2)) - tt
+            draw.text((px0 - 3 - (tr - tl) - tl - ox, ty - oy), t, font=f, fill=black)
+    if labels:
+        right_edge = -10_000
+        ly = y1 - text_h
+        skipped = 0
+        for i, label in enumerate(labels[:n]):
+            t = as_text(label)
+            if not t:
+                continue
+            tl, tr = _ink(f, t)
+            tx = round(centres[i] - (tr - tl) / 2)
+            tx = max(x0, min(x1 - (tr - tl), tx))
+            if tx <= right_edge + 2:
+                skipped += 1
+                continue
+            draw.text((tx - tl - ox, ly - oy), t, font=f, fill=black)
+            right_edge = tx + (tr - tl)
+        if skipped:
+            ctx.diag("info", node.path, f"{skipped} labels did not fit and were left out; "
+                     "shorter labels, or fewer of them")
 
 
 def _draw_bar(node, ctx, img, ox, oy, inner) -> None:
@@ -906,6 +1109,8 @@ def _collect(node: Node, out: list, lines: list, depth: int = 0) -> None:
         desc += f" {node.attrs.get('name')}"
     elif node.tag == "image":
         desc += f" {node.attrs.get('src')}"
+    elif node.tag == "chart":
+        desc += f" {node.attrs.get('type') or 'line'}, {len(node.series[0])} values"
     if node.attrs.get("bg"):
         desc += f" bg={node.attrs['bg']}"
     out.append(entry)

@@ -128,6 +128,40 @@ def main() -> int:
           and image.getpixel((5, 5)) == BLACK and image.getpixel((6, 0)) == WHITE,
           result.diagnostics)
 
+    # ── second wave of icons, big pictures ──
+    check("70+ small icons and 30 big pictures", len(icons.small_names()) >= 70
+          and len(icons.big_names()) >= 30, (len(icons.small_names()), len(icons.big_names())))
+    r = inklayout.render('<screen padding="0" align="start"><icon name="big-heart" size="64"/></screen>', {})
+    seen = {c for _, c in r.image.crop((0, 0, 64, 64)).getcolors()}
+    check("a big picture draws at 64 in black and red", r.ok and not r.diagnostics
+          and RED in seen and BLACK in seen, r.diagnostics)
+    r = inklayout.render('<screen><icon name="big-heart" size="40"/></screen>', {})
+    check("a big picture snaps to multiples of 32",
+          any("multiples of 32" in d["msg"] for d in r.diagnostics), r.diagnostics)
+    r = inklayout.render('<screen padding="0" align="start"><icon name="big-heart" color="black"/></screen>', {})
+    check("color= makes a big picture one colour", RED not in {c for _, c in r.image.getcolors()})
+
+    # ── charts ──
+    data = {"t": [12, 14, 9, 11, 16], "d": ["Mo", "Tu", "We", "Th", "Fr"]}
+    for kind in ("line", "bar", "area", "dots"):
+        r = inklayout.render(f'<screen><chart type="{kind}" values="data.t" labels="data.d" '
+                             'axis="full" mark="2"/></screen>', data)
+        check(f"a {kind} chart draws cleanly", r.ok and not r.diagnostics, r.diagnostics)
+    r = inklayout.render('<screen padding="0" align="start"><chart type="bar" values="0, 10" '
+                         'axis="none" w="20" h="20"/></screen>', {})
+    px = r.image.load()
+    check("a bar reaches the top at max and nothing at 0", px[15, 0] == BLACK and px[5, 5] == WHITE,
+          [px[15, 0], px[5, 5]])
+    r = inklayout.render('<screen><chart values="data.nope"/></screen>', {})
+    check("missing data warns, not crashes", r.ok and any("no such data" in d["msg"]
+          for d in r.diagnostics), r.diagnostics)
+    r = inklayout.render('<screen><chart type="pie" values="1, 2"/></screen>', {})
+    check("an unknown chart type is an error", not r.ok)
+    r = inklayout.render('<screen><chart/></screen>', {})
+    check("a chart without values is an error", not r.ok)
+    md = skill_markdown()
+    check("the skill file explains charts and big pictures", "<chart" in md and "big-sun" in md)
+
     print("\nALL PASS" if not FAILED else f"\nFAILED: {', '.join(FAILED)}")
     return 1 if FAILED else 0
 

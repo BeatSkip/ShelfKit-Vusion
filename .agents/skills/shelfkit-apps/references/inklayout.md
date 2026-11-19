@@ -36,17 +36,19 @@ The full spec is in `Documentation/InkLayout.md`, and the engine is `ShelfKit-Se
 ```
 
 - **Containers:** `col`, `row`, `grid` (cols, cell-h), `stack`.
-- **Content:** `text`, `icon`, `image`, `bar`, `line`, `spacer`. `<image src="bin.sprite" scale="3" color="white"/>` shows a picture from the app's folder: a `.png` or a `.sprite` (pixel art as text, `#` black, `r` red, `w` white, `.` see-through, `;` comments), reduced to the display's colours and scaled by whole factors. Unsaved editor and proposal files win over the folder. Develop can edit `.sprite` files and the agent can write them.
+- **Content:** `text`, `icon`, `image`, `chart`, `bar`, `line`, `spacer`. `<image src="bin.sprite" scale="3" color="white"/>` shows a picture from the app's folder: a `.png` or a `.sprite` (pixel art as text, `#` black, `r` red, `w` white, `.` see-through, `;` comments), reduced to the display's colours and scaled by whole factors. Unsaved editor and proposal files win over the folder. Develop can edit `.sprite` files and the agent can write them.
 - **Sizes:** px, `%`, `fill`, `fill:N` or `auto`. Also `padding`, `gap`, `align`, `justify`, `bg`, `border`, `radius`, `if=`.
 - **Bindings:** `{{ path | filter }}` over `tag.*`, `data.*`, `now`. Filters: `upper`, `lower`, `time`, `date`, `round`, `default`, `count`. Supports `a ? 'x' : 'y'`, comparisons and `and/or/not`, plus `<repeat each as>` with `loop.index/first/last`.
-- **Icons** (54, pixel-drawn on 12x12, whole-factor scaling): battery, bed, bell, bike, bolt, bulb, bus, calendar, car, cart, check, clock, cloud, cross, cup, down, drop, flag, fog, gear, gift, heart, home, info, key, leaf, left, lock, mail, message, minus, moon, music, partly, person, phone, pill, pin, plus, power, question, rain, refresh, right, snow, star, sun, thermometer, trash, umbrella, up, warning, wifi, wind.
+- **Icons** (74 small, one colour, 12x12, sizes 12/24/36/48): apple, bag, battery, bed, bell, bike, bolt, book, bulb, bus, calendar, camera, car, cart, chart, check, clock, cloud, cross, cup, down, drop, eye, fire, flag, fog, gear, gift, heart, home, info, key, label, leaf, left, list, lock, mail, message, minus, moon, music, partly, paw, person, phone, pill, pin, plug, plus, power, question, rain, refresh, right, sad, search, shirt, smile, snow, star, sun, sunrise, sunset, thermometer, trash, tree, trophy, tv, umbrella, up, warning, wifi, wind.
+- **Big pictures** (31, 32x32 in black and red, sizes 32/64/96; `color=` makes them one colour): big-bag, big-battery, big-bell, big-bin, big-bulb, big-bus, big-calendar, big-car, big-clock, big-cloud, big-drop, big-flame, big-gift, big-heart, big-house, big-key, big-mail, big-moon, big-mug, big-partly, big-person, big-pill, big-plant, big-rain, big-snow, big-storm, big-sun, big-thermometer, big-tree, big-trophy, big-washer.
+- **Charts:** `<chart type="line|bar|area|dots" values="data.temps" labels="data.days" mark="3" axis="line|full|none" min max color width size/>`. The engine scales, draws the axis and places labels; labels that don't fit are dropped (info). Default height 60.
 - **Display presets:** only `vusion-2.6-bwr` (152×296, black/white/red) so far. `GET /api/layout/displays` lists them.
 
 ## Status
 
 Built:
 - L1: the engine, diagnostics and boxes
-- Most of L2: bindings, repeat, if, icons, bar, image (sprites)
+- Most of L2: bindings, repeat, if, icons, bar, image (sprites), chart
 - L3: the skill file
 
 Not built:
