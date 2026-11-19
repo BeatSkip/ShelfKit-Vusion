@@ -42,7 +42,7 @@ long-lived poll connection per browser tab. The API is small and boring:
     POST /api/tags/<hex>           {"alias": "...", "notes": "...", "grid_row": 1, "grid_col": 3}
     POST /api/tags/layout          {"tags": [{"hex", "grid_row", "grid_col"}], "shelf_names": {}}
     POST /api/tags/<hex>/assign    {"id": "0100"}  (empty = next free) over the hub port
-    POST /api/tags/<hex>/flash     {"path": "Release/vusion-....hex"}  OTA firmware update
+    POST /api/tags/<hex>/flash     {"path": "Release/shelfkit-axsem-....hex"}  OTA firmware update
     POST /api/tags/<hex>/forget    delete the server's record of one tag
     POST /api/tags/<hex>/wipe      wipe the tag's flash and reset it into a new id
     POST /api/tags/<hex>/interval  {"seconds": 300}  idle check-in interval, stored on the tag

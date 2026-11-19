@@ -610,13 +610,14 @@ function renderDiagGlance(live) {
   if (signature === diag.glanceSig) return;
   diag.glanceSig = signature;
   const high = drain && median > 0 && drain.drain_mv_per_day > Math.max(median * 2, median + 3);
-  const ratio = drain && median > 0 ? drain.drain_mv_per_day / median : null;
+  const ratio = drain && median > 0 && drain.drain_mv_per_day > 0 ? drain.drain_mv_per_day / median : null;
   dui.figures.replaceChildren(
     diagFigure("Battery", row.battery != null ? `${row.battery.toFixed(2)} V` : "No reading",
       row.battery != null ? `${row.batteryPct != null ? `${row.batteryPct} %` : "last reading"} · low at ${prefs.low_battery_v.toFixed(2)} V` : "", row.low),
     diagFigure("Drain, last 7 days", drain ? (drain.drain_mv_per_day < 0
       ? `rising ${Math.abs(drain.drain_mv_per_day).toFixed(1)} mV` : `${drain.drain_mv_per_day.toFixed(1)} mV/day`) : "Not yet",
-      drain ? (ratio != null ? `${ratio.toFixed(1)}× the fleet median` : "") : "needs 6 h of readings", Boolean(high)),
+      drain ? (ratio != null ? `${ratio.toFixed(1)}× the fleet median`
+        : drain.drain_mv_per_day <= 0 ? "the voltage went up, not down" : "") : "needs 6 h of readings", Boolean(high)),
     diagFigure("Current", drain?.ua > 0 && drain.drain_mv_per_day > 0
       ? `${drain.ua < 10 ? drain.ua.toFixed(1) : Math.round(drain.ua)} µA` : drain ? "—" : "Not yet",
       drain && !(drain.drain_mv_per_day > 0) ? "the voltage did not fall" : "from the CR2450 curve"),
@@ -983,6 +984,35 @@ function diagShown() {
   drawDiagPlot();
   refreshDiag();
   refreshDiagExtras();
+}
+
+// ── folding a panel away ─────────────────────────────────────────────────────
+// Every panel's heading is a button that folds the panel down to that heading; which ones
+// are folded is remembered in this browser.
+const diagFolded = new Set(stored("diag.folded", "").split(",").filter(Boolean));
+
+function foldDiagPanel(panel, button, folded) {
+  panel.classList.toggle("folded", folded);
+  button.setAttribute("aria-expanded", folded ? "false" : "true");
+  button.title = folded ? "Unfold this section" : "Fold this section away";
+}
+
+for (const heading of diagSection.querySelectorAll(".diag-panel h2[id]")) {
+  const panel = heading.closest(".diag-panel");
+  const key = heading.id;
+  const button = el("button", "fold");
+  button.type = "button";
+  button.append(...heading.childNodes);
+  heading.append(button);
+  foldDiagPanel(panel, button, diagFolded.has(key));
+  button.addEventListener("click", () => {
+    const folded = !panel.classList.contains("folded");
+    if (folded) diagFolded.add(key);
+    else diagFolded.delete(key);
+    store("diag.folded", [...diagFolded].join(","));
+    foldDiagPanel(panel, button, folded);
+    if (!folded && key === "diag-batt-title") drawDiagPlot();
+  });
 }
 
 for (const button of diagModeButtons) {

@@ -1754,7 +1754,7 @@ function renderInspector() {
     : "");
   const lines = [];
   if (hubBlind) {
-    lines.push(["bad", "This hub's firmware drops read-back data. Flash vusion-hub-latest.hex, then reload."]);
+    lines.push(["bad", "This hub's firmware drops read-back data. Flash shelfkit-axsem-hub-latest.hex, then reload."]);
   }
   if (mine && Array.isArray(dump.summary)) lines.push(...dump.summary.map((line) => [null, line]));
   if (mine && dump.error) lines.push(["bad", dump.error]);
@@ -2589,7 +2589,7 @@ function renderHub() {
   const blind = caps.show === false;
   ui.displayWarning.hidden = !blind;
   setText(ui.displayWarning, blind
-    ? "This hub's firmware can't draw on its panel. Flash vusion-hub-latest.hex to use this."
+    ? "This hub's firmware can't draw on its panel. Flash shelfkit-axsem-hub-latest.hex to use this."
     : "");
   ui.displayRefresh.disabled = !display.enabled || blind;
   setText(ui.displayResult, display.last_result ? `Last redraw: ${display.last_result}` : "");

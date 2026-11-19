@@ -1,6 +1,6 @@
 # Wireless link (868 MHz) — design, findings, status
 
-Hub (`ShelfKit-Firmware/Vusion-Hub`) and tag (`ShelfKit-Firmware/Vusion`) run on identical hardware and share all radio code in
+Hub (`ShelfKit-Firmware/ShelfKit-Axsem-Hub`) and tag (`ShelfKit-Firmware/ShelfKit-Axsem`) run on identical hardware and share all radio code in
 `ShelfKit-Firmware/Shared/firmware/`. This document records what was found, how the link works, what was verified on
 hardware, and what is left.
 
@@ -98,7 +98,7 @@ Network id `0x5A` (both ends must match).
 ### Timing
 
 The tag's wake-up timer now runs from the 32.768 kHz crystal with prescaler 7, i.e. **512 Hz**
-(`SHELF_WAKE_LPXOSC=1` in `Vusion/sdcc-project.json`; `SHELFHW_TICKS_PER_S` = 512), measured on hardware
+(`SHELF_WAKE_LPXOSC=1` in `ShelfKit-Axsem/sdcc-project.json`; `SHELFHW_TICKS_PER_S` = 512), measured on hardware
 (prescaler 6 gave ~1024 Hz). The early builds used the on-chip LPOSC at a nominal 640 Hz, which ran
 ~10 % slow; removing that define falls back to it. One timer arm holds 128 s, longer gaps are walked
 down by waking to step a counter.

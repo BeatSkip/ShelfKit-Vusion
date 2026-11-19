@@ -70,7 +70,7 @@ In `shelfhw.c`, overridable with `build-all.py --define`:
 | `SHELF_FIX_XOSC` | 1 | 1 = switch the XOSC off at boot. 0 = force it on (old behaviour) |
 | `SHELF_FIX_UART_SLEEP` | 0 | 1 = do not set U0TXIE, so Sleep is possible. 0 = old behaviour, Standby only |
 
-`SHELF_NFC_POLL` and `SHELF_NFC_RAIL_HOLD` in `Vusion/include/shelf_config.h` can now be
+`SHELF_NFC_POLL` and `SHELF_NFC_RAIL_HOLD` in `ShelfKit-Axsem/include/shelf_config.h` can now be
 overridden the same way. With the sleep fix on, the UART is re-initialised after each wake
 from Sleep (`log_uart_start()`), because Sleep resets it and `log_putc()` waits on it.
 

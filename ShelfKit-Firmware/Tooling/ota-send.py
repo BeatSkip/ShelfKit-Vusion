@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Send a firmware image to a tag over the hub's wireless link (OTA update).
 
-    python ShelfKit-Firmware/Tooling/ota-send.py Release/vusion-20261020-86d8bfa-dirty.hex
+    python ShelfKit-Firmware/Tooling/ota-send.py Release/shelfkit-axsem-20261020-86d8bfa-dirty.hex
     python ShelfKit-Firmware/Tooling/ota-send.py build/firmware.bin --addr 0100 -p COM4
     python ShelfKit-Firmware/Tooling/ota-send.py firmware.hex --dry-run
 

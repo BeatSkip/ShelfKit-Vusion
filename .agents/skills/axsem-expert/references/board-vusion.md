@@ -18,7 +18,7 @@ and the code. When a doc and the code disagree, the code (and `shelf_config.h`) 
   - from sector 3: the image
 
   On first boot with no valid identity, the firmware wipes sectors 0-11.
-- The hub is the **same hardware** running `Vusion-Hub/`: always listening, UART line protocol at 115200 to the host (`ShelfKit-Server`).
+- The hub is the **same hardware** running `ShelfKit-Axsem-Hub/`: always listening, UART line protocol at 115200 to the host (`ShelfKit-Server`).
 
 ## Pin map (authoritative: `Documentation/signal-list.md`)
 
@@ -49,8 +49,8 @@ and the code. When a doc and the code disagree, the code (and `shelf_config.h`) 
 
 ```
 ShelfKit-Firmware/
-  Vusion/        tag app      src/{main,board,epd,flash,spi,pwr,img_rx,eco_rx,fw_rx,nfc_cfg,shelf_id}.c, include/shelf_config.h
-  Vusion-Hub/    hub app      src/{main,board,epd,flash,spi,pwr,img_rx}.c, include/shelf_config.h
+  ShelfKit-Axsem/        tag app      src/{main,board,epd,flash,spi,pwr,img_rx,eco_rx,fw_rx,nfc_cfg,shelf_id}.c, include/shelf_config.h
+  ShelfKit-Axsem-Hub/    hub app      src/{main,board,epd,flash,spi,pwr,img_rx}.c, include/shelf_config.h
   Bootloader/    serial + OTA bootloader at 0xD800 (src/main.c, src/crtstart.asm)
   Shared/
     firmware/axradio  shelfhw  shelflink  shelfota  shelfid   (shared sources, inc/ per module)
@@ -73,7 +73,7 @@ ShelfKit-Firmware/
 | 0xD800-0xFA6F | bootloader (8,819 B). Its CRC covers 0xD800-0xFBFF |
 | last 1 KB page | factory calibration |
 
-- An app-only hex (`vusion-*.hex`) contains its own `ljmp <entry>` at 0x0000. **Sent through the flash-resident bootloader (the normal serial path), that's harmless.** The bootloader intercepts every HEX write to 0x0000-0x0002, decodes the `ljmp`/`ajmp` target and stores it at `jmp_vector` 0xD7FE instead (`Bootloader/src/main.c` ~line 217, the AND9331 design). The reset vector stays the bootloader's, so OTA keeps working. Only written by other means (a debug adapter onto an erased chip) would the app's `ljmp` land at 0x0000, so that the bootloader never runs. The full image (`vusion-full-*.hex`) exists for that case: a blank chip that has neither.
+- An app-only hex (`shelfkit-axsem-*.hex`) contains its own `ljmp <entry>` at 0x0000. **Sent through the flash-resident bootloader (the normal serial path), that's harmless.** The bootloader intercepts every HEX write to 0x0000-0x0002, decodes the `ljmp`/`ajmp` target and stores it at `jmp_vector` 0xD7FE instead (`Bootloader/src/main.c` ~line 217, the AND9331 design). The reset vector stays the bootloader's, so OTA keeps working. Only written by other means (a debug adapter onto an erased chip) would the app's `ljmp` land at 0x0000, so that the bootloader never runs. The full image (`shelfkit-axsem-full-*.hex`) exists for that case: a blank chip that has neither.
 - AND9331's **power-fail-safe erase order** (the `K` command):
   1. Erase page 1.
   2. Write a jump to the bootloader at the start of page 1.
@@ -95,8 +95,8 @@ ShelfKit-Firmware/
 
 ## Build, flash, update
 
-- **Test builds**: `python ShelfKit-Firmware/Tooling/build-all.py --no-record` (add `--targets vusion`, `--define NAME=VALUE`, `--version x.y.z`). Output goes to `Release/` as `<target>-latest.hex` + `.map`, with code and XRAM sizes in the summary. **Don't restore `version.json` / `build-log.md` from git.** Recorded builds (without `--no-record`) bump the version and log a row; do that only when the user asks for a recorded build.
-- **Serial flash (user rule)**: `python ShelfKit-Firmware/Tooling/axsem-flasher.py Release/vusion-latest.hex -p COM4` (or the port the user names; COM3/COM4 are the tag and the hub). **App-only `vusion-*.hex`, never `vusion-full-*.hex`** over the serial port, unless the user explicitly asks. The repo READMEs suggest the full image; the user's rule wins, and it's also the safe choice (the vector redirect above). The full image would try to rewrite the bootloader region, which a running bootloader cannot program safely.
+- **Test builds**: `python ShelfKit-Firmware/Tooling/build-all.py --no-record` (add `--targets axsem`, `--define NAME=VALUE`, `--version x.y.z`). Output goes to `Release/` as `<target>-latest.hex` + `.map`, with code and XRAM sizes in the summary. **Don't restore `version.json` / `build-log.md` from git.** Recorded builds (without `--no-record`) bump the version and log a row; do that only when the user asks for a recorded build.
+- **Serial flash (user rule)**: `python ShelfKit-Firmware/Tooling/axsem-flasher.py Release/shelfkit-axsem-latest.hex -p COM4` (or the port the user names; COM3/COM4 are the tag and the hub). **App-only `shelfkit-axsem-*.hex`, never `shelfkit-axsem-full-*.hex`** over the serial port, unless the user explicitly asks. The repo READMEs suggest the full image; the user's rule wins, and it's also the safe choice (the vector redirect above). The full image would try to rewrite the bootloader region, which a running bootloader cannot program safely.
   - The flasher holds PB3 low via DTR at reset (the "SW5" of AND9331). The bootloader then stays in its command loop instead of starting the app. The flasher sends `?` (banner "AX8052 Bootloader V1.1"), `K` erase, the hex lines and `R` run. The READMEs call this the "mask-ROM" bootloader; the banner and the redirect logic say it's the flash-resident one at 0xD800.
 - **OTA**: `Tooling/ota-send.py` or the server's Reflash button. The tag receives FW_BEGIN/CHUNK/END into the SPI flash, commits the header and resets. The bootloader verifies the CRC and programs. The OTA window is about 43 KB, and an image must not contain a bootloader.
 - Logs: the tag at 115200 on PB4 (`[ t ] message` lines), the bootloader at 38400. With the serial adapter attached, DTR sits on PB3 (BOOT and NFC).

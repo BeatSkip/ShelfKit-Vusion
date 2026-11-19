@@ -1,6 +1,6 @@
 /**
  * @file shelfhw.c
- * @brief Board bring-up shared by the Hub and Vusion firmware
+ * @brief Board bring-up shared by the ShelfKit-Axsem tag and hub firmware
  *
  * The clock and radio-pin sequences follow the AX-RadioLab SLAVE template
  * (WirelessDemo/SLAVE/main.c); the Minikit specifics (LED/button pins, COM0

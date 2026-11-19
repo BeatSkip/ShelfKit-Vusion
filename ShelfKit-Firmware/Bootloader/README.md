@@ -85,7 +85,7 @@ writes the HEX for that: one file with both images in it, so it is a single flas
 operation instead of two.
 
 ```
-python ShelfKit-Firmware/Tooling/build-all.py          # Release/vusion-full-latest.hex
+python ShelfKit-Firmware/Tooling/build-all.py          # Release/shelfkit-axsem-full-latest.hex
 ```
 
 ```
@@ -115,8 +115,8 @@ Two properties worth knowing:
 - It is **not an OTA image** — `ota-send.py` refuses it (it reaches `0xFA6F`, against
   the 43 KB window), which is the right answer: an OTA image must not carry a bootloader.
 
-`--no-bundle` skips it, and it is only produced when both `vusion` and `bootloader`
-are in the built set (`--targets vusion,bootloader`).
+`--no-bundle` skips it, and it is only produced when both `axsem` and `bootloader`
+are in the built set (`--targets axsem,bootloader`).
 
 ## Building and flashing
 
@@ -168,7 +168,7 @@ if `PCON.WAKEUP` is set **and** the marker is present, it jumps through
 bootloader does.
 
 The marker requirement protects OTA. The application's `cpu_reset()`
-(`Vusion/src/fw_rx.c`) clears the marker before `PCON.SWRESET`, so an update
+(`ShelfKit-Axsem/src/fw_rx.c`) clears the marker before `PCON.SWRESET`, so an update
 reset always reaches the OTA check, even if `WAKEUP` still reads 1.
 
 **`__sdcc_gsinit_startup` must stay at 0xD838.** Every installed tag has
@@ -198,7 +198,7 @@ while the pins are still inputs, so a level left by the application cannot flash
 
 ## How it gets installed
 
-Flash **`Release/vusion-full-*.hex`** for a tag. That image contains the bootloader,
+Flash **`Release/shelfkit-axsem-full-*.hex`** for a tag. That image contains the bootloader,
 the application, *and* the reset vector:
 
 | address | contents |
@@ -207,7 +207,7 @@ the application, *and* the reset vector:
 | `0xD7FE` | the application's entry (read by `run_application()`) |
 | `0xD800`+ | the bootloader |
 
-Flashing `vusion-*.hex` (the application alone) writes `ljmp 0x021B` at `0x0000`
+Flashing `shelfkit-axsem-*.hex` (the application alone) writes `ljmp 0x021B` at `0x0000`
 instead: the chip then starts the application directly and the bootloader never
 runs, so an OTA image can be written to the flash and still never be applied.
 The build script now prints the full image as the command to use for a tag.

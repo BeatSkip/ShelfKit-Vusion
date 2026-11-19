@@ -4,7 +4,7 @@
     python ShelfKit-Server/tests/nfclink_test.py
 
 No hardware: a fake tag holds the chip's EEPROM, answers SM_OP_NFC_WRITE frames the way
-Vusion/src/fw_rx.c does (bounds included), and answers SM_OP_FLASH_DUMP + SM_DUMP_NFC
+ShelfKit-Axsem/src/fw_rx.c does (bounds included), and answers SM_OP_FLASH_DUMP + SM_DUMP_NFC
 with the hub's `flash=` log lines. App.write_nfc_link and App._read_nfc run unchanged.
 """
 from __future__ import annotations

@@ -9,14 +9,16 @@ new target adds a project without copying 140 MB of vendor code.
 
 | Folder | Target | What it does |
 |---|---|---|
-| `Vusion/` | Tag | Polls the hub every couple of minutes (adaptive), receives an image (raw or compressed) straight into the panel controller, refreshes, sleeps; takes OTA firmware updates and a wireless id |
-| `Vusion-Hub/` | Hub | Always listening, answers every poll, relays host frames (single and batched) to the tag that just spoke, can draw on its own panel, speaks a line protocol on UART at 115200 |
+| `ShelfKit-Axsem/` | Tag | Polls the hub every couple of minutes (adaptive), receives an image (raw or compressed) straight into the panel controller, refreshes, sleeps; takes OTA firmware updates and a wireless id |
+| `ShelfKit-Axsem-Hub/` | Hub | Always listening, answers every poll, relays host frames (single and batched) to the tag that just spoke, can draw on its own panel, speaks a line protocol on UART at 115200 |
+| `ShelfKit-Texas/` | Tag (skeleton) | TI **CC2510** tags (8051 + 2.4 GHz radio), SDCC. Builds; no radio or panel driver yet, placeholder pins. Needs a 2.4 GHz hub of its own — see [its README](ShelfKit-Texas/README.md) |
+| `ShelfKit-Silabs/` | Tag (skeleton) | Silicon Labs **EFR32FG22** tags (Cortex-M33 + 2.4 GHz radio), Arm GCC (`gcc-project.json`). Builds once `arm-none-eabi-gcc` is installed; no drivers yet, placeholder pins. Needs a 2.4 GHz hub — see [its README](ShelfKit-Silabs/README.md) |
 | `Tooling/` | Host scripts | The flasher, `build-all.py` (every target into `Release/`), the OTA sender, `set-id.py` and `flash-read.py` (see [Tooling/README.md](Tooling/README.md)) |
 | `Bootloader/` | AX8052 serial bootloader | Flash-resident UART bootloader (Axsem V1.1, 38400 baud, at `0xD800`) that erases and programs the application area and jumps to it, and applies an over-the-air image staged in the tag's SPI flash |
 
-Vusion is the SES-imagotag 2.6" BWR label (UU340 variant): AX8052F143 — an 8051 core plus a
+ShelfKit-Axsem runs on the SES-imagotag Vusion 2.6" BWR label (UU340 variant): AX8052F143 — an 8051 core plus a
 sub-GHz radio at 26 MHz — a Good Display **GDEW026Z39** panel (296×152, black/white/red, IL0373),
-an NFC chip and a serial flash. `Vusion/` and `Vusion-Hub/` run on identical hardware; they differ
+an NFC chip and a serial flash. `ShelfKit-Axsem/` and `ShelfKit-Axsem-Hub/` run on identical hardware; they differ
 in their `src/main.c` and their `include/shelf_config.h`; the tag adds the OTA, identity and
 compressed-image receivers, the hub keeps a smaller image receiver for its own panel.
 
@@ -26,7 +28,7 @@ compressed-image receivers, the hub keeps a smaller image receiver for its own p
 a `sdcc-project.json` in the workspace folder, and the `../Shared/…` paths are resolved against
 that folder as the project root.
 
-1. `File ▸ Open Folder…` → `ShelfKit-Firmware/Vusion-Hub` (or `Vusion`).
+1. `File ▸ Open Folder…` → `ShelfKit-Firmware/ShelfKit-Axsem-Hub` (or `ShelfKit-Axsem`).
 2. **Ctrl+Shift+B** — `firmware.ihx`, `.hex`, `.map` and `.mem` land in that target's `build/`.
 3. *SDCC: Flash* runs the `upload` command from `sdcc-project.json`, which is
    [`Tooling/axsem-flasher.py`](Tooling/axsem-flasher.py) — it wants the serial port in the
@@ -47,10 +49,10 @@ so no symlinks or junctions are involved.
 
 ## Adding another tag type
 
-The point of this folder. A new tag is a new project beside `Vusion/`, sharing everything that is
+The point of this folder. A new tag is a new project beside `ShelfKit-Axsem/`, sharing everything that is
 not board-specific:
 
-1. **Copy an existing target**: `Vusion/` for another tag, `Vusion-Hub/` for a second hub.
+1. **Copy an existing target**: `ShelfKit-Axsem/` for another tag, `ShelfKit-Axsem-Hub/` for a second hub.
 2. **Rename it** in `sdcc-project.json`: `name`, and `build.output_name` if you want a distinct hex
    (default `firmware`).
 3. **Give it an identity** in `include/shelf_config.h`: the fleet-wide `SHELF_NET_ID` and its own

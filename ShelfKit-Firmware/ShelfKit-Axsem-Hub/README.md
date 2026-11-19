@@ -1,10 +1,10 @@
-# Vusion-Hub — the hub target
+# ShelfKit-Axsem-Hub — the hub target
 
 The hub half of ShelfKit: it listens permanently, **answers every tag poll** (the answer *is* the
 acknowledgement), and **forwards images from the host to the tag that just spoke**. Everything the
 host knows about the fleet arrives on this board's UART.
 
-Same board as [`../Vusion`](../Vusion) — SES-imagotag Vusion 2.6", AX8052F143 + GDEW026Z39 — but
+Same board as [`../ShelfKit-Axsem`](../ShelfKit-Axsem) — SES-imagotag Vusion 2.6", AX8052F143 + GDEW026Z39 — but
 wired to a PC by serial cable instead of running on a shelf. It keeps the e-paper driver so the hub
 can show something itself later; it can also show an image the host sends over serial (below).
 

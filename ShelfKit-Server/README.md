@@ -345,7 +345,7 @@ identity assignment.
 ### Updating a tag's firmware over the air
 
 **Fleet** → click a tag → under **Firmware update** pick one of the HEX files from `Release/`
-(written by `ShelfKit-Firmware/Tooling/build-all.py`), then **Update firmware**. The `*-full-*.hex` (`vusion-full-latest.hex`)
+(written by `ShelfKit-Firmware/Tooling/build-all.py`), then **Update firmware**. The `*-full-*.hex` (`shelfkit-axsem-full-latest.hex`)
 bundles are filtered out on purpose: they carry the bootloader as well and cannot go over the
 air. So are the hub and bootloader images, which are not tag applications.
 
@@ -472,7 +472,7 @@ If a read does fail with *"the hub is dropping the payload"*, the hub is running
 from before the read-back existed: the tag answers, the hub prints `DATA src=…` but
 with no bytes attached. Both firmwares now announce the capability in their boot
 banner — `*** ShelfKit hub, node 0001 net 5a dump=1` — so a hub without `dump=1` needs
-`vusion-hub-*.hex` from the current build. A read that receives nothing reports the
+`shelfkit-axsem-hub-*.hex` from the current build. A read that receives nothing reports the
 error and no summary: "identity: blank" would be a lie.
 
 This is the same wire protocol and the same description code as
@@ -640,7 +640,7 @@ currently connected. A tag stays on the list while its last POLL is younger than
 timeout (5 minutes by default) and drops off after that. The panel is redrawn only when
 the set changes, and at most once per minute: a refresh takes ~15 s, during which the hub
 cannot answer polls, and the server writes nothing to the hub (its serial line is also the
-panel's reset, see [Vusion-Hub](../ShelfKit-Firmware/Vusion-Hub/README.md)).
+panel's reset, see [ShelfKit-Axsem-Hub](../ShelfKit-Firmware/ShelfKit-Axsem-Hub/README.md)).
 
 Off by default; needs a hub built with the serial image command (banner ends in `show=1`).
 

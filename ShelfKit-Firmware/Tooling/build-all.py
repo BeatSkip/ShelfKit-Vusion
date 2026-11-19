@@ -3,10 +3,11 @@
 
     python ShelfKit-Firmware/Tooling/build-all.py
     python ShelfKit-Firmware/Tooling/build-all.py --version 1.2.0
-    python ShelfKit-Firmware/Tooling/build-all.py --targets vusion,bootloader
+    python ShelfKit-Firmware/Tooling/build-all.py --targets axsem,bootloader
+    python ShelfKit-Firmware/Tooling/build-all.py --targets texas,silabs   # the other chip families
     python ShelfKit-Firmware/Tooling/build-all.py --bump          # patch + 1 (or minor/major)
     python ShelfKit-Firmware/Tooling/build-all.py --set 1.0.0
-    python ShelfKit-Firmware/Tooling/build-all.py --targets vusion,bootloader \\
+    python ShelfKit-Firmware/Tooling/build-all.py --targets axsem,bootloader \\
         --define SHELF_LOG_UART=1 --out Release/debug-log     # a tag with its serial log on
 
 Each target is built with the same flags SDCC-MDF uses, because they are read from
@@ -39,7 +40,21 @@ Shared/firmware/shelflink/inc/shelfver.h), and a line with the version, build, g
 and the hash of each image is appended to ``ShelfKit-Firmware/build-log.md`` - that file is
 how you find out what a tag with a given version/build is actually running.
 
-Requires SDCC on ``PATH`` or in its default Windows install.
+Targets, by chip family:
+
+* ``axsem`` (ShelfKit-Axsem: the AX8052F143 tag), ``axsem-hub`` (ShelfKit-Axsem-Hub) and
+  ``bootloader``: SDCC. ``all`` (the default) is these three. The old names ``vusion``
+  and ``hub`` still work.
+* ``texas`` (ShelfKit-Texas: the TI CC2510 tag): SDCC, from its own board file.
+* ``silabs`` (ShelfKit-Silabs: the EFR32FG22 tag): the Arm GNU toolchain, read from the
+  project's ``gcc-project.json`` instead of ``sdcc-project.json``.
+* ``every``: all of the above.
+
+Only the release files of the targets being built are replaced; building ``texas`` leaves
+the Axsem files in ``Release/`` alone.
+
+Requires SDCC on ``PATH`` or in its default Windows install; ``silabs`` also needs
+``arm-none-eabi-gcc`` (on ``PATH``, an Arm GNU Toolchain install or Simplicity Studio's).
 """
 
 from __future__ import annotations
@@ -62,9 +77,17 @@ DEFAULT_OUT = REPO / "Release"
 VERSION_FILE = FIRMWARE / "version.json"
 BUILD_LOG = FIRMWARE / "build-log.md"
 SDCC_DIRS = [Path(r"C:\Program Files\SDCC\bin"), Path(r"C:\Program Files (x86)\SDCC\bin")]
-SOURCE_SUFFIXES = {".c", ".asm"}
-# folder name -> the name you pass to --targets
-TARGETS = {"vusion": "Vusion", "hub": "Vusion-Hub", "bootloader": "Bootloader"}
+SOURCE_SUFFIXES = {".c", ".asm", ".s", ".S"}
+# the name you pass to --targets -> folder
+TARGETS = {"axsem": "ShelfKit-Axsem", "axsem-hub": "ShelfKit-Axsem-Hub", "bootloader": "Bootloader",
+           "texas": "ShelfKit-Texas", "silabs": "ShelfKit-Silabs"}
+ALIASES = {"vusion": "axsem", "hub": "axsem-hub"}          # the names before 2026-11-20
+GROUPS = {"all": ["axsem", "axsem-hub", "bootloader"], "every": list(TARGETS)}
+AXSEM_TAG = TARGETS["axsem"]
+AXSEM_HUB = TARGETS["axsem-hub"]
+ARM_DIRS = [Path(r"C:\Program Files (x86)\Arm GNU Toolchain arm-none-eabi"),
+            Path(r"C:\Program Files\Arm GNU Toolchain arm-none-eabi"),
+            Path(r"C:\SiliconLabs\SimplicityStudio\v5\developer\toolchains\gnu_arm")]
 # shelfota.h OTA_MAX_IMAGE: an application bigger than this cannot be sent over the
 # air, even though it still fits when flashed over the wire.
 OTA_IMAGE_WINDOW = 0xA7F0
@@ -83,6 +106,20 @@ def find_tool(name: str) -> str:
         if candidate.is_file():
             return str(candidate)
     raise SystemExit(f"cannot find {name!r}: put SDCC on PATH or install it in {SDCC_DIRS[0].parent}")
+
+
+def find_arm(name: str) -> str:
+    """arm-none-eabi-<name>: on PATH, else the newest Arm GNU Toolchain / Simplicity Studio one."""
+    found = shutil.which(f"arm-none-eabi-{name}")
+    if found:
+        return found
+    for base in ARM_DIRS:
+        for candidate in sorted(base.glob(f"*/bin/arm-none-eabi-{name}.exe"), reverse=True):
+            return str(candidate)
+    raise SystemExit(
+        f"cannot find arm-none-eabi-{name}: the silabs target needs the Arm GNU Toolchain.\n"
+        "    Install it (winget install Arm.GnuArmEmbeddedToolchain, or from developer.arm.com)\n"
+        "    or Simplicity Studio, or put its bin folder on PATH.")
 
 
 def run(command: list[str], what: str) -> None:
@@ -284,8 +321,8 @@ def build_stem(name: str, version: str | None) -> str:
 
 
 def slug(name: str) -> str:
-    """Vusion-Hub -> vusion-hub: the release name comes from the target folder, not
-    from build.output_name (Vusion and Vusion-Hub both call their build 'firmware')."""
+    """ShelfKit-Axsem-Hub -> shelfkit-axsem-hub: the release name comes from the target folder,
+    not from build.output_name (the tag and the hub both call their build 'firmware')."""
     return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
 
 
@@ -313,9 +350,74 @@ def mem_usage(map_mem: Path) -> str:
     return ", ".join(parts)
 
 
+def stale_files(out_dir: Path, folder: str) -> list[Path]:
+    """This target's earlier release files: <slug>-latest / <slug>-<version>, .hex and .map.
+    Another target whose name starts the same (shelfkit-axsem-hub) is not matched."""
+    pattern = re.compile(rf"^{re.escape(slug(folder))}-(latest|\d[\w.\-]*)\.(hex|map)$")
+    return [path for path in out_dir.iterdir() if path.is_file() and pattern.match(path.name)]
+
+
+def is_arm(folder: str) -> bool:
+    return (FIRMWARE / folder / "gcc-project.json").is_file()
+
+
+# ── one Arm (GCC) target ───────────────────────────────────────────────────
+def build_arm_target(folder: str, out_dir: Path, version: str | None,
+                     stamp: list[str] | None = None, extra: list[str] | None = None) -> dict:
+    """A Cortex-M target: gcc-project.json lists cflags, ldflags, the linker script, sources
+    and includes the same way sdcc-project.json does."""
+    root = FIRMWARE / folder
+    project = json.loads((root / "gcc-project.json").read_text(encoding="utf-8"))
+    sources, includes, _libs = collect(root, project)
+    build = project.get("build") or {}
+    name = build.get("output_name") or "firmware"
+    cflags = [str(f) for f in project.get("cflags") or []]
+    defines = [f"-D{d}" for d in project.get("defines") or []] + list(stamp or []) + [f"-D{d}" for d in extra or []]
+    include_flags = [f"-I{inc}" for inc in includes]
+    script = (root / project["linker_script"]).resolve()
+    gcc, objcopy, size_tool = find_arm("gcc"), find_arm("objcopy"), find_arm("size")
+    work = Path(tempfile.mkdtemp(prefix=f"sk-build-{name}-"))
+    try:
+        print(f"\n=== {folder}  ({name}, {len(sources)} sources, {Path(gcc).name}) ===")
+        objects: list[Path] = []
+        for index, source in enumerate(sources, 1):
+            relative = source.relative_to(root) if root in source.parents else source.name
+            obj = work / f"{index:03d}-{source.stem}.o"
+            run([gcc, *cflags, *defines, *include_flags, "-c", str(source), "-o", str(obj)],
+                f"compile {relative}")
+            objects.append(obj)
+            print(f"  {str(relative):<52} ok")
+        elf = work / f"{name}.elf"
+        map_tmp = work / f"{name}.map"
+        run([gcc, *cflags, *[str(f) for f in project.get("ldflags") or []], f"-T{script}",
+             f"-Wl,-Map={map_tmp}", *map(str, objects), "-o", str(elf)], "link")
+        hex_file = out_dir / f"{build_stem(slug(folder), version)}.hex"
+        if hex_file.exists():
+            hex_file.unlink()
+        run([objcopy, "-O", "ihex", str(elf), str(hex_file)], "objcopy")
+        shutil.copyfile(map_tmp, hex_file.with_suffix(".map"))
+        sized = subprocess.run([size_tool, str(elf)], capture_output=True, text=True)
+        code = usage = 0
+        try:
+            text, data, bss = (int(v) for v in sized.stdout.splitlines()[1].split()[:3])
+            code = text + data
+            usage = f"flash {code}/{project.get('flash_size', 0)}, ram {data + bss}/{project.get('ram_size', 0)}"
+        except (IndexError, ValueError):
+            usage = ""
+        digest = hashlib.sha256(hex_file.read_bytes()).hexdigest()[:16]
+        size = hex_file.stat().st_size
+        print(f"  -> {display(hex_file)}  {size} bytes  sha256:{digest}  {usage}")
+        return {"target": folder, "hex": hex_file, "bytes": size, "sha256": digest,
+                "usage": usage or "", "code": code}
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
 # ── one target ─────────────────────────────────────────────────────────────
 def build_target(folder: str, out_dir: Path, version: str | None, clean: bool,
                  stamp: list[str] | None = None, extra: list[str] | None = None) -> dict:
+    if is_arm(folder):
+        return build_arm_target(folder, out_dir, version, stamp, extra)
     root = FIRMWARE / folder
     project = load_project(root)
     board = load_board(root, project)
@@ -335,7 +437,7 @@ def build_target(folder: str, out_dir: Path, version: str | None, clean: bool,
         for index, source in enumerate(sources, 1):
             relative = source.relative_to(root) if root in source.parents else source.name
             obj = work / f"{index:03d}-{source.stem}.rel"
-            if source.suffix.lower() == ".asm":
+            if source.suffix.lower() in (".asm", ".s"):
                 run([find_tool("sdas8051"), "-plosgffw", str(obj), str(source)],
                     f"assemble {relative}")
             else:
@@ -485,7 +587,7 @@ def bundle(tag_hex: Path, boot_hex: Path, out_dir: Path, version: str | None) ->
     merged[APP_VECTOR] = entry & 0xFF        # run_application() reads low byte first
     merged[APP_VECTOR + 1] = entry >> 8
 
-    name = build_stem("vusion-full", version)
+    name = build_stem(f"{slug(AXSEM_TAG)}-full", version)
     target = out_dir / f"{name}.hex"
     target.write_text(write_hex(merged), encoding="utf-8")
     print(f"\n=== one HEX for both ===")
@@ -501,7 +603,8 @@ def main(argv: list[str] | None = None) -> int:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument("--targets", default="all",
-                        help="comma separated: " + ", ".join(TARGETS) + " (default all)")
+                        help="comma separated: " + ", ".join(TARGETS) + ", or all (the Axsem "
+                             "tag, hub and bootloader: the default) or every")
     parser.add_argument("--version",
                         help="name the files <target>-<version>.hex (default: <target>-latest.hex)")
     parser.add_argument("--bump", nargs="?", const="patch", choices=["major", "minor", "patch"],
@@ -530,23 +633,40 @@ def main(argv: list[str] | None = None) -> int:
     if args.no_record and (args.bump or args.set_to):
         parser.error("--no-record would throw the --bump/--set away; build without it")
 
-    if args.targets.strip().lower() == "all":
-        chosen = list(TARGETS.values())
-    else:
-        wanted = [part.strip().lower() for part in args.targets.split(",") if part.strip()]
-        unknown = [w for w in wanted if w not in TARGETS]
-        if unknown:
-            parser.error(f"unknown target(s) {unknown}; pick from {list(TARGETS)}")
-        chosen = [TARGETS[w] for w in wanted]
+    wanted: list[str] = []
+    for part in (p.strip().lower() for p in args.targets.split(",")):
+        if not part:
+            continue
+        part = ALIASES.get(part, part)
+        wanted += GROUPS.get(part, [part])
+    unknown = [w for w in wanted if w not in TARGETS]
+    if unknown:
+        parser.error(f"unknown target(s) {unknown}; pick from {list(TARGETS)}, all or every")
+    chosen = list(dict.fromkeys(TARGETS[w] for w in wanted))
+
+    # every toolchain first, so a missing one stops the run before anything is deleted
+    if any(not is_arm(folder) for folder in chosen):
+        print(f"SDCC {find_tool('sdcc')}")
+    if any(is_arm(folder) for folder in chosen):
+        try:
+            print(f"GCC  {find_arm('gcc')}")
+        except SystemExit as exc:
+            skipped = [folder for folder in chosen if is_arm(folder)]
+            chosen = [folder for folder in chosen if not is_arm(folder)]
+            if not chosen:
+                raise
+            print(f"\n!!! skipping {', '.join(skipped)}: {exc}\n")
 
     out_dir = Path(args.out).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
-    # Always: the names are stable now, so a leftover build would sit next to the
-    # fresh one and invite flashing the wrong file.
-    for stale in [*out_dir.glob("*.hex"), *out_dir.glob("*.map")]:
-        stale.unlink()
+    # The names are stable, so a leftover build would sit next to the fresh one and invite
+    # flashing the wrong file: the chosen targets' old files go (only theirs).
+    stale = [path for folder in chosen for path in stale_files(out_dir, folder)]
+    if AXSEM_TAG in chosen and "Bootloader" in chosen:
+        stale += stale_files(out_dir, f"{AXSEM_TAG}-full")
+    for path in stale:
+        path.unlink()
 
-    print(f"SDCC {find_tool('sdcc')}")
     print(f"output {out_dir}")
     stamped = bump_version(load_version(), args.bump, args.set_to)
     print(f"firmware version {version_text(stamped)}"
@@ -562,10 +682,10 @@ def main(argv: list[str] | None = None) -> int:
     else:
         write_build_log(stamped, results, args.bump)
 
-    if not args.no_bundle and "Vusion" in chosen and "Bootloader" in chosen:
+    if not args.no_bundle and AXSEM_TAG in chosen and "Bootloader" in chosen:
         by_target = {row["target"]: row["hex"] for row in results}
         try:
-            full_hex = bundle(by_target["Vusion"], by_target["Bootloader"],
+            full_hex = bundle(by_target[AXSEM_TAG], by_target["Bootloader"],
                               out_dir, args.version)
         except SystemExit as exc:
             print(f"\n!!! could not bundle: {exc}")
@@ -576,7 +696,7 @@ def main(argv: list[str] | None = None) -> int:
     # is a wire-only test image on purpose.
     over_ota = False
     for row in results:
-        if row["target"] != "Vusion" or not row.get("code"):
+        if row["target"] != AXSEM_TAG or not row.get("code"):
             continue
         if row["code"] > OTA_IMAGE_WINDOW:
             over_ota = True
@@ -595,11 +715,11 @@ def main(argv: list[str] | None = None) -> int:
     for row in results:
         print(f"  {row['hex'].name:<44} {row['bytes']:>8} bytes  {row['usage']}")
     full = locals().get("full_hex")
-    hub = next((row["hex"] for row in results if row["target"] == "Vusion-Hub"), None)
+    hub = next((row["hex"] for row in results if row["target"] == AXSEM_HUB), None)
     if full is not None:
         print(f"\nTag:  python {HERE / 'axsem-flasher.py'} {full} -p COM4")
         print("      (the full image: bootloader + application + the reset vector that")
-        print("       points at the bootloader. Flashing vusion-*.hex alone overwrites")
+        print("       points at the bootloader. Flashing shelfkit-axsem-latest.hex alone overwrites")
         print("       0x0000 with an ljmp to the application and BYPASSES the bootloader,")
         print("       so OTA updates can never be applied.)")
     if hub is not None:

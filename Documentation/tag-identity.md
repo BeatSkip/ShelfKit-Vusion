@@ -11,7 +11,7 @@ SPI flash sector 1, in the gap the OTA update never touches:
 |---|---|---|
 | `0x000000` | OTA header (magic, length, CRC) | app on `BEGIN`, bootloader after flashing |
 | `0x001000` | **identity record**: magic `SKID`, version, flags, node id (LE), CRC-16 | only when the id is (re)assigned |
-| `0x002000` | configuration record: the idle check-in interval (`SM_OP_SET_POLL`). Magic `SKCF`, version, interval in seconds (LE), a zero, CRC-16. Blank = firmware default (300 s). Written by `shelf_cfg_set_poll()` in `Vusion/src/shelf_id.c` | 10 bytes |
+| `0x002000` | configuration record: the idle check-in interval (`SM_OP_SET_POLL`). Magic `SKCF`, version, interval in seconds (LE), a zero, CRC-16. Blank = firmware default (300 s). Written by `shelf_cfg_set_poll()` in `ShelfKit-Axsem/src/shelf_id.c` | 10 bytes |
 | `0x003000` | OTA image | app on `BEGIN` |
 
 The record is checked by its own CRC. A torn write, or a flash sector that never

@@ -3,8 +3,8 @@
         {
             "name": "SDCC",
             "includePath": [
-                "${workspaceFolder}/ShelfKit-Firmware/Vusion-Hub/include",
-                "${workspaceFolder}/ShelfKit-Firmware/Vusion/include",
+                "${workspaceFolder}/ShelfKit-Firmware/ShelfKit-Axsem-Hub/include",
+                "${workspaceFolder}/ShelfKit-Firmware/ShelfKit-Axsem/include",
                 "${workspaceFolder}/ShelfKit-Firmware/Shared/sdk/libmf/include",
                 "${workspaceFolder}/ShelfKit-Firmware/Shared/sdk/libaxdvk2/include",
                 "${workspaceFolder}/ShelfKit-Firmware/Shared/firmware/axradio/inc",

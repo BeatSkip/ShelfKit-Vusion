@@ -104,6 +104,15 @@ def same_port(a: str, b: str) -> bool:
     return bool(a) and bool(b) and a.strip().casefold() == b.strip().casefold()
 
 
+# Release/ also holds the other chip families' builds (ShelfKit-Texas: CC2510, ShelfKit-Silabs:
+# EFR32FG22). They are not AX8052 images: never offer them to an Axsem tag or hub.
+OTHER_FAMILIES = ("shelfkit-texas", "shelfkit-silabs")
+
+
+def axsem_image(name: str) -> bool:
+    return not name.lower().startswith(OTHER_FAMILIES)
+
+
 def hex_kind(name: str) -> str:
     low = name.lower()
     if "-full-" in low:
@@ -123,6 +132,8 @@ def hex_files(folder: Path) -> list[dict]:
         return []
     out = []
     for path in files:
+        if not axsem_image(path.name):
+            continue
         try:
             stat = path.stat()
         except OSError:
@@ -230,6 +241,9 @@ class Flasher:
         if file.suffix.lower() != ".hex" or not file.is_file():
             return {"ok": False, "error": "Pick a .hex file that exists."}
         kind = hex_kind(file.name)
+        if not axsem_image(file.name):
+            return {"ok": False, "error": f"{file.name} is built for another chip family, "
+                                          "not the AX8052 this flasher programs."}
 
         exe = None
         if method == "debugger":

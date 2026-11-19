@@ -1,6 +1,6 @@
 /**
  * @file main.c
- * @brief ShelfKit tag (Vusion): polls the hub every SHELF_POLL_INTERVAL_S seconds
+ * @brief ShelfKit-Axsem tag: polls the hub every SHELF_POLL_INTERVAL_S seconds
  *
  * Every poll is a reliable request (see Shared/firmware/shelflink): the tag
  * sends POLL, the radio drops back into receive mode by itself, and the hub's

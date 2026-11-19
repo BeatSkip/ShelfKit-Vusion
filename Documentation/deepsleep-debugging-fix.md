@@ -35,10 +35,10 @@ The cause was a set of state that the AX8052 and AX5043 lose or leave wrong acro
 - `Shared/firmware/shelfhw/inc/shelfhw.h`: new `shelfhw_radio_wake` prototype.
 - `Shared/firmware/axradio/easyax5043.c`: `PLLLOOP = 0x89` on deep-sleep wake. It also gained `axradio_dbg_snapshot()`, a register snapshot (PWRMODE, POWSTAT, PLLLOOP, PLLRANGINGA, FREQA) for diagnosing this kind of problem.
 - `Shared/firmware/axradio/inc/axradio.h`: declares `axradio_dbg_snapshot()`.
-- `Vusion/src/main.c`: `poll_cb` handles a wake failure, and a `radio ...` register line is logged after each wake.
+- `ShelfKit-Axsem/src/main.c`: `poll_cb` handles a wake failure, and a `radio ...` register line is logged after each wake.
 
 ## Notes
 
 - Never write `PCON` from the poll path (the SWRESET bit causes a boot loop).
-- To isolate sleep problems in future, use `SHELF_RADIO_DEEPSLEEP 0` (radio OFF mode) and `SHELF_MCU_SLEEP 0` (MCU Standby only) in `Vusion/include/shelf_config.h`.
+- To isolate sleep problems in future, use `SHELF_RADIO_DEEPSLEEP 0` (radio OFF mode) and `SHELF_MCU_SLEEP 0` (MCU Standby only) in `ShelfKit-Axsem/include/shelf_config.h`.
 - The diagnostic `radio ...` log line is still in `main.c`. It can be removed once the fix is accepted.

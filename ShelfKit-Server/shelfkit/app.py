@@ -40,7 +40,7 @@ SM_OP_SET_POLL = 13     # shelfmsg.h: [1..2] idle check-in interval in seconds, 
 # default, SHELF_POLL_IDLE_S in the tag's shelf_config.h.
 POLL_INTERVALS_S = (60, 300, 1800, 7200)
 POLL_DEFAULT_S = 300
-# What the tag logs when it has handled one (see Vusion/src/fw_rx.c): "id set 0102"
+# What the tag logs when it has handled one (see ShelfKit-Axsem/src/fw_rx.c): "id set 0102"
 # or "id set FAILED, ...". The link-layer ACK only proves the frame arrived.
 RE_ID_RESULT = re.compile(r"id set (\S+)")
 RE_WIPED = re.compile(r"factory reset")
@@ -75,7 +75,7 @@ RE_POLL_UP = re.compile(r"\bup=(\d+)s\b")
 RE_POLL_IMG = re.compile(r"\bimg=(\d+)/(\d+)\b")
 REFRESH_RESULT = {0: "panel did not react", 1: "done", 2: "timed out"}
 # A tap on the tag (any phone or NFC reader near it) makes the tag poll at once with the
-# fw= report (Vusion/src/main.c, nfc_info). The only other poll with it is the first after a
+# fw= report (ShelfKit-Axsem/src/main.c, nfc_info). The only other poll with it is the first after a
 # reset, about a second after boot, so an fw= poll from a tag that has been up a while is a
 # tap. The hub hears it over the radio: apps get it (@app.on_tap) without the phone page.
 TAP_MIN_UPTIME_S = 30
@@ -1373,7 +1373,8 @@ class App:
             files = sorted(folder.glob("*.hex"), key=lambda p: p.stat().st_mtime, reverse=True)
         except OSError:
             files = []
-        for path in files[:12]:
+        from .flasher import axsem_image
+        for path in [f for f in files if axsem_image(f.name)][:12]:
             try:
                 stat = path.stat()
             except OSError:

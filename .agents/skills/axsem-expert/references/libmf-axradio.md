@@ -115,6 +115,6 @@ Error codes:
 Protocol details are in `Documentation/wireless-link.md`, OTA in `Documentation/ota-update.md`, identity in
 `Documentation/tag-identity.md`. The hub and the server only know addresses and frames.
 
-Configuration switches live in `Vusion/include/shelf_config.h` (`SHELF_*`), in `shelfhw.c`
+Configuration switches live in `ShelfKit-Axsem/include/shelf_config.h` (`SHELF_*`), in `shelfhw.c`
 (`SHELF_FIX_XOSC`, `SHELF_FIX_UART_SLEEP`), and in `sdcc-project.json` `defines` (`SHELF_WAKE_LPXOSC=1`).
 They can be overridden per build with `build-all.py --define NAME=VALUE`.

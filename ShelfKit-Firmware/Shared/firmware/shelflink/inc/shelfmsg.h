@@ -85,7 +85,7 @@
 
 /*
  * Compressed planes (ECO chain coding, Documentation/ECO-ESL-ImageCompression.pdf;
- * encoder ShelfKit-Server/shelfkit/eco.py, decoder Vusion/src/eco_rx.c). Either
+ * encoder ShelfKit-Server/shelfkit/eco.py, decoder ShelfKit-Axsem/src/eco_rx.c). Either
  * plane may come compressed instead of as CHUNKs; the order stays BW, then RED.
  *
  *   ZCHUNK : [1] plane, [2..3] offset in the compressed file (LE), [4..] data

@@ -1,6 +1,6 @@
 ---
 name: ax8052-ax5043-firmware
-description: Use for any firmware work on the AX8052F143 (Axsem/onsemi 8051 MCU with the integrated AX5043 sub-GHz radio). That covers ShelfKit-Firmware (Vusion tag, Vusion-Hub, Bootloader), SDCC/8051 C or assembly, libmf, the axradio/easyax5043 engine, AX5043 registers, the radio FIFO, power modes (standby, sleep, deep sleep), the wake-up timers, clocks and oscillators, GPIO, interrupts, flash/OTA, and battery or power debugging. Load it before writing, reviewing or debugging code for this chip, even for a small change.
+description: Use for any firmware work on the AX8052F143 (Axsem/onsemi 8051 MCU with the integrated AX5043 sub-GHz radio). That covers ShelfKit-Firmware (ShelfKit-Axsem tag, ShelfKit-Axsem-Hub, Bootloader), SDCC/8051 C or assembly, libmf, the axradio/easyax5043 engine, AX5043 registers, the radio FIFO, power modes (standby, sleep, deep sleep), the wake-up timers, clocks and oscillators, GPIO, interrupts, flash/OTA, and battery or power debugging. Load it before writing, reviewing or debugging code for this chip, even for a small change.
 ---
 
 # AX8052F143 + AX5043 firmware
@@ -80,7 +80,7 @@ PDF extraction artefact: the micro sign is lost, so "230 A", "mA" or "ms" in a c
 
 **Workflow (user rules)**
 15. Test builds: `python ShelfKit-Firmware/Tooling/build-all.py ... --no-record`. Never restore `version.json` or `build-log.md` from git.
-16. Serial flashing: flash the **app-only `Release/vusion-*.hex`** with `Tooling/axsem-flasher.py -p COMx`. **Never flash `vusion-full-*.hex` over serial** unless the user explicitly asks; the full image also targets the bootloader region. App-only is safe: the bootloader redirects the app's reset jump into its vector at 0xD7FE.
+16. Serial flashing: flash the **app-only `Release/shelfkit-axsem-*.hex`** with `Tooling/axsem-flasher.py -p COMx`. **Never flash `shelfkit-axsem-full-*.hex` over serial** unless the user explicitly asks; the full image also targets the bootloader region. App-only is safe: the bootloader redirects the app's reset jump into its vector at 0xD7FE.
 17. Commit only when the user asks.
 
 ## Workflow for a change

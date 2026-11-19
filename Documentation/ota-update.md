@@ -70,7 +70,7 @@ boots the application that is still there.
 The CRC is CRC-16/CCITT (poly `0x1021`, init `0xFFFF`) over the image bytes, so
 the sender, the tag and the bootloader share one definition (`ota_crc16`).
 
-## Application side — `Vusion/src/fw_rx.c`
+## Application side — `ShelfKit-Axsem/src/fw_rx.c`
 
 - No buffers: each chunk goes straight to the flash and is folded into the CRC.
 - `BEGIN` erases up to ~0.3 s worth of sectors, so the sender waits before the
@@ -113,7 +113,7 @@ The bootloader moved from `0xE400` to `0xD800` for this feature: at `0xE400` it 
 SDCC's reentrant support for the shared CRC/header code).
 
 A tag that has no bootloader yet gets one with the merged HEX from
-`build-all.py` (`vusion-full-*.hex`), which contains both images and already has the
+`build-all.py` (`shelfkit-axsem-full-*.hex`), which contains both images and already has the
 application's entry in the jump-vector slot — see
 [ShelfKit-Firmware/Bootloader/README.md](../ShelfKit-Firmware/Bootloader/README.md#installing-the-bootloader-and-the-application-at-once).
 
@@ -132,7 +132,7 @@ resetting into a boot that has nothing to apply.
 ### The reset vector is part of the bootloader
 
 The bootloader only runs if `0x0000` holds `ljmp 0xD838`. That is what
-`Release/vusion-full-*.hex` writes, together with the application entry at
+`Release/shelfkit-axsem-full-*.hex` writes, together with the application entry at
 `0xD7FE`. Flashing the application hex on its own puts `ljmp 0x021B` at `0x0000`,
 which starts the application directly: the OTA image is stored in SPI flash and
 never applied, because nothing ever looks at it. The build script's "Tag:" line
@@ -164,8 +164,8 @@ From the server: **Fleet** → click the tag → **Firmware update** → pick th
 From a shell:
 
 ```
-python ShelfKit-Firmware/Tooling/build-all.py                  # Release/vusion-<date>-<hash>.hex
-python ShelfKit-Firmware/Tooling/ota-send.py Release/vusion-…​.hex --addr 0100 -p COM4
+python ShelfKit-Firmware/Tooling/build-all.py                  # Release/shelfkit-axsem-<date>-<hash>.hex
+python ShelfKit-Firmware/Tooling/ota-send.py Release/shelfkit-axsem-…​.hex --addr 0100 -p COM4
 ```
 
 `ota-send.py` converts the Intel HEX to the binary the tag wants (gap-filling with

@@ -18,24 +18,26 @@ Python 3 helpers that build and flash the boards over their serial link. The hos
 ```
 python ShelfKit-Firmware/Tooling/build-all.py
 python ShelfKit-Firmware/Tooling/build-all.py --version 1.2.0
-python ShelfKit-Firmware/Tooling/build-all.py --targets vusion,bootloader
+python ShelfKit-Firmware/Tooling/build-all.py --targets axsem,bootloader
+python ShelfKit-Firmware/Tooling/build-all.py --targets texas,silabs   # CC2510 / EFR32FG22 skeletons
+python ShelfKit-Firmware/Tooling/build-all.py --targets every            # all of them
 python ShelfKit-Firmware/Tooling/build-all.py --clean
 ```
 
 ```
 === one HEX for both ===
-  Release/vusion-full-latest.hex
+  Release/shelfkit-axsem-full-latest.hex
   bootloader 0xD800..0xFA6F  (8819 bytes)
   application 0x0003..0x9FF5  (40921 bytes, entry 0x021B)
   jump vector 0xD7FE = 1B 02
 
 === ready to flash ===
-  vusion-latest.hex       115544 bytes  code 40950/59389, xram 6972/8192
-  vusion-hub-latest.hex    87016 bytes  code 30822/59389, xram 4949/8192
+  shelfkit-axsem-latest.hex       115544 bytes  code 40950/59389, xram 6972/8192
+  shelfkit-axsem-hub-latest.hex    87016 bytes  code 30822/59389, xram 4949/8192
   bootloader-latest.hex    24931 bytes  code 8819/65536, xram 428/8192
 ```
 
-`vusion-full-*.hex` holds the bootloader **and** the application, with the
+`shelfkit-axsem-full-*.hex` holds the bootloader **and** the application, with the
 application's entry installed in the bootloader's jump vector: one flash operation
 for a tag that has neither yet. See
 [../Bootloader/README.md](../Bootloader/README.md#installing-the-bootloader-and-the-application-at-once).
@@ -55,9 +57,9 @@ placement, and the `.mem` figures are printed in the summary.
 
 **File names:** `<target>-latest.hex` by default, or `<target>-<version>.hex` when you
 pass `--version`. The output folder is cleared of old `.hex`/`.map` files on every
-run, so `Release/` always holds exactly the build you just made. The old wording was
-`<target>-<date>-<git hash>[-dirty].hex`. The target name comes from the folder (`vusion`,
-`vusion-hub`, `bootloader`), not from `build.output_name` — both Vusion projects call their build
+run, but only the files of the targets being built (a `texas` build leaves the Axsem files alone). The targets are `axsem`, `axsem-hub`, `bootloader` (together `all`, the default), `texas` and `silabs`; `vusion` and `hub` still work as the old names. `silabs` needs `arm-none-eabi-gcc` and is skipped with a note when it is missing and other targets were asked for. The old wording was
+`<target>-<date>-<git hash>[-dirty].hex`. The target name comes from the folder (`shelfkit-axsem`,
+`shelfkit-axsem-hub`, `bootloader`), not from `build.output_name` — both ShelfKit-Axsem projects call their build
 `firmware`, which would collide.
 
 `Release/` is git-ignored: it is output, and re-running the script regenerates it.
@@ -95,7 +97,7 @@ range is everything the firmware writes.
 ## Flashing a build
 
 ```
-python ShelfKit-Firmware/Tooling/axsem-flasher.py Release/vusion-full-latest.hex -p COM7
+python ShelfKit-Firmware/Tooling/axsem-flasher.py Release/shelfkit-axsem-full-latest.hex -p COM7
 ```
 
 **SDCC: Flash calls this too.** `upload` in each target's `sdcc-project.json` runs this script with

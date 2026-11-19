@@ -1,0 +1,24 @@
+{
+  "name": "TI CC2510F32",
+  "vendor": "Texas Instruments",
+  "build": {
+    "cpu": "mcs51",
+    "mcu": "ti-cc2510f32",
+    "f_cpu": "26000000UL",
+    "extra_flags": ["--xram-loc", "0xF000"],
+    "memory": {
+      "size_iram": 256,
+      "size_xram": 3840,
+      "size_code": 32768
+    },
+    "memory_model": "small",
+    "sdcc": {
+      "target": "mcs51"
+    }
+  },
+  "upload": {
+    "maximum_size": 32768,
+    "maximum_ram_size": 4096,
+    "protocol": "cc-debugger"
+  }
+}

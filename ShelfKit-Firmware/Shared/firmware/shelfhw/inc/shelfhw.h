@@ -1,6 +1,6 @@
 /**
  * @file shelfhw.h
- * @brief Board bring-up shared by the Hub and Vusion firmware
+ * @brief Board bring-up shared by the ShelfKit-Axsem tag and hub firmware
  *
  * One call (shelfhw_init) puts the AX8052F143 into the state the radio engine
  * and the wake-up timers expect, without disturbing the other chips on the

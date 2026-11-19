@@ -1235,6 +1235,23 @@ tr.failed .state-word, tr.failed .detail { color: var(--red); font-weight: 500; 
 .dfl-axis { display: grid; grid-template-columns: 44px minmax(60px, 110px) 1fr 64px; gap: 3px; color: var(--ink-2); font-size: 0.75rem; }
 .dfl-axis > span:nth-child(3) { display: flex; justify-content: space-between; }
 
+/* folding a panel down to its heading */
+.diag-panel h2 .fold {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 32px; margin: -6px 0 -6px -6px;
+  padding: 0 6px; border: 0; background: none; font: inherit; color: inherit; cursor: pointer;
+}
+.diag-panel h2 .fold:hover { background: var(--raised); }
+.diag-panel h2 .fold::before {
+  content: ""; width: 7px; height: 7px; flex: none; margin-top: -3px;
+  border-right: 2px solid currentColor; border-bottom: 2px solid currentColor;
+  transform: rotate(45deg); transition: transform 0.12s;
+}
+.diag-panel.folded h2 .fold::before { transform: rotate(-45deg); margin-top: 0; }
+.diag-panel.folded > :not(.diag-panel-head):not(h2),
+.diag-panel.folded .diag-panel-head > :not(h2) { display: none !important; }
+.diag-panel.folded { gap: 0; }
+.diag-log.folded { height: auto; min-height: 0; }
+
 /* one tag: the glance strip, the comparison, the check-in strip */
 .diag-glance { flex-direction: row; align-items: center; gap: 18px; }
 .diag-glass { --glass-w: 76px; --glass-h: 148px; flex: none; width: 76px; height: 148px; }

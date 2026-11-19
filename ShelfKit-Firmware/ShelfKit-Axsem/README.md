@@ -1,4 +1,4 @@
-# Vusion — the tag target
+# ShelfKit-Axsem — the tag firmware for Axsem AX8052F143 tags
 
 The battery tag half of ShelfKit: it **polls the hub** every couple of minutes and, when the hub has
 content for it, **receives an image and refreshes the panel**. It drives nothing else — the hub
@@ -7,7 +7,7 @@ drives, the tag listens.
 Built for the SES-imagotag **Vusion 2.6" BWR label** (UU340 variant): an **Axsem AX8052F143**
 (8051 core + sub-GHz radio, 26 MHz crystal) driving a Good Display **GDEW026Z39** e-paper panel
 (296×152, black/white/red, IL0373 controller), with an NFC chip and a serial flash on the same SPI bus.
-Same hardware as [`../Vusion-Hub`](../Vusion-Hub); only the firmware role differs.
+Same hardware as [`../ShelfKit-Axsem-Hub`](../ShelfKit-Axsem-Hub); only the firmware role differs.
 
 ## What it does
 
@@ -236,7 +236,7 @@ problem: `OSCRUN` shows the LPXOSC running, and the FRC calibration already used
 
 The radio deep sleep is still the least proven step. If a tag stops making its polls,
 `SHELF_RADIO_DEEPSLEEP 0` falls back to the crystal-on `AXRADIO_MODE_OFF`; removing
-`SHELF_WAKE_LPXOSC` from `Vusion/sdcc-project.json` falls back to the internal RC at
+`SHELF_WAKE_LPXOSC` from `ShelfKit-Axsem/sdcc-project.json` falls back to the internal RC at
 640 Hz.
 
 ### Measuring power without a meter
