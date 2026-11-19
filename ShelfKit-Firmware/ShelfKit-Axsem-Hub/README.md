@@ -22,7 +22,7 @@ radio: always in receive
   line per command: `P` → `PONG`; `S<addr:4><payload><chk:2>` → send one reliable frame and answer
   `SENT <addr> ok|fail att=N`; `B…` → the same for up to 16 frames in one line (the hub sends them back
   to back); `Q<id>` → **pre-arm** that tag, so its next poll reply says "data follows" and the tag keeps
-  listening; `L<hh>` → ask every tag to wait `hh*10` s; `D…` → draw on the hub's own panel (below). The
+  listening; `L<hh>` → ask every tag to wait `hh*10` s; `G0`/`G1` → green activity flashes off/on (`OK led 0|1`, back on after a reset; the banner says `led=1|0`); `D…` → draw on the hub's own panel (below). The
   reply goes out before anything is logged, because the tag only waits `SL_RSP_TIMEOUT_MS`. The boot
   banner (`*** ShelfKit hub, node 0001 net 5a dump=1 batch=1 show=1`) advertises what this build can do:
   `dump` relays a tag's flash read-back payloads, `batch` accepts `B` lines, `show` accepts `D`.

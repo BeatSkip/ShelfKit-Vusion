@@ -25,6 +25,7 @@ DEFAULTS = {
     "wall_size": "full",      # large | full | medium | half | small (WALL_SIZES)
     "axsdb_path": "",         # axsdb.exe, or its folder; empty = look for it
     "show_tag_port": True,    # the optional tag debug serial pane on the Hub screen
+    "hub_led": True,          # the hub's green flash per tag check-in (sent as G0/G1)
     "public_url": "",         # where phones reach the tag pages (a reverse proxy); "" = here
     "inspector_order": [],    # the tag inspector's sections, top to bottom; [] = page order
     "shelf_names": {},        # {"<shelf number>": "name"}: the groups on the shelf wall
@@ -39,7 +40,7 @@ RANGES = {
     "forget_after_s": (300, 86400),
     "low_battery_v": (2.0, 3.2),
 }
-BOOLS = ("show_tag_port",)
+BOOLS = ("show_tag_port", "hub_led")
 STRINGS = {"axsdb_path": 400}      # name -> longest value
 # Tag sizes on the shelf wall, as a fraction of one panel pixel per screen pixel. The page
 # draws them from the same names (SIZES in static/app.js).

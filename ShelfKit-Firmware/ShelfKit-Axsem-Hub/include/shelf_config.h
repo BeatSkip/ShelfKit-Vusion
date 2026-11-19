@@ -20,4 +20,11 @@
  * PB5 and the panel's RST pin. */
 #define HUB_EPD_RST_PULSE   0
 
+/* The green activity flashes (a tag polled, an image is starting). 1 = on at boot; the host
+ * turns them off and on with "G0" / "G1" (the server's Settings > General > Hub LED). The
+ * blue boot pulse and the red fatal-error blink are not affected. */
+#ifndef SHELF_HUB_LED
+#define SHELF_HUB_LED       1
+#endif
+
 #endif /* SHELF_CONFIG_H */

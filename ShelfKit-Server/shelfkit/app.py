@@ -127,6 +127,8 @@ def battery_percent(volts: float) -> int:
     """Remaining capacity of an average CR2450, in percent, from its voltage."""
     return round(battery_level(volts))
 RE_PONG = re.compile(r"^PONG\b")
+# The hub's answer to G0 / G1 (green activity flashes off / on). An older hub says "ERR cmd".
+RE_LED_OK = re.compile(r"^OK led ([01])")
 # Lines only a hub prints: seeing one proves the port is a hub, so it may be sent a heartbeat.
 # (A tag's debug port is never sent one: its UART RX pin is also the panel's reset.)
 RE_HUB_LINE = re.compile(r"^(POLL src=|RSP |PONG\b|SENT |\*\*\* ShelfKit hub)")
@@ -192,6 +194,9 @@ class Pane:
         self.hub_seen = False   # it printed a line only a hub prints (RE_HUB_LINE)
         # the last heartbeat: state None (not checked) | "checking" | "ok" | "fail"
         self.heartbeat: dict = {"state": None, "at": None, "ms": None, "why": None}
+        # the hub LED setting this hub has confirmed ("OK led 0|1"); None = not sent since
+        # the port opened or the hub reset (the hub forgets it on reset)
+        self.led_sent: bool | None = None
 
     def add(self, arrival: int, text: str) -> None:
         self.seq += 1
@@ -401,6 +406,8 @@ class App:
             hiding = self.prefs["show_tag_port"] and not merged["show_tag_port"]
             self.prefs = merged
         self._save_setting(prefs_mod.SETTING_KEY, merged)
+        if "hub_led" in options:
+            threading.Thread(target=self.sync_hub_led, daemon=True).start()
         for key, port in changes.items():
             self._set_pane_port(key, port)
         tag = self.tag_key()
@@ -793,6 +800,11 @@ class App:
                 self._reset_at = None      # the firmware came up: nothing to learn
                 event = ("boot", None, text.strip()[:48])
                 hub_booted = key == self.hub_key()
+                if hub_booted:
+                    pane.led_sent = None        # a reset hub is back at its built-in default
+            led = RE_LED_OK.match(text)
+            if led:
+                pane.led_sent = led.group(1) == "1"
         if counted is not None and self.store is not None:
             # The store owns the counter, so a restart continues the same number.
             self.tags[counted] = self.store.touch_tag(f"{counted:04X}")
@@ -802,6 +814,8 @@ class App:
             self._rearm_pending(only=counted)   # a second command for it is still waiting
         if hub_booted:
             self._rearm_pending()               # a reset hub forgot every pre-arm
+            if not self.prefs.get("hub_led", True):
+                threading.Timer(HEARTBEAT_OPEN_DELAY_S, self.sync_hub_led).start()
         if event is not None:
             self._event(*event)
         installed = None
@@ -1040,6 +1054,7 @@ class App:
             self._save_setting(f"pane.{key}.port", pane.spec.port)
             with self.lock:
                 pane.heartbeat = {"state": None, "at": None, "ms": None, "why": None}
+                pane.led_sent = None
             if self._heartbeat_target(key):
                 threading.Timer(HEARTBEAT_OPEN_DELAY_S, self.heartbeat,
                                 args=(key, "port opened")).start()
@@ -1100,6 +1115,8 @@ class App:
                     pane.heartbeat = dict(pane.heartbeat, state=before)
                 return dict(pane.heartbeat)
             ok = answered_ms is not None
+            if ok:
+                self.sync_hub_led(locked=True)
             with self.lock:
                 pane.heartbeat = {"state": "ok" if ok else "fail", "at": time.time(),
                                   "ms": answered_ms, "why": why}
@@ -1115,6 +1132,33 @@ class App:
             return result
         finally:
             self._hb_lock.release()
+
+    def sync_hub_led(self, locked: bool = False) -> None:
+        """Tell the hub the LED setting (G0 / G1) unless it already confirmed it. The hub
+        starts with its flashes on, so with the setting on nothing is sent until it changes:
+        a hub without the G command is then never bothered. `locked`: the caller holds the
+        heartbeat lock (it is the one waiting for the hub's answers)."""
+        key = self.hub_key()
+        pane = self.panes.get(key)
+        if pane is None or not pane.worker.is_open or not self._heartbeat_target(key):
+            return
+        want = bool(self.prefs.get("hub_led", True))
+        if pane.led_sent == want or (pane.led_sent is None and want):
+            return
+        if not locked and not self._hb_lock.acquire(blocking=False):
+            return                              # the heartbeat in flight will do it
+        try:
+            if self._hub_busy(key):
+                return                          # after the transfer: the next heartbeat
+            with self.lock:
+                start = pane.seq
+            if pane.worker.write(b"G1\n" if want else b"G0\n"):
+                if not self._wait_line(key, RE_LED_OK, start, HEARTBEAT_TIMEOUT_S):
+                    self.note(key, "# hub LED: no answer to G - flash a newer hub firmware "
+                                   "to switch its LED off")
+        finally:
+            if not locked:
+                self._hb_lock.release()
 
     def _heartbeat_loop(self) -> None:
         """Check the hub again when it has been quiet for a while, or did not answer."""

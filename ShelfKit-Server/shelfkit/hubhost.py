@@ -27,6 +27,7 @@ is a reset pulse on the panel (PB5 is both), see HUB_EPD_RST_PULSE in the hub's 
 
 Hub command channel (115200 8N1, one line per command, hex only):
     D<img msg><chk:2>                 -> OK img   (SM_OP_IMG_* for the hub's own panel)
+    G0 / G1                           -> OK led 0|1  (green activity flashes off / on)
     P                                 -> PONG
     S<addr:4><payload><chk:2>         -> SENT <addr> ok|fail att=N     (reliable DATA frame)
 chk = two's complement of the byte sum, so addr+payload+chk adds up to 0 mod 256.

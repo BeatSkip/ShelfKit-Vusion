@@ -21,6 +21,8 @@
 #include "shelf_config.h"
 #include "shelfmsg.h"
 #include "spi.h"
+
+extern uint8_t __xdata hub_led;        /* main.c: the green activity flashes, set by 'G' */
 #include "img_rx.h"
 
 /* The hub can be busy with another tag's poll or a retry for a few seconds, so a
@@ -65,7 +67,8 @@ static void on_begin(void)
     /* Green = "an image is starting". One short flash: the white LED used to be
      * held on for the whole transfer (minutes), which warmed the panel and
      * showed up on the frame. */
-    shelfhw_led_pulse(SHELFHW_LED_GREEN, SHELFHW_LED_PULSE_MS);
+    if (hub_led)
+        shelfhw_led_pulse(SHELFHW_LED_GREEN, SHELFHW_LED_PULSE_MS);
     panel_power_on();
     spi_init();
     dbg_chunks = 0;

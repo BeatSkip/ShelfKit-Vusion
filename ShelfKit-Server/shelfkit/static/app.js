@@ -252,6 +252,7 @@ const ui = {
   aliasesResult: $("aliases-result"),
   setAxsdb: $("set-axsdb"),
   setPublicUrl: $("set-public-url"),
+  setHubLed: $("set-hub-led"),
   setAxsdbState: $("set-axsdb-state"),
 
   navFlash: $("nav-flash"),
@@ -2971,7 +2972,7 @@ function minutesText(seconds) {
 // Stored by the server (shelfkit/prefs.py), so every browser sees the same values.
 const DEFAULT_PREFS = {
   late_after_s: 330, silent_after_s: 630, forget_after_s: 900, low_battery_v: 2.5,
-  fleet_view: "wall", wall_size: "full", show_tag_port: true,
+  fleet_view: "wall", wall_size: "full", show_tag_port: true, hub_led: true,
 };
 const settingsInputs = {
   late_after_s: [ui.setLate, 60],
@@ -2995,6 +2996,7 @@ function loadSettingsForm() {
   setRadio(ui.setSize, prefs.wall_size);
   ui.setAxsdb.value = prefs.axsdb_path || "";
   ui.setPublicUrl.value = prefs.public_url || "";
+  ui.setHubLed.checked = prefs.hub_led !== false;
   setSettingsDirty(false);
 }
 
@@ -3050,6 +3052,7 @@ function settingsFromForm() {
   out.wall_size = radioValue(ui.setSize);
   out.axsdb_path = ui.setAxsdb.value.trim();
   out.public_url = ui.setPublicUrl.value.trim();
+  out.hub_led = ui.setHubLed.checked;
   return out;
 }
 

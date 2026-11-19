@@ -30,6 +30,7 @@
 
 static uint8_t __xdata rsp[SM_RSP_LEN];
 static uint8_t __xdata delay_hint;      /* 10 s units, 0 = no request */
+uint8_t __xdata hub_led = SHELF_HUB_LED; /* green activity flashes; 'G' sets it, img_rx.c reads it */
 /* Tags the host has data queued for: their next poll reply carries SM_CMD_DATA
  * so the tag keeps listening instead of closing its window after the grace. */
 #define PREARM_SLOTS 32     /* keep PREARM_SLOTS in the server's shelfkit/app.py equal */
@@ -123,6 +124,7 @@ static void log_rx(const struct sl_rx __xdata *rx)
  *   P                          -> "PONG"
  *   Q<hhhh>                    -> data is queued for tag hhhh: flag its next poll
  *   L<hh>                      -> ask every tag to wait hh*10 s before the next poll
+ *   G<0|1>                     -> green activity flashes off / on: "OK led 0|1"
  *   S<addr:4><payload...><chk:2>   reliable DATA frame to node addr
  *                              -> "SENT <addr> ok|fail att=N" when finished
  * chk makes the sum of all decoded bytes (addr, payload, chk) 0 mod 256. A bad
@@ -372,7 +374,8 @@ static void log_banner(void)
     log_hex16(SHELF_NODE_ID);
     log_puts(" net ");
     log_hex8(SHELF_NET_ID);
-    log_puts(" dump=1 batch=1 show=1");
+    log_puts(" dump=1 batch=1 show=1 led=");
+    log_dec(hub_led);
     log_puts(" fw=");
     log_dec(SHELF_FW_MAJOR);
     log_puts(".");
@@ -429,6 +432,25 @@ static void host_line(void)
                 log_puts("OK delay\r\n");
             } else {
                 log_puts("ERR hex\r\n");
+            }
+        }
+        else if (line[0] == 'G') {
+            /* G0 / G1: the green activity flashes off / on (until the next reset) */
+            if (line_len >= 2 && (line[1] == '0' || line[1] == '1')) {
+                hub_led = (uint8_t)(line[1] - '0');
+                if (!hub_led && led_lit) {
+                    shelfhw_led(SHELFHW_LED_GREEN, 0);
+                    led_lit = 0;
+                }
+                log_puts(hub_led ? "OK led 1
+
+" : "OK led 0
+
+");
+            } else {
+                log_puts("ERR hex
+
+");
             }
         }
         else if (line[0] == 'S')
@@ -531,7 +553,7 @@ static void on_rx(const struct sl_rx __xdata *rx)
     /* A tag announced itself: one short green flash. Deliberately not a
      * toggle - keeping the LED lit for the whole poll interval is what heated
      * the panel on the tag and made the frame look like a toggle here. */
-    if (rx->type == SL_T_POLL) {
+    if (rx->type == SL_T_POLL && hub_led) {
         shelfhw_led(SHELFHW_LED_GREEN, 1);
         led_lit = 1;
         led_t0 = (uint16_t)wtimer0_curtime();
