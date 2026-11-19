@@ -237,6 +237,29 @@ def main() -> int:
         return False
 
     try:
+        # the heartbeat: the hub is asked P as its port opens, without any tag polling
+        def hub_heartbeat():
+            return next(p for p in get("/api/state")["panes"] if p["key"] == "hub")["heartbeat"]
+        end = time.time() + 5
+        while time.time() < end and hub_heartbeat().get("state") != "ok":
+            time.sleep(0.1)
+        hb = hub_heartbeat()
+        check("the hub is sent a heartbeat when its port opens", hb.get("state") == "ok"
+              and "P" in PORTS["SMOKE1"].written and hb.get("ms") is not None, hb)
+        check("the tag's debug port is never sent one", "P" not in PORTS["SMOKE2"].written,
+              PORTS["SMOKE2"].written)
+        real_write = PORTS["SMOKE1"].write
+        PORTS["SMOKE1"].write = lambda data: (None if bytes(data).strip() == b"P"
+                                              else real_write(data))
+        post("/api/pane/hub/heartbeat")
+        hb = hub_heartbeat()
+        check("a hub that does not answer shows as such", hb.get("state") == "fail", hb)
+        check("... in the event log too", any("hub" in row and "does not answer" in str(row)
+                                              for row in app.events(0)), app.events(0)[-3:])
+        PORTS["SMOKE1"].write = real_write
+        post("/api/pane/hub/heartbeat")
+        check("and answering again once it does", hub_heartbeat().get("state") == "ok")
+
         # the hub's boot banner is what state() and the push read capabilities from
         PORTS["SMOKE1"].feed("*** ShelfKit hub, node 0001 net 5a dump=1 batch=1 show=1\r\n")
         PORTS["SMOKE1"].feed("POLL src=0100 seq=01 rssi=-30 up=12s att=1 hubrssi=-33 vdd=0300\r\n")

@@ -2306,7 +2306,20 @@ function listedPanes() {
 }
 function paneHealth(pane) {
   if (pane.status.startsWith("error")) return { word: "Error", cls: "bad" };
-  return pane.open ? { word: "Connected", cls: "ok" } : { word: "Closed", cls: "off" };
+  if (!pane.open) return { word: "Closed", cls: "off" };
+  const hb = pane.heartbeat || {};
+  if (hb.state === "fail") return { word: "Not answering", cls: "bad" };
+  if (hb.state === "ok") return { word: "Answering", cls: "ok" };
+  if (hb.state === "checking") return { word: "Checking…", cls: "off" };
+  return { word: "Connected", cls: "ok" };
+}
+/** "answered 12 ms, 40 s ago" for the hub's last heartbeat. */
+function heartbeatText(pane) {
+  const hb = pane.heartbeat || {};
+  if (!pane.open || !hb.state) return "";
+  if (hb.state === "checking") return " · checking that the hub answers…";
+  const ago = hb.at ? ` ${ageText(Date.now() / 1000 - hb.at)} ago` : "";
+  return hb.state === "ok" ? ` · answered in ${hb.ms} ms${ago}` : ` · did not answer${ago}`;
 }
 
 function pickHubsView(view, tab) {
@@ -2492,16 +2505,21 @@ function renderHubDetail(pane, rows) {
 
   const silent = rows.filter((row) => row.status === "silent").length;
   const rowSig = JSON.stringify([pane.key, pane.port, pane.baud, pane.open, pane.status, pane.dtr,
-    pane.lines, hub ? rows.length : 0, silent]);
+    pane.lines, hub ? rows.length : 0, silent, heartbeatText(pane)]);
   if (signatures.hubRows !== rowSig) {
     signatures.hubRows = rowSig;
     const open = () => pickHubsView(pane.key, "console");
     const list = [
       hubRow("Connection",
-        `USB serial on ${pane.port || "no port yet"} at ${pane.baud} baud · ${pane.status}`,
+        `USB serial on ${pane.port || "no port yet"} at ${pane.baud} baud · ${pane.status}${heartbeatText(pane)}`,
         pane.open ? "Close" : "Open",
         () => command(pane.key, pane.open ? "close" : "open", { port: pane.port, baud: pane.baud })),
     ];
+    if (hub && pane.open && pane.heartbeat?.state) {
+      list.push(hubRow("Heartbeat",
+        "The server sends the hub P and expects PONG: when the port opens, and after two quiet minutes",
+        "Check now", () => command(pane.key, "heartbeat")));
+    }
     if (hub) {
       list.push(hubRow("Tags",
         `${plural(rows.length, "tag")} check in through this hub${silent ? `, ${silent} silent` : ""}`,
@@ -2624,10 +2642,11 @@ function renderChrome() {
 
   const hub = hubPane();
   const open = !!hub?.open;
-  ui.linkState.hidden = open;
-  setClass(ui.linkState, `link-state${open ? "" : " closed"}`);
-  setClass(ui.linkMark, `mark ${open ? "s-online" : "s-alert"}`);
-  setText(ui.linkText, open ? `Hub on ${hub.port}` : "Hub port closed");
+  const dead = open && hub.heartbeat?.state === "fail";
+  ui.linkState.hidden = open && !dead;
+  setClass(ui.linkState, `link-state${open && !dead ? "" : " closed"}`);
+  setClass(ui.linkMark, `mark ${open && !dead ? "s-online" : "s-alert"}`);
+  setText(ui.linkText, dead ? "Hub not answering" : open ? `Hub on ${hub.port}` : "Hub port closed");
 
   const waiting = (state.queue || []).filter(
     (job) => job.state === "pending" || job.state === "running").length;

@@ -127,6 +127,17 @@ def battery_percent(volts: float) -> int:
     """Remaining capacity of an average CR2450, in percent, from its voltage."""
     return round(battery_level(volts))
 RE_PONG = re.compile(r"^PONG\b")
+# Lines only a hub prints: seeing one proves the port is a hub, so it may be sent a heartbeat.
+# (A tag's debug port is never sent one: its UART RX pin is also the panel's reset.)
+RE_HUB_LINE = re.compile(r"^(POLL src=|RSP |PONG\b|SENT |\*\*\* ShelfKit hub)")
+# The heartbeat: 'P' must answer 'PONG'. Sent when the hub's port opens, then whenever the hub
+# has said nothing for HEARTBEAT_QUIET_S (tags may poll only every few minutes, or not at all).
+HEARTBEAT_TIMEOUT_S = 2.0
+HEARTBEAT_TRIES = 3
+HEARTBEAT_QUIET_S = 120.0
+HEARTBEAT_TICK_S = 10.0
+# after opening: let a board that resets on open print its banner first
+HEARTBEAT_OPEN_DELAY_S = 0.5
 # What the board says when it comes up. Which one appears after a reset tells us
 # which BOOT-pin level the firmware needs (see App.pulse_reset).
 RE_BOOTLOADER = re.compile(r"^AX8052 Bootloader")
@@ -178,6 +189,9 @@ class Pane:
         self.epoch = 0
         # Wakes anything waiting for a line (the image push waits for SENT/PONG).
         self.cond = threading.Condition()
+        self.hub_seen = False   # it printed a line only a hub prints (RE_HUB_LINE)
+        # the last heartbeat: state None (not checked) | "checking" | "ok" | "fail"
+        self.heartbeat: dict = {"state": None, "at": None, "ms": None, "why": None}
 
     def add(self, arrival: int, text: str) -> None:
         self.seq += 1
@@ -212,6 +226,8 @@ class Pane:
             "bytes": worker.rx_bytes,
             "epoch": self.epoch,
             "cursor": self.seq,
+            # a closed port has no heartbeat to speak of
+            "heartbeat": dict(self.heartbeat) if worker.is_open else {"state": None},
         }
 
 
@@ -278,6 +294,8 @@ class App:
         self._restore()
         self.hubdisp = HubDisplay(self, display_opts)
         self.hubdisp.start()
+        self._hb_lock = threading.Lock()        # one heartbeat at a time
+        threading.Thread(target=self._heartbeat_loop, name="hub-heartbeat", daemon=True).start()
         if auto_open:
             for key in self.keys:
                 if key == self.tag_key() and not self.prefs["show_tag_port"]:
@@ -707,6 +725,8 @@ class App:
             if pane is None:
                 return
             pane.add(next(self._arrivals), text)
+            if not text.startswith("#") and RE_HUB_LINE.match(text):
+                pane.hub_seen = True
             rsp = RE_RSP.match(text)
             if rsp:
                 self.rsp_cmd[int(rsp.group(1), 16)] = (int(rsp.group(2), 16), time.time())
@@ -998,6 +1018,11 @@ class App:
             # Remember the port for next time - as a pre-filled choice, not as an
             # automatic open: opening re-applies the modem lines.
             self._save_setting(f"pane.{key}.port", pane.spec.port)
+            with self.lock:
+                pane.heartbeat = {"state": None, "at": None, "ms": None, "why": None}
+            if self._heartbeat_target(key):
+                threading.Timer(HEARTBEAT_OPEN_DELAY_S, self.heartbeat,
+                                args=(key, "port opened")).start()
             self._save_setting(f"pane.{key}.baud", pane.spec.baud)
             self._event("open", None, f"{pane.spec.name}={pane.spec.port}")
 
@@ -1008,6 +1033,86 @@ class App:
         pane.worker.close()
         with self.lock:
             self.status = f"{pane.spec.name}: closed"
+
+    # ── the hub's heartbeat ────────────────────────────────────────────────
+    def _heartbeat_target(self, key: str) -> bool:
+        """Only the hub's port, and only once it is known to be a hub: named "hub", or it
+        has printed something only a hub prints."""
+        pane = self.panes.get(key)
+        if pane is None or key != self.hub_key():
+            return False
+        return pane.spec.name.strip().lower() == "hub" or pane.hub_seen
+
+    def _hub_busy(self, key: str) -> bool:
+        """A transfer, read-back or flash owns the hub's command channel right now."""
+        return bool((self.flash.active and self.flash.pane == key) or self.sending
+                    or self.display_busy or self.dump.get("active")
+                    or any(job["state"] == "running" for job in self.queue))
+
+    def heartbeat(self, key: str, why: str = "check") -> dict:
+        """Send the hub 'P' and wait for 'PONG' (a few tries). Records the result on the
+        pane, notes a change in its log and the event log, and returns it."""
+        pane = self.panes.get(key)
+        if pane is None or not pane.worker.is_open:
+            return {"state": None, "error": "the port is not open"}
+        if not self._heartbeat_target(key):
+            return {"state": None, "error": "not a hub port"}
+        if not self._hb_lock.acquire(blocking=False):
+            return dict(pane.heartbeat)                  # one is already on its way
+        try:
+            with self.lock:
+                before = pane.heartbeat.get("state")
+                pane.heartbeat = dict(pane.heartbeat, state="checking", why=why)
+            answered_ms = None
+            for _try in range(HEARTBEAT_TRIES):
+                if self._hub_busy(key) or not pane.worker.is_open:
+                    break                                # a transfer proves more than we would
+                with self.lock:
+                    start = pane.seq
+                sent = time.monotonic()
+                if not pane.worker.write(b"P\n"):
+                    break
+                if self._wait_line(key, RE_PONG, start, HEARTBEAT_TIMEOUT_S):
+                    answered_ms = round((time.monotonic() - sent) * 1000)
+                    break
+            if answered_ms is None and self._hub_busy(key):
+                with self.lock:                          # not a verdict: try again later
+                    pane.heartbeat = dict(pane.heartbeat, state=before)
+                return dict(pane.heartbeat)
+            ok = answered_ms is not None
+            with self.lock:
+                pane.heartbeat = {"state": "ok" if ok else "fail", "at": time.time(),
+                                  "ms": answered_ms, "why": why}
+                result = dict(pane.heartbeat)
+            if ok and before != "ok":
+                self.note(key, f"# heartbeat: the hub answers ({answered_ms} ms, {why})")
+                if before == "fail":
+                    self._event("hub", None, "the hub answers again")
+            elif not ok and before != "fail":
+                self.note(key, f"# heartbeat: no PONG to P after {HEARTBEAT_TRIES} tries ({why})"
+                               " - is the hub's firmware running, and is this its port?")
+                self._event("hub", None, f"the hub does not answer ({why})")
+            return result
+        finally:
+            self._hb_lock.release()
+
+    def _heartbeat_loop(self) -> None:
+        """Check the hub again when it has been quiet for a while, or did not answer."""
+        while True:
+            time.sleep(HEARTBEAT_TICK_S)
+            try:
+                key = self.hub_key()
+                pane = self.panes.get(key)
+                if pane is None or not pane.worker.is_open or not self._heartbeat_target(key):
+                    continue
+                hb = pane.heartbeat
+                quiet = time.time() - max(pane.last_at or 0.0, hb.get("at") or 0.0)
+                failing = hb.get("state") == "fail" and time.time() - (hb.get("at") or 0) > 30
+                if (quiet >= HEARTBEAT_QUIET_S or failing or hb.get("state") is None) \
+                        and not self._hub_busy(key):
+                    self.heartbeat(key, "hub was quiet" if hb.get("state") else "first check")
+            except Exception:  # noqa: BLE001 - the checker must keep running
+                pass
 
     def clear_pane(self, key: str) -> None:
         pane = self.panes.get(key)

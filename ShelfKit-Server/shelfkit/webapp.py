@@ -398,6 +398,8 @@ class Handler(BaseHTTPRequestHandler):
             self.app.close_pane(key)
         elif action == "clear":
             self.app.clear_pane(key)
+        elif action == "heartbeat":
+            self.app.heartbeat(key, "asked from the page")
         elif action == "line":
             line = str(body.get("line") or "").lower()
             if line not in ("dtr", "rts"):
