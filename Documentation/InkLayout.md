@@ -89,7 +89,7 @@ Every element also takes:
 | `<bar>` | A horizontal gauge | `value`, `max`, `color`, `bg` |
 | `<line>` | A rule | `color`, `width`, `dash` |
 | `<spacer>` | Empty space | `w`, `h` (`fill` pushes the following content to the end) |
-| `<image>` | A picture the app supplies | `src` (a key in the app's data), `dither` (threshold/floyd/ordered) |
+| `<image>` | A picture from the app's own folder: a `.png`, or a `.sprite` (pixel art as text: `#` black, `r` red, `w` white, `.` see-through, `;` comments), reduced to the display's colours | `src` (a file name next to `layout.xml`), `scale` (whole factor 1-8), `color` (recolours all its ink) |
 
 `<rect>`, `<circle>` and `<path>` from SVG are deliberately absent at first. They are
 what invites a model to compute coordinates. They can be added later inside a
@@ -236,7 +236,8 @@ label keeps using system fonts (Tahoma/Consolas) until it is moved onto InkLayou
 **Built** (`ShelfKit-Server/shelfkit/inklayout/`, tests in `tests/inklayout_test.py`):
 - **L1:**
   - Parse and validation (DOCTYPE/entities refused, size and node caps)
-  - `col`/`row`/`grid`/`stack`/`text`/`icon`/`bar`/`line`/`spacer`
+  - `col`/`row`/`grid`/`stack`/`text`/`icon`/`image`/`bar`/`line`/`spacer`
+  - 54 pixel icons (`inklayout/icons.py`); `<image>` sprites from the app's folder (`inklayout/sprites.py`, tests in `tests/sprites_test.py`)
   - `w`/`h` as px, %, `fill`, `fill:N`, `auto`; `padding`, `gap`, `align`, `justify`
   - `border`, `radius`, colours, and the `checker`/`dots`/`hatch` patterns
   - Text fit: `ellipsis`, `shrink` and `wrap`, with `lines`

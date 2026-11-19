@@ -26,7 +26,7 @@ from PIL import Image, ImageDraw
 
 from .. import displays
 from ..service_image import font as _load_font
-from . import icons
+from . import icons, sprites
 from .expr import MISSING, ExprError, as_text, evaluate, interpolate
 
 MAX_SOURCE = 64 * 1024
@@ -48,6 +48,7 @@ ATTRS = {
     "stack": COMMON | {"align"},
     "text": COMMON | {"size", "font", "bold", "color", "align", "fit", "lines"},
     "icon": COMMON | {"name", "size", "color"},
+    "image": COMMON | {"src", "scale", "color"},
     "bar": COMMON | {"value", "max", "color"},
     "line": COMMON | {"color", "width", "dash"},
     "spacer": {"w", "h", "if", "id"},
@@ -88,11 +89,25 @@ class LayoutResult:
 
 
 class _Ctx:
-    def __init__(self, preset: displays.DisplayPreset, data_ctx: dict) -> None:
+    def __init__(self, preset: displays.DisplayPreset, data_ctx: dict,
+                 assets: "sprites.Assets | None" = None) -> None:
         self.preset = preset
         self.data = data_ctx
         self.diags: list[dict] = []
         self.nodes = 0
+        self.assets = assets
+        self._sprites: dict[str, object] = {}
+
+    def sprite(self, node: Node):
+        """The node's <image src> in the display's colours, or None (with an error)."""
+        src = (node.attrs.get("src") or "").strip()
+        if src not in self._sprites:
+            try:
+                self._sprites[src] = sprites.load(self.assets, src, dict(self.preset.colors))
+            except sprites.SpriteError as exc:
+                self._sprites[src] = None
+                self.diag("error", node.path, str(exc))
+        return self._sprites[src]
 
     def diag(self, level: str, at: str, msg: str) -> None:
         if not any(d["at"] == at and d["msg"] == msg for d in self.diags):
@@ -467,6 +482,10 @@ def _measure(node: Node, ctx: _Ctx, max_w: int) -> tuple[int, int]:
     elif tag == "icon":
         s = _icon_size(node, ctx)
         w, h = s, s
+    elif tag == "image":
+        spr = ctx.sprite(node)
+        k = ctx.integer(node, "scale", 1, 1, 8)
+        w, h = (spr.width * k, spr.height * k) if spr is not None else (0, 0)
     elif tag == "bar":
         w, h = min(inner, 40), 8
     elif tag == "line":
@@ -763,6 +782,8 @@ def _draw(node: Node, ctx: _Ctx, img: Image.Image, ox: int, oy: int) -> None:
         _draw_text(node, ctx, sub, sx, sy, inner)
     elif tag == "icon":
         _draw_icon(node, ctx, sub, sx, sy, inner)
+    elif tag == "image":
+        _draw_image(node, ctx, sub, sx, sy, inner)
     elif tag == "bar":
         _draw_bar(node, ctx, sub, sx, sy, inner)
     elif tag == "line":
@@ -814,6 +835,32 @@ def _draw_icon(node, ctx, img, ox, oy, inner) -> None:
     ImageDraw.Draw(img).point(pts, fill=colour)
 
 
+def _draw_image(node, ctx, img, ox, oy, inner) -> None:
+    spr = ctx.sprite(node)
+    if spr is None:
+        return
+    k = ctx.integer(node, "scale", 1, 1, 8)
+    if k > 1:
+        spr = spr.resize((spr.width * k, spr.height * k), Image.NEAREST)
+    colour = ctx.colour(node, "color", None)
+    if colour is not None:              # every pixel that is not white takes this colour
+        white = tuple(ctx.preset.colors.get("white", (255, 255, 255)))
+        spr = spr.copy()                # never recolour the cached one
+        px = spr.load()
+        for y in range(spr.height):
+            for x in range(spr.width):
+                r, g, b, a = px[x, y]
+                if a and (r, g, b) != white:
+                    px[x, y] = (*colour, 255)
+    x0, y0, x1, y1 = inner
+    if spr.width > x1 - x0 or spr.height > y1 - y0:
+        ctx.diag("warn", node.path, f"the picture is {spr.width}x{spr.height} but has only "
+                 f"{x1 - x0}x{y1 - y0}: it is cut. Use a smaller scale or give it more room")
+    x0 += max(0, (x1 - x0 - spr.width) // 2)
+    y0 += max(0, (y1 - y0 - spr.height) // 2)
+    img.paste(spr.convert("RGB"), (x0 - ox, y0 - oy), spr.split()[3])
+
+
 def _draw_bar(node, ctx, img, ox, oy, inner) -> None:
     value, top = ctx.number(node, "value", 0.0), ctx.number(node, "max", 1.0)
     frac = 0.0 if top <= 0 else max(0.0, min(1.0, value / top))
@@ -857,6 +904,8 @@ def _collect(node: Node, out: list, lines: list, depth: int = 0) -> None:
         desc += f" '{shown}' ({node.attrs.get('font', 'sans')} {node.size}{bold})"
     elif node.tag == "icon":
         desc += f" {node.attrs.get('name')}"
+    elif node.tag == "image":
+        desc += f" {node.attrs.get('src')}"
     if node.attrs.get("bg"):
         desc += f" bg={node.attrs['bg']}"
     out.append(entry)
@@ -868,13 +917,15 @@ def _collect(node: Node, out: list, lines: list, depth: int = 0) -> None:
 # ── entry point ────────────────────────────────────────────────────────────
 def render(source: str, data: dict | None = None, *, tag: dict | None = None,
            display: str | None = None, now: datetime | None = None,
-           shared: dict | None = None, orientation: str | None = None) -> LayoutResult:
+           shared: dict | None = None, orientation: str | None = None,
+           assets: "sprites.Assets | None" = None) -> LayoutResult:
     """Render a <screen> document. Never raises on bad input: see .diagnostics.
-    `orientation` (portrait/landscape), when given, wins over <screen orientation=>."""
+    `orientation` (portrait/landscape), when given, wins over <screen orientation=>.
+    `assets` is where <image src> files are found (the app's folder)."""
     scope = {"data": data if data is not None else {}, "tag": tag or {},
              "shared": shared or {}, "now": now or datetime.now()}
     preset = displays.preset(display)
-    ctx = _Ctx(preset, scope)
+    ctx = _Ctx(preset, scope, assets)
     root = _parse(source or "", ctx)
 
     if root is not None and display is None and root.attrib.get("display"):

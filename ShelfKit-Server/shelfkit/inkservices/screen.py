@@ -16,6 +16,7 @@ import re
 from PIL import Image
 
 from .. import inklayout
+from ..inklayout import sprites
 from .canvas import Canvas
 from .sdk import InkApp, TagContext
 
@@ -76,7 +77,7 @@ def draw_screen(app: InkApp, tag: TagContext,
         raise AppError(f"@app.data must return a dict, not {type(data).__name__}")
     result = inklayout.render(path.read_text(encoding="utf-8"), data, tag=tag_view(tag),
                               display=tag.display.id, now=tag.now, shared=tag.shared,
-                              orientation=base)
+                              orientation=base, assets=sprites.Assets(app.folder))
     if not result.ok:
         raise LayoutError(result)
     return result.image, result

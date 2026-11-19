@@ -551,7 +551,7 @@
   }
 
   // ── the explorer's context menu ──────────────────────────────────────────
-  const FILE_NAME = /^[A-Za-z0-9_-][A-Za-z0-9_.-]{0,60}\.(py|xml|md|json|txt|toml)$/;   // develop.EDITABLE
+  const FILE_NAME = /^[A-Za-z0-9_-][A-Za-z0-9_.-]{0,60}\.(py|xml|md|json|txt|toml|sprite)$/;   // develop.EDITABLE
   const NEW_KINDS = {
     file: { label: "New file…", ext: "", text: () => "" },
     py: { label: "New Python module…", ext: ".py", text: (n) => `"""${n}: part of the ${D.app} app."""\n` },
@@ -649,8 +649,8 @@
       if (name && ext && !/\.[A-Za-z0-9]+$/.test(name)) name += ext;
       if (!name) return { error: "" };
       if (!FILE_NAME.test(name)) {
-        return { error: /\.[A-Za-z0-9]+$/.test(name) ? "Use .py, .xml, .md, .json, .txt or .toml, and letters, digits, - _ ."
-          : "Add an extension: .py, .xml, .md, .json, .txt or .toml" };
+        return { error: /\.[A-Za-z0-9]+$/.test(name) ? "Use .py, .xml, .md, .json, .txt, .toml or .sprite, and letters, digits, - _ ."
+          : "Add an extension: .py, .xml, .md, .json, .txt, .toml or .sprite" };
       }
       if (D.files.some((f) => f.name.toLowerCase() === name.toLowerCase())) return { error: `There is already a ${name}` };
       return { name };
@@ -916,7 +916,9 @@
       }
       const seq = ++D.layoutSeq;
       try {
-        const r = await api("/api/layout/render", { layout: D.edits[name], data: (D.vt && D.vt.data) || {} });
+        const sprites = Object.fromEntries(Object.entries(D.edits).filter(([n]) => n.endsWith(".sprite")));
+        const r = await api("/api/layout/render", { layout: D.edits[name], data: (D.vt && D.vt.data) || {},
+          app: D.app, files: sprites });
         if (seq !== D.layoutSeq) return;
         D.draft = { png: r.png, diagnostics: r.diagnostics };
       } catch (e) {

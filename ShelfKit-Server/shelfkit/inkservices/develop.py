@@ -49,13 +49,14 @@ from http import HTTPStatus
 from pathlib import Path
 
 from .. import ai, inklayout
+from ..inklayout import sprites
 from . import appsettings, phone
 from . import sdk as sdk_module
 from .screen import AppError, tag_view
 
 VIRTUAL = "FFF0"
 VIRTUAL_SHARED = "FFF0:shared"
-EDITABLE = re.compile(r"^[A-Za-z0-9_-][A-Za-z0-9_.-]{0,60}\.(py|xml|md|json|txt|toml)$")
+EDITABLE = re.compile(r"^[A-Za-z0-9_-][A-Za-z0-9_.-]{0,60}\.(py|xml|md|json|txt|toml|sprite)$")
 MAX_FILE = 256_000
 CHECKPOINTS_KEEP = 40
 HISTORY_KEEP = 12            # messages of the agent conversation kept per app
@@ -353,8 +354,12 @@ HOW AN APP RUNS (the host, shelfkit/inkservices/host.py)
   handle None). Never write a key or a password into a file. You can add, change and remove
   them in "settings" (below). Per-tag settings are app.config_field(...) and tag.config.
 - Imports: the Python standard library and shelfkit.inkservices only.
-- Files you may write: app.py, layout.xml and other .py .xml .md .json .txt .toml files in the
-  app folder (plain names, no folders).
+- Files you may write: app.py, layout.xml and other .py .xml .md .json .txt .toml .sprite files
+  in the app folder (plain names, no folders).
+- Pictures: use a built-in <icon> when one fits (the InkLayout reference lists them). For
+  anything else write a small .sprite file (pixel art as text: # black, r red, w white,
+  . see-through, ; comments; 8 to 24 px a side) and show it with
+  <image src="name.sprite" scale="2"/>. The owner may also drop .png files in the folder.
 
 GOOD HABITS
 - Text must fit its box: fit="shrink", lines= and | default:"-" in the layout.
@@ -713,8 +718,10 @@ def _propose(host, job: dict, current: dict, proposed: dict, var_preview: dict |
     if layout_name:
         try:
             data, tagv, shared, now, display = _virtual_view(host, job["app"], var_preview)
+            folder = getattr(host._app(job["app"]), "folder", None)
             result = inklayout.render(clean[layout_name], data, tag=tagv, display=display,
-                                      now=now, shared=shared)
+                                      now=now, shared=shared,
+                                      assets=sprites.Assets(folder, clean))
             buf = io.BytesIO()
             result.image.save(buf, format="PNG")
             job["preview"] = base64.b64encode(buf.getvalue()).decode("ascii")

@@ -37,10 +37,11 @@ import io
 from http import HTTPStatus
 
 from .. import displays, inklayout
+from ..inklayout import sprites
 from .screen import AppError
 
 _HEX = set("0123456789ABCDEF")
-_SOURCE = {".py", ".xml", ".md", ".txt", ".json", ".toml"}   # what "Open the code" shows
+_SOURCE = {".py", ".xml", ".md", ".txt", ".json", ".toml", ".sprite"}   # what "Open the code" shows
 
 
 def _hex(value) -> str | None:
@@ -134,10 +135,19 @@ def handle_get(handler, path: str, query: dict) -> bool:
 
 def handle_post(handler, path: str, body: dict) -> bool:
     if path == "/api/layout/render":
+        # <image src> needs an app's folder; files: its unsaved .sprite texts, from the editor
+        assets = None
+        host = _host(handler) if body.get("app") else None
+        item = host.loaded.get(str(body.get("app"))) if host is not None else None
+        if item is not None:
+            unsaved = body.get("files") if isinstance(body.get("files"), dict) else {}
+            assets = sprites.Assets(getattr(item.app, "folder", None) or item.path,
+                                    {str(k): str(v) for k, v in unsaved.items()
+                                     if str(k).endswith(".sprite")})
         result = inklayout.render(str(body.get("layout") or ""),
                                   body.get("data") if isinstance(body.get("data"), dict) else {},
                                   tag=body.get("tag") if isinstance(body.get("tag"), dict) else None,
-                                  display=body.get("display") or None)
+                                  display=body.get("display") or None, assets=assets)
         buf = io.BytesIO()
         result.image.save(buf, format="PNG")
         handler._json({"ok": result.ok, "png": base64.b64encode(buf.getvalue()).decode("ascii"),

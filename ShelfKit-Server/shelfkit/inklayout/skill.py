@@ -47,6 +47,8 @@ ATTR_DOCS = {
     "fit": "ellipsis (default: cut with …), shrink (smaller sizes until it fits), wrap (as many lines as fit)",
     "lines": "maximum number of lines (default 1; with fit=wrap: as many as fit)",
     "name": "the icon's name",
+    "src": "an <image>'s file in the app's folder: name.png or name.sprite",
+    "scale": "an <image>'s whole-number zoom, 1 to 8 (default 1)",
     "value": "the bar's value",
     "max": "the bar's full value (default 1)",
     "width": "line thickness in pixels",
@@ -64,6 +66,8 @@ ELEMENT_DOCS = {
              "bottom-left, bottom-right, top, bottom, left, right)",
     "text": "words; the only element that shows text",
     "icon": f"a built-in pixel icon, size a multiple of {icons.BASE}",
+    "image": "a picture from the app's own folder (a .png, or .sprite pixel art), "
+             "reduced to the display's colours; color recolours all its ink",
     "bar": "a horizontal gauge, filled value/max",
     "line": "a rule: horizontal in a col, vertical in a row",
     "spacer": "empty space; h=\"fill\" pushes what follows to the bottom",
@@ -215,8 +219,8 @@ draws it pixel-sharp, and tells you in words what did not fit.
 
 ## Elements
 """]
-    for el in ("screen", "col", "row", "grid", "stack", "text", "icon", "bar", "line", "spacer",
-               "repeat"):
+    for el in ("screen", "col", "row", "grid", "stack", "text", "icon", "image", "bar", "line",
+               "spacer", "repeat"):
         attrs = sorted(ATTRS[el] - {"id"})
         out.append(f"- **`<{el}>`**: {ELEMENT_DOCS[el]}. Attributes: "
                    + ", ".join(f"`{a}`" for a in attrs))
@@ -244,6 +248,28 @@ Fonts: {' and '.join(FONTS)}. How many characters fit across the screen (with 6 
 ## Icons
 
 {', '.join(icons.names())}. Sizes: {', '.join(map(str, icons.sizes()))}.
+Prefer an icon when one fits: they are drawn for this panel.
+
+## Pictures (sprites)
+
+For a picture no icon covers, put a file next to layout.xml and show it with
+`<image src="bin.sprite" scale="3"/>`. A `.sprite` file is pixel art as text, one
+character per pixel: `#` black, `r` red, `w` white, `.` nothing (see-through); lines
+starting with `;` are comments. Keep it small (8 to 24 pixels a side) and let `scale`
+enlarge it in whole steps; `color="white"` recolours it for a dark background:
+
+```
+; bin, 8 x 8
+.######.
+########
+.#.##.#.
+.#.##.#.
+.#.##.#.
+.######.
+```
+
+A `.png` works too; it is reduced to the display's colours (transparent stays
+see-through). Draw it the size it should be shown, or a whole fraction of it.
 
 ## Examples
 """)

@@ -22,7 +22,7 @@
     if (/\.py$/.test(name)) return "python";
     if (/\.xml$/.test(name)) return "xml";
     if (/\.json$/.test(name)) return "json";
-    if (/\.(md|toml|txt)$/.test(name)) return "text";
+    if (/\.(md|toml|txt|sprite)$/.test(name)) return "text";
     return "text";
   }
   const LANG_NAME = { python: "Python", xml: "InkLayout XML", json: "JSON", text: "Plain text" };

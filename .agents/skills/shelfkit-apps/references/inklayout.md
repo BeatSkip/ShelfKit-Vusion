@@ -36,17 +36,17 @@ The full spec is in `Documentation/InkLayout.md`, and the engine is `ShelfKit-Se
 ```
 
 - **Containers:** `col`, `row`, `grid` (cols, cell-h), `stack`.
-- **Content:** `text`, `icon`, `bar`, `line`, `spacer`. `image` is specified but not built yet.
+- **Content:** `text`, `icon`, `image`, `bar`, `line`, `spacer`. `<image src="bin.sprite" scale="3" color="white"/>` shows a picture from the app's folder: a `.png` or a `.sprite` (pixel art as text, `#` black, `r` red, `w` white, `.` see-through, `;` comments), reduced to the display's colours and scaled by whole factors. Unsaved editor and proposal files win over the folder. Develop can edit `.sprite` files and the agent can write them.
 - **Sizes:** px, `%`, `fill`, `fill:N` or `auto`. Also `padding`, `gap`, `align`, `justify`, `bg`, `border`, `radius`, `if=`.
 - **Bindings:** `{{ path | filter }}` over `tag.*`, `data.*`, `now`. Filters: `upper`, `lower`, `time`, `date`, `round`, `default`, `count`. Supports `a ? 'x' : 'y'`, comparisons and `and/or/not`, plus `<repeat each as>` with `loop.index/first/last`.
-- **Icons** (pixel-drawn, whole-factor scaling): battery, bell, calendar, check, clock, cloud, cross, heart, home, message, moon, pill, rain, sun, warning.
+- **Icons** (54, pixel-drawn on 12x12, whole-factor scaling): battery, bed, bell, bike, bolt, bulb, bus, calendar, car, cart, check, clock, cloud, cross, cup, down, drop, flag, fog, gear, gift, heart, home, info, key, leaf, left, lock, mail, message, minus, moon, music, partly, person, phone, pill, pin, plus, power, question, rain, refresh, right, snow, star, sun, thermometer, trash, umbrella, up, warning, wifi, wind.
 - **Display presets:** only `vusion-2.6-bwr` (152×296, black/white/red) so far. `GET /api/layout/displays` lists them.
 
 ## Status
 
 Built:
 - L1: the engine, diagnostics and boxes
-- Most of L2: bindings, repeat, if, icons, bar
+- Most of L2: bindings, repeat, if, icons, bar, image (sprites)
 - L3: the skill file
 
 Not built:
