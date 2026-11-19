@@ -12,6 +12,9 @@ long-lived poll connection per browser tab. The API is small and boring:
     POST /api/flash/cancel     stop it (the chip may be left half-programmed)
     GET  /api/voltage?tag=0100&since=<unix>&until=<unix>   a tag's voltage readings and drain
     GET  /api/events?tag=0100&limit=2000   one tag's own event log, oldest first
+    GET  /api/diag/fleet?since=&until=&tags=0100,0101   every tag's drain, check-ins and pushes; firmware compared
+    GET  /api/diag/band?since=&until=&exclude=0100   the fleet's normal voltage change (quartiles)
+    GET  /api/diag/tag?tag=0100   one tag's last 24 h of check-ins and its recent queued commands
     GET  /api/power-runs?tag=0100   a tag's archived power measurements (+ where the current starts)
     GET  /api/power-runs?id=7       one archived measurement with its readings
     GET  /api/fw-history?tag=0100   which firmware a tag ran when: installs and every report
@@ -84,6 +87,7 @@ ASSETS = {
     "/develop.js": "develop.js",         # the Develop screen, Settings > AI services
     "/codeedit.js": "codeedit.js",       # its highlighter and go-to-definition
     "/diag.js": "diag.js",               # the Diagnostics screen
+    "/diagfleet.js": "diagfleet.js",     # its Fleet mode
     "/style.css": "style.css",
     "/inkapps.html": "inkapps.html",     # InkServices + InkLayout development page
 }
@@ -165,6 +169,28 @@ class Handler(BaseHTTPRequestHandler):
             if not tag or len(tag) > 4 or any(c not in "0123456789ABCDEF" for c in tag):
                 return self._error("tag is a hex id such as 0100")
             return self._json(self.app.voltage_history(tag, since, until))
+        if path in ("/api/diag/fleet", "/api/diag/band"):
+            import time as _time
+            try:
+                until = float((query.get("until") or [_time.time()])[0])
+                since = float((query.get("since") or [until - 86400.0 * 7])[0])
+            except ValueError:
+                return self._error("since and until are unix times")
+            if until <= since:
+                return self._error("until comes after since")
+            if path == "/api/diag/fleet":
+                only = [t.strip().upper() for t in (query.get("tags") or [""])[0].split(",")
+                        if t.strip()]
+                if any(len(t) > 4 or any(c not in "0123456789ABCDEF" for c in t) for t in only):
+                    return self._error("tags is a comma list of hex ids such as 0100,0101")
+                return self._json(self.app.diag_fleet(since, until, only or None))
+            exclude = (query.get("exclude") or [""])[0].strip().upper() or None
+            return self._json(self.app.diag_band(since, until, exclude))
+        if path == "/api/diag/tag":
+            tag = (query.get("tag") or [""])[0].strip().upper()
+            if not tag or len(tag) > 4 or any(c not in "0123456789ABCDEF" for c in tag):
+                return self._error("tag is a hex id such as 0100")
+            return self._json(self.app.diag_tag(tag))
         if path == "/api/events":
             tag = (query.get("tag") or [""])[0].strip().upper()
             if not tag or len(tag) > 4 or any(c not in "0123456789ABCDEF" for c in tag):

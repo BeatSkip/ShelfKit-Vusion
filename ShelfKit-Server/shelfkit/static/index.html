@@ -206,11 +206,26 @@
         boots and port changes here, and keeps them across restarts.</p>
     </section>
 
-    <!-- Diagnostics: one tag, looked at closely -->
-    <section class="screen" data-screen="diagnostics" aria-labelledby="diag-title" hidden>
+    <!-- Diagnostics: the whole fleet compared, or one tag looked at closely -->
+    <section class="screen" data-screen="diagnostics" data-mode="tag" aria-labelledby="diag-title" hidden>
       <div class="screen-head diag-head">
         <h1 id="diag-title">Diagnostics</h1>
-        <div class="tag-pick diag-pick">
+        <div class="segmented" id="diag-mode" role="group" aria-label="What to look at">
+          <button type="button" data-mode="fleet" title="Every tag side by side: battery, drain, check-ins, firmware">Fleet</button>
+          <button type="button" data-mode="tag" title="One tag looked at closely">One tag</button>
+        </div>
+        <label class="diag-fleet-only diag-field">Period
+          <select id="dfl-period">
+            <option value="1">Last 24 hours</option>
+            <option value="7">Last 7 days</option>
+            <option value="30">Last 30 days</option>
+            <option value="90">Last 90 days</option>
+          </select>
+        </label>
+        <label class="diag-fleet-only diag-field">Shelf
+          <select id="dfl-shelf"><option value="">All shelves</option></select>
+        </label>
+        <div class="tag-pick diag-pick diag-tag-only">
           <button id="diag-prev" class="tag-step" type="button" aria-label="Previous tag"
                   title="Previous tag on the shelf"></button>
           <label class="tag-select" title="Show another tag">
@@ -223,15 +238,111 @@
                   title="Next tag on the shelf"></button>
         </div>
         <span class="grow"></span>
-        <button id="diag-inspect" type="button"
+        <span id="dfl-updated" class="dim diag-fleet-only"></span>
+        <button id="diag-inspect" class="diag-tag-only" type="button"
                 title="Open the side panel for this tag: its name, firmware and commands">Tag details</button>
       </div>
 
       <p class="empty" id="diag-empty" hidden>No tag has checked in yet. Diagnostics appear
         here once the hub hears one.</p>
 
+      <!-- Fleet: every tag side by side (diag.js, /api/diag/fleet) -->
+      <div class="dfl" id="diag-fleet" hidden>
+        <div class="dfl-kpis" id="dfl-kpis"></div>
+
+        <section class="diag-panel" aria-labelledby="dfl-att-title">
+          <div class="diag-panel-head">
+            <h2 id="dfl-att-title">Needs attention</h2>
+            <span id="dfl-att-count" class="dim"></span>
+          </div>
+          <ul class="dfl-att" id="dfl-att"></ul>
+          <p class="hint" id="dfl-att-none" hidden>Nothing needs you: every tag is checking in,
+            no battery is low and no push failed.</p>
+        </section>
+
+        <div class="dfl-pair">
+          <section class="diag-panel" aria-labelledby="dfl-batt-title">
+            <div class="diag-panel-head">
+              <h2 id="dfl-batt-title">Battery now</h2>
+              <span class="dim" id="dfl-batt-note"></span>
+            </div>
+            <div class="dfl-bars" id="dfl-batt"></div>
+          </section>
+          <section class="diag-panel" aria-labelledby="dfl-drain-title">
+            <div class="diag-panel-head">
+              <h2 id="dfl-drain-title">Drain per day</h2>
+              <span class="dim" id="dfl-drain-note"></span>
+            </div>
+            <div class="dfl-bars" id="dfl-drain"></div>
+          </section>
+        </div>
+
+        <section class="diag-panel" aria-labelledby="dfl-fw-title">
+          <div class="diag-panel-head">
+            <h2 id="dfl-fw-title">Firmware</h2>
+            <span class="hint">Each stretch a tag ran one version, from 30 minutes after the
+              update, to see what a release does to the battery and the radio.</span>
+          </div>
+          <div class="dfl-fw-mix" id="dfl-fw-mix" aria-hidden="true"></div>
+          <div class="table-wrap">
+            <table class="grid dfl-table">
+              <thead><tr><th>Version</th><th>Tags</th><th>Median drain</th><th>Median current</th>
+                <th>Check-ins missed</th><th>Pushes failed</th><th>First seen</th></tr></thead>
+              <tbody id="dfl-fw"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="diag-panel" aria-labelledby="dfl-heat-title">
+          <div class="diag-panel-head">
+            <h2 id="dfl-heat-title">Check-ins, last 24 hours</h2>
+            <span class="hint" id="dfl-heat-note"></span>
+          </div>
+          <div class="table-wrap"><div class="dfl-heat" id="dfl-heat"></div></div>
+          <div class="dfl-legend" aria-hidden="true">
+            <span><i class="dh0"></i>All heard</span>
+            <span><i class="dh1"></i>1 missed</span>
+            <span><i class="dh2"></i>2 or more missed</span>
+            <span><i class="dh3"></i>Silent the whole hour</span>
+            <span><i class="dhx"></i>Nobody listening (server or hub off)</span>
+          </div>
+        </section>
+
+        <section class="diag-panel" aria-labelledby="dfl-all-title">
+          <div class="diag-panel-head">
+            <h2 id="dfl-all-title">All tags</h2>
+            <span class="hint">Click a column to sort. Click a tag for its own diagnostics.</span>
+            <span class="grow"></span>
+            <div class="segmented" id="dfl-filter" role="group" aria-label="Which tags">
+              <button type="button" data-filter="all">All</button>
+              <button type="button" data-filter="alert">Needs attention</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="grid dfl-table dfl-tags">
+              <thead><tr id="dfl-head"></tr></thead>
+              <tbody id="dfl-rows"></tbody>
+            </table>
+          </div>
+        </section>
+        <p class="hint">Drain and current come from the CR2450 discharge curve, read off a
+          trend line through the readings; the cell's voltage is nearly flat for most of its life,
+          so treat them as rough. Hours in which the server heard no tag at all count as neither
+          heard nor missed.</p>
+      </div>
+
       <div class="diag" id="diag-body">
         <div class="diag-main">
+          <section class="diag-panel diag-glance" aria-label="This tag at a glance">
+            <span class="glass diag-glass" id="diag-glass"></span>
+            <div class="diag-glance-body">
+              <div class="diag-glance-head">
+                <span class="state-line"><span class="mark" id="diag-mark"></span><span id="diag-state"></span></span>
+                <span class="dim" id="diag-where"></span>
+              </div>
+              <div class="dfl-kpis diag-figures" id="diag-figures"></div>
+            </div>
+          </section>
           <section class="diag-panel" aria-labelledby="diag-batt-title">
             <div class="diag-panel-head">
               <h2 id="diag-batt-title">Battery voltage</h2>
@@ -244,6 +355,8 @@
                 <option value="90">Last 90 days</option>
                 <option value="0">All readings</option>
               </select>
+              <label class="check" title="The middle half of the other tags' voltage change over the same time, started at this tag's first reading">
+                <input id="diag-band" type="checkbox"> Fleet band</label>
               <span id="diag-readout" class="diag-readout" aria-hidden="true"></span>
               <span class="grow"></span>
               <span class="yrange">
@@ -274,15 +387,49 @@
                  title="Drag to resize the plot. Double-click for the default height."></div>
             <p class="hint">Drag across the plot to measure a stretch of it. Click the plot to
               drop the selection.</p>
-            <h3 id="diag-stats-title" class="diag-stats-title">Whole period</h3>
-            <dl class="facts diag-stats" id="diag-stats"></dl>
+            <div class="diag-stat-cols">
+              <div>
+                <h3 id="diag-stats-title" class="diag-stats-title">Whole period</h3>
+                <dl class="facts diag-stats" id="diag-stats"></dl>
+              </div>
+              <div id="diag-prev" hidden>
+                <h3 id="diag-prev-title" class="diag-stats-title"></h3>
+                <dl class="facts diag-stats" id="diag-prev-stats"></dl>
+              </div>
+            </div>
             <p class="hint" id="diag-stats-note" hidden></p>
           </section>
 
           <!-- More diagnostics go here: one <section class="diag-panel"> each. -->
           <div class="diag-panels">
-            <section class="diag-panel diag-reserved" aria-label="Room for more diagnostics">
-              <p>Room for more diagnostics</p>
+            <section class="diag-panel wide" aria-labelledby="diag-cmp-title">
+              <div class="diag-panel-head">
+                <h2 id="diag-cmp-title">Compared with the fleet</h2>
+                <span class="hint">Each dot is one tag over the last 7 days; the ringed one is this tag.</span>
+              </div>
+              <div class="diag-cmp" id="diag-cmp"></div>
+            </section>
+            <section class="diag-panel wide" aria-labelledby="diag-ci-title">
+              <div class="diag-panel-head">
+                <h2 id="diag-ci-title">Check-ins, last 24 hours</h2>
+                <span class="hint" id="diag-ci-note"></span>
+              </div>
+              <div class="diag-ci" id="diag-ci" role="img"></div>
+              <div class="diag-ci-axis" id="diag-ci-axis" aria-hidden="true"></div>
+            </section>
+            <section class="diag-panel wide" aria-labelledby="diag-push-title">
+              <div class="diag-panel-head">
+                <h2 id="diag-push-title">Pushes and commands</h2>
+                <span class="hint">The last 30 days. Waited: from queued until the tag checked in.</span>
+              </div>
+              <div class="table-wrap">
+                <table class="grid dfl-table">
+                  <thead><tr><th>Queued</th><th>What</th><th>Waited for the tag</th><th>Transfer</th><th>Result</th></tr></thead>
+                  <tbody id="diag-pushes"></tbody>
+                </table>
+              </div>
+              <p class="hint" id="diag-push-none" hidden>Nothing was queued for this tag in the last
+                30 days. (The server keeps this history from this version on.)</p>
             </section>
           </div>
         </div>
@@ -933,6 +1080,7 @@
   <div id="toasts" class="toasts" aria-live="polite"></div>
   <script src="/app.js"></script>
   <script src="/diag.js"></script>
+  <script src="/diagfleet.js"></script>
   <script src="/apps.js"></script>
   <script src="/codeedit.js"></script>
   <script src="/develop.js"></script>

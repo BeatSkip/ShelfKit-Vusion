@@ -1,6 +1,7 @@
 "use strict";
 
-/* The Diagnostics screen: one tag at a time, with room to look closely.
+/* The Diagnostics screen, in two modes: Fleet (diagfleet.js: every tag side by side) and
+ * One tag, below: one tag at a time, with room to look closely.
  *
  * A large battery plot (drag across it to measure a stretch: drain, current, charge and
  * power come from that selection), the tag's own event log beside it, and the tag picker
@@ -34,10 +35,59 @@ const diag = {
   waiting: [],
   logSig: "",
   factsSig: "",
+  band: null,             // /api/diag/band for the plotted window, or null
+  prev: null,             // {version, from, to, data}: the firmware before the current one
+  fleet: null,            // /api/diag/fleet over the last 7 days, to compare with
+  detail: null,           // /api/diag/tag: check-ins of the last 24 h and queued commands
+  extrasSeq: 0,
+  glanceSig: "",
 };
 
+// ── the two modes, and helpers both use ─────────────────────────────────────
+const diagSection = document.querySelector('section[data-screen="diagnostics"]');
+const diagModeButtons = [...document.querySelectorAll("#diag-mode button")];
+let diagMode = stored("diag.mode", "fleet") === "tag" ? "tag" : "fleet";
+
+function diagMedian(values) {
+  const sorted = values.filter((v) => v != null && Number.isFinite(v)).sort((a, b) => a - b);
+  if (!sorted.length) return null;
+  const mid = sorted.length >> 1;
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+/** How long a full CR2450 lasts at `ua` microamps: "2.4 years", "200 days". */
+function diagLifeText(ua) {
+  if (!(ua > 0)) return "";
+  const days = (DIAG_CELL_MAH * 1000) / ua / 24;
+  return days >= 365 ? `${(days / 365).toFixed(1)} years` : `${Math.round(days)} days`;
+}
+
+function ordinal(n) {
+  const tail = n % 100 >= 11 && n % 100 <= 13 ? "th" : ({ 1: "st", 2: "nd", 3: "rd" }[n % 10] || "th");
+  return `${n}${tail}`;
+}
+
+function setDiagMode(mode) {
+  diagMode = mode === "tag" ? "tag" : "fleet";
+  store("diag.mode", diagMode);
+  diagSection.dataset.mode = diagMode;
+  for (const button of diagModeButtons) {
+    const on = button.dataset.mode === diagMode;
+    button.classList.toggle("on", on);
+    button.setAttribute("aria-pressed", on ? "true" : "false");
+  }
+  if (screen !== "diagnostics") return;
+  renderDiag();
+  diagShown();
+}
+
 const dui = {
-  body: $("diag-body"), empty: $("diag-empty"),
+  body: $("diag-body"), empty: $("diag-empty"), fleet: $("diag-fleet"),
+  glass: $("diag-glass"), mark: $("diag-mark"), state: $("diag-state"), where: $("diag-where"),
+  figures: $("diag-figures"), band: $("diag-band"),
+  prev: $("diag-prev"), prevTitle: $("diag-prev-title"), prevStats: $("diag-prev-stats"),
+  cmp: $("diag-cmp"), ci: $("diag-ci"), ciNote: $("diag-ci-note"), ciAxis: $("diag-ci-axis"),
+  pushes: $("diag-pushes"), pushNone: $("diag-push-none"),
   id: $("diag-id"), alias: $("diag-alias"),
   pick: $("diag-pick"), prev: $("diag-prev"), next: $("diag-next"),
   inspect: $("diag-inspect"),
@@ -65,10 +115,16 @@ function setDiagTag(hex) {
   diag.installs = [];
   diag.since = 0;
   diag.factsSig = "";
+  diag.band = null;
+  diag.prev = null;
+  diag.detail = null;
+  diag.glanceSig = "";
   drawDiagPlot();
   renderDiagStats();
   loadDiagLog();
   refreshDiag();
+  renderDiagExtras();
+  refreshDiagExtras();
   if (screen === "diagnostics") draw();
 }
 
@@ -81,7 +137,9 @@ function stepDiagTag(delta) {
 /** Open the Diagnostics screen on one tag (the inspector's button, a log row). */
 function openDiagnostics(hex) {
   setDiagTag(hex);
+  if (diagMode !== "tag") setDiagMode("tag");
   if (screen !== "diagnostics") location.hash = "#diagnostics";
+  else window.scrollTo(0, 0);
 }
 
 // ── the battery plot ─────────────────────────────────────────────────────────
@@ -201,6 +259,16 @@ function drawDiagPlot() {
   diag.plot.selB = svgEl("line", { class: "sel-edge", y1: T, y2: H - B, visibility: "hidden" });
   svg.append(diag.plot.selRect);
   const series = voltagePlotGroup(svg, "diag-clip", L, T, W - L - R, H - T - B);
+  const band = dui.band?.checked ? (diag.band?.points || []).filter((b) => b[0] >= t0 && b[0] <= t1) : [];
+  if (band.length >= 2) {
+    // the other tags' change since the window began, started at this tag's first reading
+    const base = pts[0][1];
+    const upper = band.map((b) => `${x(b[0]).toFixed(1)},${y(base + b[3]).toFixed(1)}`);
+    const lower = band.map((b) => `${x(b[0]).toFixed(1)},${y(base + b[1]).toFixed(1)}`).reverse();
+    series.append(svgEl("polygon", { class: "band", points: upper.concat(lower).join(" ") }));
+    series.append(svgEl("polyline", { class: "band-mid",
+      points: band.map((b) => `${x(b[0]).toFixed(1)},${y(base + b[2]).toFixed(1)}`).join(" ") }));
+  }
   series.append(svgEl("polyline", { class: "series",
     points: pts.map((p) => `${x(p[0]).toFixed(1)},${y(p[1]).toFixed(1)}`).join(" ") }));
   if (pts.length <= 400) {
@@ -382,6 +450,49 @@ function renderDiagStats() {
   for (const [key, value] of rows) dui.stats.append(el("dt", null, key), el("dd", null, value));
   dui.statsNote.hidden = !note;
   setText(dui.statsNote, note);
+  const prev = diag.prev;
+  dui.prev.hidden = !prev?.data?.stats;
+  if (prev?.data?.stats) {
+    setText(dui.prevTitle, `Previous firmware ${prev.version}: ${fmtWhen(prev.from)} → ${fmtWhen(prev.to)}`);
+    dui.prevStats.replaceChildren();
+    for (const [key, value] of diagStatRows(prev.data).filter(([key]) => key !== "Firmware")) {
+      dui.prevStats.append(el("dt", null, key), el("dd", null, value));
+    }
+  }
+}
+
+/** The stretch the tag ran its previous firmware, from 30 min after it was installed until
+ *  the current one came: to compare drain before and after an update. */
+async function loadDiagPrev(tag) {
+  const installs = diag.installs;
+  if (installs.length < 2) {
+    diag.prev = null;
+    return;
+  }
+  const [startAt, version] = installs[installs.length - 2];
+  const endAt = installs[installs.length - 1][0];
+  const from = endAt - startAt > FW_SETTLE_S * 2 ? startAt + FW_SETTLE_S : startAt;
+  if (diag.prev && diag.prev.version === version && diag.prev.to === endAt) return;
+  try {
+    const data = await getJSON(`/api/voltage?tag=${tag}&since=${from}&until=${endAt}`);
+    if (tag !== diag.tag) return;
+    diag.prev = { version, from, to: endAt, data };
+  } catch (error) {
+    diag.prev = null;
+  }
+}
+
+async function loadDiagBand(tag, since, until) {
+  if (!dui.band.checked) {
+    diag.band = null;
+    return;
+  }
+  try {
+    const band = await getJSON(`/api/diag/band?since=${since}&until=${until}&exclude=${tag}`);
+    if (tag === diag.tag) diag.band = band;
+  } catch (error) {
+    diag.band = null;
+  }
 }
 
 async function refreshDiagSelection() {
@@ -411,7 +522,11 @@ async function refreshDiag() {
     diag.installs = runs.installs || [];
     diag.since = runs.current_since || 0;
     const [since, until] = diagWindow();
-    const data = await getJSON(`/api/voltage?tag=${tag}&since=${since}&until=${until}`);
+    const [data] = await Promise.all([
+      getJSON(`/api/voltage?tag=${tag}&since=${since}&until=${until}`),
+      loadDiagBand(tag, since, until),
+      loadDiagPrev(tag),
+    ]);
     if (mine !== diag.seq || data.hex_id !== tag) return;
     diag.data = data;
     if (!diag.drag) {
@@ -444,6 +559,207 @@ dui.unzoom.addEventListener("click", () => {
   refreshDiag();
 });
 dui.clear.addEventListener("click", clearDiagSelection);
+
+// ── the tag at a glance, compared with the fleet, its check-ins and pushes ───────
+async function refreshDiagExtras() {
+  if (!diag.tag) return;
+  const mine = ++diag.extrasSeq;
+  const tag = diag.tag;
+  const until = Date.now() / 1000;
+  try {
+    const [detail, fleet] = await Promise.all([
+      getJSON(`/api/diag/tag?tag=${tag}`),
+      getJSON(`/api/diag/fleet?since=${until - 7 * 86400}&until=${until}`),
+    ]);
+    if (mine !== diag.extrasSeq || tag !== diag.tag) return;
+    diag.detail = detail;
+    diag.fleet = fleet;
+  } catch (error) {
+    return;                           /* the next refresh tries again */
+  }
+  diag.glanceSig = "";
+  renderDiagExtras();
+}
+
+function diagFigure(label, value, sub, bad) {
+  const box = el("div", bad ? "dfl-kpi bad" : "dfl-kpi");
+  box.append(el("span", "k-label", label), el("span", "k-value", value), el("span", "k-sub", sub || ""));
+  return box;
+}
+
+function diagMine() {
+  return (diag.fleet?.tags || []).find((t) => t.hex_id === diag.tag) || null;
+}
+
+function renderDiagGlance(live) {
+  const lastV = diagMine()?.last_v;
+  // the server restarted and has not heard the tag since: its last stored reading
+  const row = live.battery == null && lastV != null
+    ? { ...live, battery: lastV, batteryPct: null, low: lastV < prefs.low_battery_v } : live;
+  paintGlass(dui.glass, row, 2);
+  setClass(dui.mark, `mark ${row.failed ? "s-alert" : `s-${row.status}`}`);
+  setText(dui.state, `${statusWord(row)}, heard ${heardText(row).toLowerCase()}`);
+  const place = row.row == null ? "Not on a shelf" : shelfName(String(row.row));
+  setText(dui.where, [place, row.push?.name].filter(Boolean).join(" · "));
+  const mine = diagMine();
+  const drain = mine?.drain?.enough ? mine.drain : null;
+  const median = diag.fleet?.median_drain;
+  const day = diag.detail?.checkins;
+  const signature = JSON.stringify([row.battery, row.batteryPct, row.low, drain, median, day?.missed,
+    day?.expected, prefs.low_battery_v]);
+  if (signature === diag.glanceSig) return;
+  diag.glanceSig = signature;
+  const high = drain && median > 0 && drain.drain_mv_per_day > Math.max(median * 2, median + 3);
+  const ratio = drain && median > 0 ? drain.drain_mv_per_day / median : null;
+  dui.figures.replaceChildren(
+    diagFigure("Battery", row.battery != null ? `${row.battery.toFixed(2)} V` : "No reading",
+      row.battery != null ? `${row.batteryPct != null ? `${row.batteryPct} %` : "last reading"} · low at ${prefs.low_battery_v.toFixed(2)} V` : "", row.low),
+    diagFigure("Drain, last 7 days", drain ? (drain.drain_mv_per_day < 0
+      ? `rising ${Math.abs(drain.drain_mv_per_day).toFixed(1)} mV` : `${drain.drain_mv_per_day.toFixed(1)} mV/day`) : "Not yet",
+      drain ? (ratio != null ? `${ratio.toFixed(1)}× the fleet median` : "") : "needs 6 h of readings", Boolean(high)),
+    diagFigure("Current", drain?.ua > 0 && drain.drain_mv_per_day > 0
+      ? `${drain.ua < 10 ? drain.ua.toFixed(1) : Math.round(drain.ua)} µA` : drain ? "—" : "Not yet",
+      drain && !(drain.drain_mv_per_day > 0) ? "the voltage did not fall" : "from the CR2450 curve"),
+    diagFigure("Check-ins heard", day?.expected ? `${(100 * day.heard / day.expected).toFixed(1)} %` : "—",
+      day?.expected ? `${day.missed} of ${day.expected} missed, last 24 h` : "", day?.expected && day.missed / day.expected > 0.05),
+    diagFigure("A full cell lasts", drain?.ua > 0 ? diagLifeText(drain.ua) : "—", "at this rate"),
+  );
+}
+
+/** One row of "Compared with the fleet": every tag's value as a dot, this tag ringed. */
+function compareRow(label, values, mine, fmt, highIsBad) {
+  const row = el("div", "diag-cmp-row");
+  const strip = el("div", "strip");
+  const all = values.concat(mine == null ? [] : [mine]).filter((v) => v != null && Number.isFinite(v));
+  row.append(el("span", "label", label), strip);
+  if (mine == null || all.length < 2) {
+    row.append(el("span", "verdict dim", mine == null ? "Not measured yet" : "No other tag to compare with"));
+    return row;
+  }
+  const lo = Math.min(...all), hi = Math.max(...all);
+  const at = (v) => (hi > lo ? ((v - lo) / (hi - lo)) * 100 : 50);
+  for (const v of values) {
+    const dot = el("i");
+    dot.style.left = `${at(v).toFixed(1)}%`;
+    dot.title = fmt(v);
+    strip.append(dot);
+  }
+  const ring = el("b");
+  ring.style.left = `${at(mine).toFixed(1)}%`;
+  ring.title = `This tag: ${fmt(mine)}`;
+  strip.append(ring);
+  const higher = values.filter((v) => v > mine).length;
+  const n = values.length + 1;
+  const rank = highIsBad ? higher + 1 : n - higher;
+  const median = diagMedian(values);
+  let text;
+  if (highIsBad) text = rank <= Math.ceil(n / 4) ? `${ordinal(rank)} highest of ${n}` : `${fmt(mine)} · fleet median ${fmt(median)}`;
+  else text = rank <= Math.ceil(n / 4) ? `${ordinal(rank)} lowest of ${n}` : `${fmt(mine)} · fleet median ${fmt(median)}`;
+  const bad = highIsBad ? rank === 1 && mine > median * 1.5 : rank === 1 && mine < median;
+  row.append(el("span", bad ? "verdict bad" : "verdict", text));
+  return row;
+}
+
+function renderDiagCompare() {
+  const others = (diag.fleet?.tags || []).filter((t) => t.hex_id !== diag.tag);
+  const mine = diagMine();
+  const live = new Map(tagRows().map((row) => [row.hex, row]));
+  const voltOf = (hex) => live.get(hex)?.battery
+    ?? (diag.fleet?.tags || []).find((t) => t.hex_id === hex)?.last_v ?? null;
+  const drainOf = (t) => (t.drain?.enough ? t.drain.drain_mv_per_day : null);
+  const missOf = (t) => (t.checkins?.expected ? (100 * t.checkins.missed) / t.checkins.expected : null);
+  const transferOf = (t) => t.pushes?.transfer_s ?? null;
+  const mv = (v) => `${v.toFixed(1)} mV/day`;
+  dui.cmp.replaceChildren(
+    compareRow("Drain per day", others.map(drainOf).filter((v) => v != null), mine && drainOf(mine), mv, true),
+    compareRow("Battery", others.map((t) => voltOf(t.hex_id)).filter((v) => v != null),
+      voltOf(diag.tag), (v) => `${v.toFixed(2)} V`, false),
+    compareRow("Check-ins missed", others.map(missOf).filter((v) => v != null), mine && missOf(mine),
+      (v) => `${v.toFixed(1)} %`, true),
+    compareRow("Push transfer time", others.map(transferOf).filter((v) => v != null), mine && transferOf(mine),
+      (v) => `${Math.round(v)} s`, true),
+  );
+}
+
+function renderDiagCheckins() {
+  const day = diag.detail?.checkins;
+  if (!day) {
+    dui.ci.replaceChildren();
+    setText(dui.ciNote, "Loading.");
+    return;
+  }
+  const now = diag.detail.now;
+  const start = now - 86400;
+  const slots = Math.min(600, Math.max(24, Math.round(86400 / day.interval_s)));
+  const width = 86400 / slots;
+  const missed = new Set(day.missed_at.map((t) => Math.floor((t - start) / width)));
+  const offline = diag.detail.offline || [];
+  const cells = [];
+  for (let i = 0; i < slots; i++) {
+    const a = start + i * width, mid = a + width / 2;
+    let cls = "";
+    if (a + width < day.start) cls = "before";
+    else if (offline.some(([d0, d1]) => mid >= d0 && mid < d1)) cls = "off";
+    else if (missed.has(i)) cls = "miss";
+    cells.push(el("i", cls));
+  }
+  dui.ci.replaceChildren(...cells);
+  dui.ci.setAttribute("aria-label", `Check-ins of the last 24 hours: ${day.heard} heard, ${day.missed} missed`);
+  const parts = [`${day.expected} expected at ${minutesText(Math.round(day.interval_s))} intervals`,
+    `${day.heard} heard`, `${day.missed} missed`];
+  if (day.longest_gap_s > day.interval_s * 1.5 && day.longest_gap_at) {
+    parts.push(`longest gap ${spanText(day.longest_gap_s)} (from ${fmtWhen(day.longest_gap_at)})`);
+  }
+  if (day.offline_s > 600) parts.push(`nobody listening for ${spanText(day.offline_s)} (hatched)`);
+  setText(dui.ciNote, parts.join(" · "));
+  const label = (t) => new Date(t * 1000).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  dui.ciAxis.replaceChildren(el("span", null, `Yesterday ${label(start)}`), el("span", null, label(start + 43200)),
+    el("span", null, "now"));
+}
+
+const JOB_RESULT_TEXT = {
+  done: "Delivered", failed: "Failed", replaced: "Replaced by a newer one", cancelled: "Cancelled",
+  pending: "Waiting for the tag", running: "Sending",
+};
+
+function renderDiagPushes() {
+  const jobs = diag.detail?.jobs || [];
+  dui.pushNone.hidden = jobs.length > 0 || !diag.detail;
+  dui.pushes.replaceChildren(...jobs.map((job) => {
+    const tr = el("tr");
+    const result = JOB_RESULT_TEXT[job.result] || job.result;
+    const retried = job.tries > 1 ? ` after ${job.tries} tries` : "";
+    tr.append(
+      el("td", null, eventTime(job.queued_at)),
+      el("td", null, `${JOB_LABEL[job.kind] || job.kind}${job.label ? `: ${job.label}` : ""}`),
+      el("td", "num", job.wait_s == null ? "—" : spanText(job.wait_s)),
+      el("td", "num", job.transfer_s == null ? "—" : spanText(job.transfer_s)),
+      el("td", job.result === "failed" ? "bad" : job.result === "done" ? null : "dim",
+        `${result}${job.result === "done" || job.result === "failed" ? retried : ""}`
+        + (job.result === "failed" && job.error ? ` (${job.error})` : "")),
+    );
+    return tr;
+  }));
+}
+
+function renderDiagExtras() {
+  const row = tagRows().find((candidate) => candidate.hex === diag.tag);
+  if (row) renderDiagGlance(row);
+  renderDiagCompare();
+  renderDiagCheckins();
+  renderDiagPushes();
+}
+
+dui.band.checked = stored("diag.band", "1") === "1";
+dui.band.addEventListener("change", () => {
+  store("diag.band", dui.band.checked ? "1" : "0");
+  if (!dui.band.checked) {
+    diag.band = null;
+    drawDiagPlot();
+  } else {
+    refreshDiag();
+  }
+});
 
 // ── resizing: the plot's height and the log's width ──────────────────────────
 function setPlotHeight(px, keep) {
@@ -630,11 +946,17 @@ function renderDiagFacts(row) {
 
 function renderDiag() {
   const rows = tagRows();
+  const fleetMode = diagMode === "fleet";
   dui.empty.hidden = rows.length > 0;
-  dui.body.hidden = rows.length === 0;
+  dui.body.hidden = fleetMode || rows.length === 0;
+  dui.fleet.hidden = !fleetMode || rows.length === 0;
   dui.pick.closest(".tag-pick").hidden = rows.length === 0;
   dui.inspect.hidden = rows.length === 0;
   if (!rows.length) return;
+  if (fleetMode) {
+    if (window.renderFleetDiag) window.renderFleetDiag();     // diagfleet.js
+    return;
+  }
   let row = rows.find((candidate) => candidate.hex === diag.tag);
   if (!row) {                         // first visit, or the tag was forgotten
     const remembered = stored("diag.tag", "");
@@ -648,13 +970,28 @@ function renderDiag() {
   setText(dui.alias, row.alias || "No alias");
   renderTagPicker({ pick: dui.pick, prev: dui.prev, next: dui.next }, diag.tag);
   renderDiagFacts(row);
+  renderDiagGlance(row);
   renderDiagLog();
 }
 
 /** The screen came into view: its plot had no size while it was hidden. */
 function diagShown() {
+  if (diagMode === "fleet") {
+    if (window.fleetShown) window.fleetShown();               // diagfleet.js
+    return;
+  }
   drawDiagPlot();
   refreshDiag();
+  refreshDiagExtras();
+}
+
+for (const button of diagModeButtons) {
+  button.addEventListener("click", () => setDiagMode(button.dataset.mode));
+}
+diagSection.dataset.mode = diagMode;
+for (const button of diagModeButtons) {
+  button.classList.toggle("on", button.dataset.mode === diagMode);
+  button.setAttribute("aria-pressed", button.dataset.mode === diagMode ? "true" : "false");
 }
 
 dui.pick.addEventListener("change", () => setDiagTag(dui.pick.value));
@@ -671,8 +1008,11 @@ $("inspector-diag").addEventListener("click", () => {
 });
 
 setInterval(() => {
-  if (screen === "diagnostics" && !diag.drag) refreshDiag();
+  if (screen === "diagnostics" && diagMode === "tag" && !diag.drag) refreshDiag();
 }, 30000);
+setInterval(() => {
+  if (screen === "diagnostics" && diagMode === "tag") refreshDiagExtras();
+}, 60000);
 
 if (screen === "diagnostics") {
   draw();

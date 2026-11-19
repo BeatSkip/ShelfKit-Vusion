@@ -564,6 +564,26 @@ class App:
         return {"hex_id": hex_id, "installs": self.store.fw_installs(hex_id),
                 "reports": self.store.fw_reports(hex_id)}
 
+    # ── Diagnostics: the fleet at once (diagstats.py) ───────────────────────
+    def diag_fleet(self, since: float, until: float, only=None) -> dict:
+        from . import diagstats
+        if self.store is None:
+            return {"since": since, "until": until, "tags": [], "firmware": [], "totals": {}}
+        return diagstats.fleet(self.store, since, until, POLL_DEFAULT_S, only)
+
+    def diag_band(self, since: float, until: float, exclude: str | None = None) -> dict:
+        from . import diagstats
+        if self.store is None:
+            return {"since": since, "until": until, "tags": 0, "points": []}
+        return diagstats.band(self.store, since, until, exclude)
+
+    def diag_tag(self, hex_id: str) -> dict:
+        from . import diagstats
+        hex_id = hex_id.upper()
+        if self.store is None:
+            return {"hex_id": hex_id, "checkins": None, "jobs": []}
+        return diagstats.tag(self.store, hex_id, POLL_DEFAULT_S)
+
     def power_run(self, run_id: int) -> dict | None:
         return self.store.power_run(run_id) if self.store is not None else None
 
@@ -2066,6 +2086,7 @@ class App:
             if job is None:
                 return None
             job["state"] = "running"
+        self._job_started(job)
         addr = job["addr"]
         frames = list(job["params"]["staged"][0])
         if not frames:
@@ -2082,6 +2103,7 @@ class App:
         with self.lock:
             job["state"] = "failed"
             job["error"] = why
+        self._job_log(job, result="failed", error=why, ended_at=time.time())
         self._event("fail", f"{job['addr']:04X}", job["label"])
 
     def _interloper_step(self, key: str, inter: dict, step: int, cancel) -> bool:
@@ -2098,6 +2120,7 @@ class App:
             with self.lock:
                 inter["job"]["state"] = "done"
                 inter["job"]["error"] = None
+            self._job_log(inter["job"], result="done", error=None, ended_at=time.time())
             self.note(key, f"# {inter['addr']:04X} has the image, its panel is refreshing")
             self._event("ok", f"{inter['addr']:04X}", inter["job"]["label"])
             return False
@@ -2232,20 +2255,22 @@ class App:
                     )
                 except Exception as exc:  # noqa: BLE001 - report at click time
                     return {"ok": False, "error": f"cannot prepare the image: {exc}"}
+            replaced = []
             if kind in ("interval", "nfc"):
                 # only the newest choice matters: drop one that is still waiting
-                self.queue = [j for j in self.queue
-                              if not (j["addr"] == addr and j["state"] == "pending"
-                                      and j["kind"] == kind)]
+                replaced += [j for j in self.queue
+                             if j["addr"] == addr and j["state"] == "pending" and j["kind"] == kind]
             source = params.get("source")
             if source:
                 # One pending image per tag from the same source (an InkService app):
                 # a newer screen replaces the one still waiting, so a burst of button
                 # presses costs the tag one transfer, not one per press. A job that
                 # is already running is left alone.
-                self.queue = [j for j in self.queue
-                              if not (j["addr"] == addr and j["state"] == "pending"
-                                      and j["params"].get("source") == source)]
+                replaced += [j for j in self.queue
+                             if j["addr"] == addr and j["state"] == "pending"
+                             and j["params"].get("source") == source]
+            if replaced:
+                self.queue = [j for j in self.queue if not any(j is r for r in replaced)]
             job = {"id": next(self._jobs), "kind": kind, "addr": addr,
                    "label": label, "params": params, "created": time.time(),
                    "state": "pending", "error": None,
@@ -2254,6 +2279,13 @@ class App:
                    "tries": 0, "not_before": 0.0}
             self.queue.append(job)
             self.status = f"queued: {label} for {addr:04X}"
+        for old in replaced:
+            self._job_log(old, result="replaced", ended_at=job["created"])
+        if self.store is not None:
+            try:
+                job["db"] = self.store.add_job(f"{addr:04X}", kind, label, job["created"])
+            except Exception:  # noqa: BLE001 - the history must not block a push
+                pass
         self._prearm(addr)
         self._event("queue", f"{addr:04X}", label)
         return {"ok": True, "queued": job["id"], "addr": f"{addr:04X}",
@@ -2386,16 +2418,20 @@ class App:
         """Drop everything still pending, and stop the one that is running."""
         with self.lock:
             cancelled = 0
+            dropped = []
             for job in self.queue:
                 if job["state"] == "pending":
                     job["state"] = "cancelled"
                     cancelled += 1
+                    dropped.append(job)
             if self.sending and self._cancel is not None:
                 self._cancel.set()
             if self.dump.get("active") and getattr(self, "_dump_cancel", None):
                 self._dump_cancel.set()
             self.status = (f"cancelled {cancelled} queued command(s)" if cancelled
                            else "nothing was queued")
+        for job in dropped:
+            self._job_log(job, result="cancelled", ended_at=time.time())
         if cancelled:
             self._event("cancel", None, f"{cancelled} queued command(s)")
         return {"ok": True, "cancelled": cancelled}
@@ -2425,8 +2461,26 @@ class App:
                 return {"ok": True, "stopping": True}
             else:
                 return {"ok": False, "error": "it has already finished"}
+        self._job_log(job, result="cancelled", ended_at=time.time())
         self._event("cancel", hex_code, f"{job['kind']} command")
         return {"ok": True, "cancelled": 1}
+
+    def _job_log(self, job: dict, **fields) -> None:
+        """Keep a queued command's progress in the database (Diagnostics: push timing)."""
+        if self.store is None or not job.get("db"):
+            return
+        try:
+            self.store.update_job(job["db"], **fields)
+        except Exception:  # noqa: BLE001 - the history must not break the queue
+            pass
+
+    def _job_started(self, job: dict) -> None:
+        now = time.time()
+        fields = {"result": "running", "last_start_at": now}
+        if not job.get("started"):
+            job["started"] = now
+            fields["first_start_at"] = now
+        self._job_log(job, **fields)
 
     JOB_TRIES = 2        # attempts before a queued delivery is reported failed
     JOB_RETRY_S = 5.0    # and the pause before it is offered again
@@ -2450,6 +2504,7 @@ class App:
             if job is None:
                 return
             job["state"] = "running"
+        self._job_started(job)
         threading.Thread(target=self._run_job, args=(job,),
                          name=f"job-{job['id']}", daemon=True).start()
 
@@ -2525,6 +2580,7 @@ class App:
                 job["state"] = "pending"       # back in the queue, not failed
                 job["error"] = error
                 job["not_before"] = time.time() + self.JOB_RETRY_S
+            self._job_log(job, result="pending", tries=job["tries"], error=str(error)[:200])
             self.note(
                 self.hub_key(),
                 f"# {job['label']} deferred (attempt {job['tries']}/{self.JOB_TRIES}),"
@@ -2537,6 +2593,8 @@ class App:
             job["error"] = None if ok else error
             self.status = (f"{job['label']} delivered to {addr:04X}" if ok
                            else f"{job['label']} failed: {error}")
+        self._job_log(job, result="done" if ok else "failed", ended_at=time.time(),
+                      tries=job.get("tries", 0) + 1, error=None if ok else str(error)[:200])
         self._event("ok" if ok else "fail", f"{addr:04X}", job["label"])
 
     def send(self, addr: int, fit: str | None = None, dither: str | None = None,

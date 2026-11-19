@@ -20,7 +20,7 @@ import threading
 import time
 from pathlib import Path
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 MAX_EVENTS = 5000      # keep the newest N; the Logs screen never shows more
 MAX_BITMAPS = 64       # content store ceiling (each row ~15 KB of blobs)
 
@@ -90,6 +90,7 @@ CREATE TABLE IF NOT EXISTS voltage (    -- every supply-voltage reading a tag ha
     fw     TEXT                        -- the firmware the tag ran then, '1.1.0-49' (null: unknown)
 );
 CREATE INDEX IF NOT EXISTS voltage_tag_at ON voltage(hex_id, at);
+CREATE INDEX IF NOT EXISTS voltage_at ON voltage(at);
 
 CREATE TABLE IF NOT EXISTS fw_reports ( -- every firmware report: the first poll after each reset
     id       INTEGER PRIMARY KEY AUTOINCREMENT,  -- (power-up, update, flashing) and each NFC tap
@@ -120,6 +121,21 @@ CREATE TABLE IF NOT EXISTS app_bindings ( -- InkServices: the app that owns a ta
     last_hash    TEXT,                 -- sha1 of the last queued planes: skip identical pushes
     last_push_at REAL
 );
+
+CREATE TABLE IF NOT EXISTS jobs (       -- every queued command, for push timing in Diagnostics
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    hex_id         TEXT NOT NULL,
+    kind           TEXT NOT NULL,      -- image | service | firmware | interval | nfc | ...
+    label          TEXT,
+    queued_at      REAL NOT NULL,
+    first_start_at REAL,               -- the tag polled and the transfer began
+    last_start_at  REAL,               -- the newest attempt (a retry starts again)
+    ended_at       REAL,
+    result         TEXT NOT NULL,      -- pending | running | done | failed | replaced | cancelled
+    tries          INTEGER NOT NULL DEFAULT 0,
+    error          TEXT
+);
+CREATE INDEX IF NOT EXISTS jobs_tag_at ON jobs(hex_id, queued_at);
 """
 
 
@@ -523,6 +539,60 @@ class Store:
                 (name, bitmap_key, when, hex_id),
             )
             self._db.commit()
+
+    # ── queued commands, kept for Diagnostics ──────────────────────────────
+    JOB_FIELDS = ("first_start_at", "last_start_at", "ended_at", "result", "tries", "error")
+
+    def add_job(self, hex_id: str, kind: str, label: str, at: float | None = None) -> int:
+        when = time.time() if at is None else at
+        with self._lock:
+            cursor = self._db.execute(
+                "INSERT INTO jobs(hex_id, kind, label, queued_at, result) VALUES(?,?,?,?,?)",
+                (hex_id, kind, label, when, "pending"))
+            self._db.commit()
+            return int(cursor.lastrowid)
+
+    def update_job(self, job_id: int, **fields) -> None:
+        sets = {k: v for k, v in fields.items() if k in self.JOB_FIELDS}
+        if not sets:
+            return
+        with self._lock:
+            self._db.execute(
+                f"UPDATE jobs SET {', '.join(f'{k}=?' for k in sets)} WHERE id=?",
+                (*sets.values(), job_id))
+            self._db.commit()
+
+    def jobs_between(self, since: float, until: float, hex_id: str | None = None,
+                     limit: int = 20000) -> list[dict]:
+        """Queued commands in [since, until] (by when they were queued), oldest first."""
+        sql = "SELECT * FROM jobs WHERE queued_at>=? AND queued_at<=?"
+        args: list = [since, until]
+        if hex_id:
+            sql += " AND hex_id=?"
+            args.append(hex_id)
+        sql += " ORDER BY queued_at DESC LIMIT ?"
+        args.append(limit)
+        with self._lock:
+            rows = self._db.execute(sql, args).fetchall()
+        return [dict(row) for row in reversed(rows)]
+
+    def voltage_since(self, since: float, until: float) -> dict[str, list[tuple[float, float, str | None]]]:
+        """Every tag's readings in [since, until] in one query: {hex: [(t, volts, fw)]}."""
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT hex_id, at, raw, fw FROM voltage WHERE at>=? AND at<=? ORDER BY hex_id, at",
+                (since, until)).fetchall()
+        out: dict[str, list] = {}
+        for row in rows:
+            out.setdefault(row["hex_id"], []).append((row["at"], row["raw"] / 256.0, row["fw"]))
+        return out
+
+    def first_reports(self) -> dict[str, float]:
+        """When each firmware version was first reported by any tag."""
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT version, MIN(at) AS at FROM fw_reports GROUP BY version").fetchall()
+        return {row["version"]: row["at"] for row in rows}
 
     # ── bitmaps ────────────────────────────────────────────────────────────
     def put_bitmap(self, render, name: str | None = None) -> None:
