@@ -105,8 +105,9 @@ def same_port(a: str, b: str) -> bool:
 
 
 # Release/ also holds the other chip families' builds (texas/label: CC2510, silabs/label:
-# EFR32FG22). They are not AX8052 images: never offer them to an Axsem tag or hub.
-OTHER_FAMILIES = ("shelfkit-texas", "shelfkit-silabs")
+# EFR32FG22, solum/label: ZBS243). They are not AX8052 images: never offer them to an Axsem
+# tag or hub.
+OTHER_FAMILIES = ("shelfkit-texas", "shelfkit-silabs", "shelfkit-solum")
 
 
 def axsem_image(name: str) -> bool:

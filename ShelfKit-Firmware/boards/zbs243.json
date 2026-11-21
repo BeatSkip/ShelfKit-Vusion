@@ -1,0 +1,23 @@
+{
+  "name": "Solum ZBS243",
+  "vendor": "Samsung / SoluM",
+  "build": {
+    "cpu": "mcs51",
+    "mcu": "zbs243",
+    "f_cpu": "16000000UL",
+    "memory": {
+      "size_iram": 256,
+      "size_xram": 8192,
+      "size_code": 65536
+    },
+    "memory_model": "small",
+    "sdcc": {
+      "target": "mcs51"
+    }
+  },
+  "upload": {
+    "maximum_size": 65536,
+    "maximum_ram_size": 8192,
+    "protocol": "zbs-flasher"
+  }
+}

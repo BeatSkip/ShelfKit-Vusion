@@ -4,7 +4,7 @@
     python ShelfKit-Firmware/tooling/build-all.py
     python ShelfKit-Firmware/tooling/build-all.py --version 1.2.0
     python ShelfKit-Firmware/tooling/build-all.py --targets axsem,bootloader
-    python ShelfKit-Firmware/tooling/build-all.py --targets texas,silabs   # the other chip families
+    python ShelfKit-Firmware/tooling/build-all.py --targets texas,silabs,solum   # the other chip families
     python ShelfKit-Firmware/tooling/build-all.py --bump          # patch + 1 (or minor/major)
     python ShelfKit-Firmware/tooling/build-all.py --set 1.0.0
     python ShelfKit-Firmware/tooling/build-all.py --targets axsem,bootloader \\
@@ -48,12 +48,13 @@ works as a target name too, e.g. ``--targets axsem/hub``):
   ``bootloader`` (axsem/bootloader): SDCC. ``all`` (the default) is these three. The old
   names ``vusion`` and ``hub`` still work.
 * ``texas`` (texas/label: the TI CC2510 label): SDCC, from its own board file.
+* ``solum`` (solum/label: the Solum label with the ZBS243): SDCC, from its own board file.
 * ``silabs`` (silabs/label: the EFR32FG22 label): the Arm GNU toolchain, read from the
   project's ``gcc-project.json`` instead of ``sdcc-project.json``.
 * ``every``: all of the above.
 
 The release files keep their names: shelfkit-axsem, shelfkit-axsem-hub, bootloader,
-shelfkit-texas and shelfkit-silabs (``-latest.hex`` or ``-<version>.hex``), plus
+shelfkit-texas, shelfkit-silabs and shelfkit-solum (``-latest.hex`` or ``-<version>.hex``), plus
 shelfkit-axsem-full for the bootloader + label bundle.
 
 Only the release files of the targets being built are replaced; building ``texas`` leaves
@@ -87,12 +88,12 @@ SDCC_DIRS = [Path(r"C:\Program Files\SDCC\bin"), Path(r"C:\Program Files (x86)\S
 SOURCE_SUFFIXES = {".c", ".asm", ".s", ".S"}
 # the name you pass to --targets -> folder under ShelfKit-Firmware/
 TARGETS = {"axsem": "axsem/label", "axsem-hub": "axsem/hub", "bootloader": "axsem/bootloader",
-           "texas": "texas/label", "silabs": "silabs/label"}
+           "texas": "texas/label", "silabs": "silabs/label", "solum": "solum/label"}
 # folder -> release file name (the label and the hub both call their build 'firmware', and the
 # names predate the platform folders, so they are fixed here rather than derived from the path)
 RELEASE = {"axsem/label": "shelfkit-axsem", "axsem/hub": "shelfkit-axsem-hub",
            "axsem/bootloader": "bootloader", "texas/label": "shelfkit-texas",
-           "silabs/label": "shelfkit-silabs"}
+           "silabs/label": "shelfkit-silabs", "solum/label": "shelfkit-solum"}
 ALIASES = {"vusion": "axsem", "hub": "axsem-hub",           # the names before 2026-11-20
            **{folder: name for name, folder in TARGETS.items()}}
 GROUPS = {"all": ["axsem", "axsem-hub", "bootloader"], "every": list(TARGETS)}

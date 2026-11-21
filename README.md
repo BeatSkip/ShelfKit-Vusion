@@ -184,7 +184,7 @@ This writes `Release/shelfkit-axsem-latest.hex` (tag), `shelfkit-axsem-hub-lates
 The tag application nearly fills its 43,006 B OTA window, so new firmware features have to earn
 their bytes. Details are in [tooling/README.md](ShelfKit-Firmware/tooling/README.md).
 
-Two more tag families have buildable skeletons, not working firmware yet: [texas/label](ShelfKit-Firmware/texas/label/README.md) (TI CC2510, SDCC) and [silabs/label](ShelfKit-Firmware/silabs/label/README.md) (EFR32FG22, Arm GCC). Build them with `--targets texas,silabs` (or `every`); both are 2.4 GHz and need a hub of their own.
+Three more label families have buildable skeletons, not working firmware yet: [texas/label](ShelfKit-Firmware/texas/label/README.md) (TI CC2510, SDCC), [silabs/label](ShelfKit-Firmware/silabs/label/README.md) (EFR32FG22, Arm GCC) and [solum/label](ShelfKit-Firmware/solum/label/README.md) (Solum ZBS243, SDCC). Build them with `--targets texas,silabs,solum` (or `every`); all three are 2.4 GHz and need a hub of their own.
 
 ### 2. The server
 
@@ -237,7 +237,7 @@ tag, because the app-only hex skips the bootloader. The `.map` files stay out.
 
 | Path | What it is |
 |---|---|
-| `ShelfKit-Firmware/` | Firmware projects: `axsem/label/` (tag), `axsem/hub/` (hub), `axsem/bootloader/`, `texas/label/` and `silabs/label/` (skeletons), `axsem/` also holds the Axsem SDK and drivers, `common/` the protocol code every platform shares, `tooling/` (build, flash, OTA, ID scripts) |
+| `ShelfKit-Firmware/` | Firmware projects: `axsem/label/` (tag), `axsem/hub/` (hub), `axsem/bootloader/`, `texas/label/`, `silabs/label/` and `solum/label/` (skeletons), `axsem/` also holds the Axsem SDK and drivers, `common/` the protocol code every platform shares, `tooling/` (build, flash, OTA, ID scripts) |
 | `ShelfKit-Server/` | The web app, image pipeline, `shelfkit/inkservices/` (app host), `shelfkit/inklayout/` (layout language) and `inkapps/` (the apps). See its [README](ShelfKit-Server/README.md) |
 | `Documentation/` | Protocol, power, NFC, OTA and panel notes, datasheets, plans, screenshots |
 | `Resources/`, `Data/` | Sample images; captured flash dumps |

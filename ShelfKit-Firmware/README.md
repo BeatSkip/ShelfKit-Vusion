@@ -15,6 +15,8 @@ ShelfKit-Firmware/
     label/
   silabs/                Silicon Labs EFR32FG22 (Cortex-M33 + 2.4 GHz radio), Arm GCC
     label/
+  solum/                 Solum labels: ZBS243 (8051 + 2.4 GHz 802.15.4 radio), SDCC
+    label/
   boards/                board definitions (CPU, memory sizes, model), one per chip
   common/                code every platform compiles
     shelflink/           the ShelfLink frame format: sl_proto.c, shelflink.h, shelfmsg.h, shelfver.h
@@ -33,6 +35,7 @@ Every target is a **self-contained project**: its own `src/`, `include/` and `sd
 | `axsem/hub/` | Hub | Always listening, answers every poll, relays host frames (single and batched) to the tag that just spoke, can draw on its own panel, speaks a line protocol on UART at 115200 |
 | `texas/label/` | Label (skeleton) | TI **CC2510** tags (8051 + 2.4 GHz radio), SDCC. Builds; no radio or panel driver yet, placeholder pins. Needs a 2.4 GHz hub of its own — see [its README](texas/label/README.md) |
 | `silabs/label/` | Label (skeleton) | Silicon Labs **EFR32FG22** tags (Cortex-M33 + 2.4 GHz radio), Arm GCC (`gcc-project.json`). Builds once `arm-none-eabi-gcc` is installed; no drivers yet, placeholder pins. Needs a 2.4 GHz hub — see [its README](silabs/label/README.md) |
+| `solum/label/` | Label (skeleton) | Solum / SoluM labels with the **ZBS243** (8051 + 2.4 GHz 802.15.4 radio, no public datasheet), SDCC. Builds; no clock, radio or panel driver yet, placeholder pins and SoC registers. Needs a 2.4 GHz hub — see [its README](solum/label/README.md) |
 | `tooling/` | Host scripts | The flasher, `build-all.py` (every target into `Release/`), the OTA sender, `set-id.py` and `flash-read.py` (see [tooling/README.md](tooling/README.md)) |
 | `axsem/bootloader/` | AX8052 serial bootloader | Flash-resident UART bootloader (Axsem V1.1, 38400 baud, at `0xD800`) that erases and programs the application area and jumps to it, and applies an over-the-air image staged in the tag's SPI flash |
 

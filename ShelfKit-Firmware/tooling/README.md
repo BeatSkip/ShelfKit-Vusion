@@ -19,7 +19,7 @@ Python 3 helpers that build and flash the boards over their serial link. The hos
 python ShelfKit-Firmware/tooling/build-all.py
 python ShelfKit-Firmware/tooling/build-all.py --version 1.2.0
 python ShelfKit-Firmware/tooling/build-all.py --targets axsem,bootloader
-python ShelfKit-Firmware/tooling/build-all.py --targets texas,silabs   # CC2510 / EFR32FG22 skeletons
+python ShelfKit-Firmware/tooling/build-all.py --targets texas,silabs,solum   # CC2510 / EFR32FG22 / ZBS243 skeletons
 python ShelfKit-Firmware/tooling/build-all.py --targets every            # all of them
 python ShelfKit-Firmware/tooling/build-all.py --clean
 ```
@@ -58,10 +58,10 @@ placement, and the `.mem` figures are printed in the summary.
 
 **File names:** `<target>-latest.hex` by default, or `<target>-<version>.hex` when you
 pass `--version`. The output folder is cleared of old `.hex`/`.map` files on every
-run, but only the files of the targets being built (a `texas` build leaves the Axsem files alone). The targets are `axsem`, `axsem-hub`, `bootloader` (together `all`, the default), `texas` and `silabs`, or their folder paths (`axsem/label`, `axsem/hub`, `axsem/bootloader`, `texas/label`, `silabs/label`); `vusion` and `hub` still work as the old names. `silabs` needs `arm-none-eabi-gcc` and is skipped with a note when it is missing and other targets were asked for. The old wording was
+run, but only the files of the targets being built (a `texas` build leaves the Axsem files alone). The targets are `axsem`, `axsem-hub`, `bootloader` (together `all`, the default), `texas`, `silabs` and `solum`, or their folder paths (`axsem/label`, `axsem/hub`, `axsem/bootloader`, `texas/label`, `silabs/label`, `solum/label`); `vusion` and `hub` still work as the old names. `silabs` needs `arm-none-eabi-gcc` and is skipped with a note when it is missing and other targets were asked for. The old wording was
 `<target>-<date>-<git hash>[-dirty].hex`. The release name is fixed per folder in `RELEASE` in build-all.py
 (`axsem/label` → `shelfkit-axsem`, `axsem/hub` → `shelfkit-axsem-hub`, `axsem/bootloader` → `bootloader`,
-`texas/label` → `shelfkit-texas`, `silabs/label` → `shelfkit-silabs`), not taken from `build.output_name`:
+`texas/label` → `shelfkit-texas`, `silabs/label` → `shelfkit-silabs`, `solum/label` → `shelfkit-solum`), not taken from `build.output_name`:
 the label and the hub both call their build `firmware`, which would collide.
 
 `Release/` is git-ignored: it is output, and re-running the script regenerates it.

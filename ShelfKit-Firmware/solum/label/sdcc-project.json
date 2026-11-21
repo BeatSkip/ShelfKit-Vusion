@@ -1,0 +1,20 @@
+{
+  "name": "solum-label",
+  "board": "zbs243",
+  "sources": [
+    "src",
+    "../../common/shelflink/sl_proto.c"
+  ],
+  "includes": [
+    "include",
+    "../../common/shelflink",
+    "../../common/shelflink/inc"
+  ],
+  "defines": [],
+  "libraries": [],
+  "build": {
+    "output_dir": "build",
+    "output_name": "firmware",
+    "hooks": {}
+  }
+}
