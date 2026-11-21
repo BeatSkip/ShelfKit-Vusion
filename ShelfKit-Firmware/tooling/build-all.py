@@ -14,7 +14,8 @@ Each target is built with the same flags SDCC-MDF uses, because they are read fr
 the target's own ``sdcc-project.json`` and the board definition it names:
 
 * ``build.flags`` of the project (the bootloader's ``-Wl-bHOME=0xe400`` lives there),
-* CPU, memory model and the IRAM/XRAM/code sizes from the board JSON,
+* CPU, memory model and the IRAM/XRAM/code sizes from the board JSON (the project's
+  ``.vscode/boards/``; the copies of one board must be identical),
 * ``sources`` (directories are walked for ``.c`` and ``.asm``), plus the ``inc``
   folder of every source directory as an include path,
 * ``includes``, ``libraries`` (every ``*.lib`` in the listed folders) and
@@ -164,21 +165,41 @@ def load_board(root: Path, project: dict) -> dict:
             boards_dir = json.loads(settings.read_text(encoding="utf-8")).get("sdcc.boardsDir")
         except ValueError:
             boards_dir = None
-    folders = [root / boards_dir] if boards_dir else []
-    folders += sorted(FIRMWARE.glob("*/boards"))
+    # the extension's own order: the project's .sdcc/boards wins over sdcc.boardsDir
+    folders = [root / ".sdcc" / "boards"] + ([root / boards_dir] if boards_dir else [])
+    folders.append(root / ".vscode" / "boards")
     seen = set()
     for folder in folders:
         if not folder.is_dir() or folder in seen:
             continue
         seen.add(folder)
         for candidate in sorted(folder.glob("*.json")):
-            try:
-                board = json.loads(candidate.read_text(encoding="utf-8"))
-            except ValueError:
-                continue
-            if board.get("build", {}).get("mcu") == wanted:
+            board = read_board(candidate)
+            if board is not None and board.get("build", {}).get("mcu") == wanted:
+                check_board_copies(candidate, board)
                 return board
     raise SystemExit(f"no board definition for {wanted!r} in {[str(f) for f in folders]}")
+
+
+def read_board(path: Path) -> dict | None:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def check_board_copies(used: Path, board: dict) -> None:
+    """Every project carries its own copy of its board file (.vscode/boards/, where the
+    extension finds it), so the label, hub and bootloader each hold one. They must stay
+    identical: a build stops when another project's copy of the same board id differs."""
+    wanted = board.get("build", {}).get("mcu")
+    for other in sorted(FIRMWARE.glob("*/*/.vscode/boards/*.json")):
+        if other.resolve() == used.resolve():
+            continue
+        data = read_board(other)
+        if data is not None and data.get("build", {}).get("mcu") == wanted and data != board:
+            raise SystemExit(f"board {wanted!r} differs between {display(used)} and {display(other)}:\n"
+                             "    every project has its own copy - make them identical again")
 
 
 def board_flags(board: dict) -> list[str]:

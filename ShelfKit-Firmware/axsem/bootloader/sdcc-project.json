@@ -14,9 +14,6 @@
   "libraries": [
     "../lib"
   ],
-  "components": [
-    "../components"
-  ],
   "build": {
     "output_dir": "build",
     "output_name": "bootloader",

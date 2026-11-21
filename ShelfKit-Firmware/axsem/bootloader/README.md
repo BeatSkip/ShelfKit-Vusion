@@ -76,7 +76,7 @@ Both are compiled exactly as they were: the `.c` with `sdcc`, the `.asm` with `s
 | manual compiler/assembler/linker steps | *SDCC: Build* — **Ctrl+Shift+B** |
 
 The `.sdcc/` board cache that came with the skeleton was removed; the board definition is read from
-`../axsem/boards` like every other target.
+`.vscode/boards` like every other target.
 
 ## Installing the bootloader and the application at once
 

@@ -56,7 +56,7 @@ ShelfKit-Firmware/
     shared/       axradio  shelfhw  shelflink(.c)  shelfota  shelfid   (inc/ per module)
     sdk/libmf, sdk/libaxdvk2 ...   vendor SDK (only libmf/include and libaxdvk2/include on the include path)
     lib/*.lib                      prebuilt libmf etc. (patched libmf.lib)
-    boards/axsem-8051.json         board def: id axsem-8052f143, 26 MHz, iram 256, xram 8192, code 59389, --model-small
+    <target>/.vscode/boards/axsem-8051.json  board def (one identical copy per target): id axsem-8052f143, 26 MHz, iram 256, xram 8192, code 59389, --model-small
   common/shelflink/  sl_proto.c + inc/{shelflink,shelfmsg,shelfver}.h: the frame format, shared with texas/ and silabs/
   texas/label, silabs/label        skeletons for other chips
   tooling/  build-all.py  axsem-flasher.py  ota-send.py  flash-read.py  set-id.py

@@ -12,8 +12,6 @@ exactly one copy. Before this layout existed, the two firmware targets each carr
 | `shared/` | `sources`/`includes` in `sdcc-project.json` | The Axsem-only modules: `axradio` (the AX5043 engine), `shelfhw` (board bring-up), `shelflink` (`shelflink.c`, the radio side of the link), `shelfota` (OTA staging) and `shelfid` (the label's identity). The frame format itself is in `../common/shelflink` |
 | `sdk/` | `includes` in `sdcc-project.json` | Full Axsem SDK source tree (759 files): `libmf`, `libaxdvk2`, `libax5042`, `libaxdsp`, `libmfcrypto`, each with its IAR/Keil/ARM/SDCC makefiles, headers and sources |
 | `lib/` | `libraries` in `sdcc-project.json` | Prebuilt SDCC archives, linked as-is: `libmf.lib`, `libaxdvk2.lib`, `libaxdsp.lib`, `libmfcrypto.lib` |
-| `boards/` | `sdcc.boardsDir` in `.vscode/settings.json` | `axsem-8051.json` — the SDCC-MDF board definition. Id `axsem-8052f143` (from `build.mcu`), 26 MHz, 256 B IRAM, 8 KB XRAM, 59389 B code, `--model-small` |
-| `components/` | `components` in `sdcc-project.json` | Source components (ESP8266-IDF pattern). Empty apart from its README; each subfolder becomes one source library |
 
 Only `sdk/libmf/include` and `sdk/libaxdvk2/include` are actually on the compiler's include path.
 The rest of the SDK is kept as the vendor reference the drivers were written from, and because
@@ -21,13 +19,15 @@ The rest of the SDK is kept as the vendor reference the drivers were written fro
 
 ## Two things to know
 
-- `boards/` used to live in each target's own `.sdcc/boards/` folder. The extension scans
-  `sdcc.boardsDir` as a `custom` source and caches the result, so **reload the VS Code window**
-  after editing `boards/axsem-8051.json`.
+- The board definition, `axsem-8051.json` (id `axsem-8052f143` from `build.mcu`, 26 MHz,
+  256 B IRAM, 8 KB XRAM, 59389 B code, `--model-small`), lives in each target's
+  `.vscode/boards/`: one identical copy in `label/`, `hub/` and `bootloader/`. `build-all.py`
+  refuses to build when they differ, so change all three. The extension scans `sdcc.boardsDir`
+  as a `custom` source and caches the result, so **reload the VS Code window** after editing it.
 - The extension accepts a relative `sdcc.boardsDir` and resolves it against the active project
   root. If a target's `.vscode/settings.json` is missing (or the target is opened as part of a
   multi-root workspace), the board will not be found and the build will fail with an unknown
-  board — keep `"sdcc.boardsDir": "../boards"` in place.
+  board — keep `"sdcc.boardsDir": ".vscode/boards"` in place.
 
 ## Changing the SDK
 

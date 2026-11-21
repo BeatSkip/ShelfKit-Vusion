@@ -1,5 +1,5 @@
 {
     "sdcc.monitorBaud": 115200,
     "sdcc.shellPath": "cmd.exe",
-    "sdcc.boardsDir": "../boards"
+    "sdcc.boardsDir": ".vscode/boards"
 }

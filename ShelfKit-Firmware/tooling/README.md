@@ -47,7 +47,7 @@ It builds each target exactly the way SDCC-MDF does, because it reads the target
 
 - `build.flags` of the project (this is where the bootloader's `-Wl-bHOME=0xd800` and its 64 KB code
   space live),
-- CPU, memory model and the IRAM/XRAM/code sizes from [`../axsem/boards/`](../axsem/boards),
+- CPU, memory model and the IRAM/XRAM/code sizes from the project's `.vscode/boards/` (e.g. [`axsem/label/.vscode/boards/`](../axsem/label/.vscode/boards)),
 - `sources` (directories are walked for `.c` and `.asm`, and every source directory's `inc/` is added
   to the include path), `includes`, `libraries` (every `*.lib`) and `defines`.
 

@@ -8,7 +8,7 @@ in [`include/board.h`](include/board.h) are placeholders marked `TODO(board)`.
 
 The **TI CC2510F32**: an 8051 core with a 2.4 GHz transceiver, 32 KB flash and 4 KB RAM
 (mapped as XDATA at `0xF000`). Being an 8051, it builds with the same **SDCC** as the
-Axsem firmware; its board file is [`../texas/boards/ti-cc2510f32.json`](../boards/ti-cc2510f32.json).
+Axsem firmware; its board file is [`.vscode/boards/ti-cc2510f32.json`](.vscode/boards/ti-cc2510f32.json).
 
 ## It needs its own hub
 

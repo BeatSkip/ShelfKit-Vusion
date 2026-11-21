@@ -11,10 +11,8 @@ ShelfKit-Firmware/
     bootloader/          serial + OTA bootloader at 0xD800
     shared/              axradio, shelfhw, shelflink (radio side), shelfota, shelfid
     sdk/  lib/           the Axsem SDK sources and its prebuilt .lib archives
-    boards/              axsem-8051.json, the SDCC-MDF board definition
-    components/          SDCC-MDF source components (empty)
   texas/                 TI CC2510 (8051 + 2.4 GHz radio), SDCC
-    label/  boards/
+    label/
   silabs/                Silicon Labs EFR32FG22 (Cortex-M33 + 2.4 GHz radio), Arm GCC
     label/
   common/                code every platform compiles
@@ -25,7 +23,8 @@ ShelfKit-Firmware/
 
 Every target is a **self-contained project**: its own `src/`, `include/` and `sdcc-project.json`
 (or `gcc-project.json` for the Arm one), and for the SDCC targets a `.vscode/` for the
-[SDCC-MDF extension](https://marketplace.visualstudio.com/items?itemName=dzantemir.sdcc-mdf).
+[SDCC-MDF extension](https://marketplace.visualstudio.com/items?itemName=dzantemir.sdcc-mdf),
+which also holds the board definition (`.vscode/boards/*.json`).
 Everything else is reached by relative path, so a new target adds a project without copying
 140 MB of vendor code. See [axsem/README.md](axsem/README.md) for the Axsem SDK and shared code.
 
@@ -61,8 +60,9 @@ The three files that wire an Axsem target to the shared tree, and what they must
 
 | File | Entries |
 |---|---|
-| `sdcc-project.json` | `sources`/`includes` with `../shared/…`, `../sdk/…` and `../../common/shelflink`, `libraries: ["../lib"]`, `components: ["../components"]`, `upload` args `../../tooling/axsem-flasher.py` |
-| `.vscode/settings.json` | `"sdcc.boardsDir": "../boards"` — scanned as a `custom` board source; the board id `axsem-8052f143` comes from that board JSON's `build.mcu` |
+| `sdcc-project.json` | `sources`/`includes` with `../shared/…`, `../sdk/…` and `../../common/shelflink`, `libraries: ["../lib"]`, `upload` args `../../tooling/axsem-flasher.py` |
+| `.vscode/settings.json` | `"sdcc.boardsDir": ".vscode/boards"` — scanned as a `custom` board source; the board id `axsem-8052f143` comes from that board JSON's `build.mcu` |
+| `.vscode/boards/axsem-8051.json` | The board definition: 26 MHz, 256 B IRAM, 8 KB XRAM, 59389 B code, `--model-small`. The extension cannot take a board inline in `sdcc-project.json` and would read every other JSON in `.vscode/` as a board, hence the subfolder. Each project has its own copy; `build-all.py` stops if the copies differ, so edit all three |
 | `.vscode/c_cpp_properties.json` | `${workspaceFolder}/../sdk/libmf/include` and the shared `inc/` folders for IntelliSense |
 
 If you move a target deeper, every one of those grows one `../`. The extension deliberately keeps
@@ -73,7 +73,7 @@ so no symlinks or junctions are involved.
 
 A new label on an existing platform is a new project beside `axsem/label/` (for example
 `axsem/label-4in2/`), sharing everything that is not board-specific. A new chip platform is a new
-top-level folder like `texas/`, with its own `label/` (and later `hub/`), `boards/` and `shared/`;
+top-level folder like `texas/`, with its own `label/` (and later `hub/`) and `shared/`;
 only `common/` and `tooling/` are shared across platforms.
 
 1. **Copy an existing target**: `axsem/label/` for another label, `axsem/hub/` for a second hub.
@@ -89,7 +89,7 @@ only `common/` and `tooling/` are shared across platforms.
    target needs it — and leave `src/epd.c` as thin wiring. A mono panel has no red plane, so the
    receiving path (`src/img_rx.c`), the wire format (two planes today) and the hub's frame count have
    to agree; the clean way is a capability byte in the poll.
-5. **Choose the board**, if the MCU is not an AX8052F143: add a board JSON to `axsem/boards/` and
+5. **Choose the board**, if the MCU is not an AX8052F143: add a board JSON to the project's `.vscode/boards/` and
    point `board` in `sdcc-project.json` at its `build.mcu`.
 6. **Keep the protocol.** Any tag must speak the same POLL / POLL_RSP / DATA / ACK frames
    ([Documentation/wireless-link.md](../Documentation/wireless-link.md)); the hub and the server only
@@ -105,7 +105,7 @@ only `common/` and `tooling/` are shared across platforms.
 - `"sdcc.shellPath": "cmd.exe"` in each target's `.vscode/settings.json` works around the extension's
   single-quoted tool paths, which PowerShell cannot call without `&`. After changing it, reload the
   VS Code window — the extension reuses its build terminal.
-- Board definitions are cached by the extension; after editing `axsem/boards/…`, reload the window.
+- Board definitions are cached by the extension; after editing a `.vscode/boards/…` file, reload the window.
 - `build/` is git-ignored and is regenerated; it is safe to delete when paths move under it.
 - Each target's README covers that target's drivers, logs and quirks; the Axsem SDK and shared
   code have [axsem/README.md](axsem/README.md).
