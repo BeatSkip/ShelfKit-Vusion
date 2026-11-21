@@ -9,6 +9,8 @@
                 "${workspaceFolder}/ShelfKit-Firmware/axsem/sdk/libaxdvk2/include",
                 "${workspaceFolder}/ShelfKit-Firmware/axsem/shared/axradio/inc",
                 "${workspaceFolder}/ShelfKit-Firmware/axsem/shared/shelfhw/inc",
+                "${workspaceFolder}/ShelfKit-Firmware/axsem/shared/shelfota/inc",
+                "${workspaceFolder}/ShelfKit-Firmware/axsem/shared/shelfid/inc",
                 "${workspaceFolder}/ShelfKit-Firmware/common/shelflink",
                 "${workspaceFolder}/ShelfKit-Firmware/common/shelflink/inc",
                 "C:/Program Files/SDCC/include",

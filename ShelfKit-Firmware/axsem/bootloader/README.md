@@ -70,13 +70,13 @@ Both are compiled exactly as they were: the `.c` with `sdcc`, the `.asm` with `s
 | `-mmcs51 --model-small --verbose` | `board` (`axsem-8052f143`) supplies the CPU, model, IRAM/XRAM sizes |
 | `--xram-size 8192 --iram-size 256 --code-size 65536` | the board supplies the first two; `--code-size 65536` moved to `build.flags` |
 | `-Wl-bVECTOR=0x0000 -Wl-bHOME=0xe400` (reference) | the same, but moved to `0xd800` to make room for the OTA path, in `build.flags` |
-| `-llibmf` | `libraries: ["../axsem/lib"]` — the linker pulls only what is referenced |
-| include paths from the Code::Blocks install | `include` + `../axsem/sdk/libmf/include` |
+| `-llibmf` | `libraries: ["../lib"]` — the linker pulls only what is referenced |
+| include paths from the Code::Blocks install | `include` + `../sdk/libmf/include` |
 | output `bin/Release/bootloader.hex` | `build/bootloader.hex` (`build.output_name`) |
-| manual compiler/assembler/linker steps | *SDCC: Build* — **Ctrl+Shift+B** |
+| manual compiler/assembler/linker steps | `tooling/build-all.py --targets bootloader` |
 
-The `.sdcc/` board cache that came with the skeleton was removed; the board definition is read from
-`.vscode/boards` like every other target.
+The `.sdcc/` board cache that came with the skeleton was removed; the board definition is
+`ShelfKit-Firmware/boards/axsem-8051.json`, shared with the label and the hub.
 
 ## Installing the bootloader and the application at once
 
@@ -120,18 +120,19 @@ are in the built set (`--targets axsem,bootloader`).
 
 ## Building and flashing
 
-Open **this folder** in VS Code, **Ctrl+Shift+B**, output in `build/`. Or by hand from here:
+`python ShelfKit-Firmware/tooling/build-all.py --targets bootloader` from the repo root (into
+`Release/bootloader-latest.hex`). Or by hand from here:
 
 ```powershell
 $flags = @('-mmcs51','--model-small','--iram-size','256','--xram-size','8192','--code-size','65536',
-           '-Wl-bVECTOR=0x0000','-Wl-bHOME=0xd800','-Iinclude','-I../axsem/sdk/libmf/include')
+           '-Wl-bVECTOR=0x0000','-Wl-bHOME=0xd800','-Iinclude','-I../sdk/libmf/include')
 & 'C:\Program Files\SDCC\bin\sdcc.exe' @flags -c src/main.c -o build/main.rel
 & 'C:\Program Files\SDCC\bin\sdas8051.exe' -plosgffw build/crtstart.rel src/crtstart.asm
 & 'C:\Program Files\SDCC\bin\sdcc.exe' @flags build/crtstart.rel build/main.rel `
-    ../axsem/lib/libmf.lib -o build/bootloader.hex
+    ../lib/libmf.lib -o build/bootloader.hex
 ```
 
-*SDCC: Flash* runs [`../tooling/axsem-flasher.py`](../../tooling/axsem-flasher.py), which talks to
+[`tooling/axsem-flasher.py`](../../tooling/axsem-flasher.py) installs it; it talks to
 the **mask-ROM** bootloader selected by the BOOT pin (DTR on the adapter) — that is the only thing that
 can write the `0xD800` region, since a flash-resident bootloader cannot erase itself while it runs.
 Once this image is in place, applications can be uploaded over UART0 without touching the BOOT pin.

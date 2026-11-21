@@ -24,14 +24,5 @@
       "-Wl-bHOME=0xd800"
     ],
     "hooks": {}
-  },
-  "upload": {
-    "tool": "python",
-    "args": [
-      "../../tooling/axsem-flasher.py",
-      "${outputHex}",
-      "-p",
-      "${config:comPort}"
-    ]
   }
 }

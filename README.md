@@ -171,10 +171,8 @@ address).
 
 ### 1. Firmware
 
-You need [SDCC](https://sdcc.sourceforge.net/) (verified with 3.6.0). VS Code with the
-[SDCC-MDF extension](https://marketplace.visualstudio.com/items?itemName=dzantemir.sdcc-mdf) is
-optional and handy for single-target builds; open `ShelfKit-Firmware/axsem/label` or `axsem/hub` itself,
-not the repo root. To build everything at once:
+You need [SDCC](https://sdcc.sourceforge.net/) (verified with 3.6.0). Every target builds with
+one script (`--targets axsem/hub` and the like build just one):
 
 ```
 python ShelfKit-Firmware/tooling/build-all.py

@@ -10,12 +10,12 @@
     python ShelfKit-Firmware/tooling/build-all.py --targets axsem,bootloader \\
         --define SHELF_LOG_UART=1 --out Release/debug-log     # a tag with its serial log on
 
-Each target is built with the same flags SDCC-MDF uses, because they are read from
-the target's own ``sdcc-project.json`` and the board definition it names:
+Each target is built from its own ``sdcc-project.json`` (the SDCC-MDF project format)
+and the board definition it names:
 
-* ``build.flags`` of the project (the bootloader's ``-Wl-bHOME=0xe400`` lives there),
-* CPU, memory model and the IRAM/XRAM/code sizes from the board JSON (the project's
-  ``.vscode/boards/``; the copies of one board must be identical),
+* ``build.flags`` of the project (the bootloader's ``-Wl-bHOME=0xd800`` lives there),
+* CPU, memory model and the IRAM/XRAM/code sizes from the board JSON in
+  ``ShelfKit-Firmware/boards/`` whose ``build.mcu`` is the project's ``board``,
 * ``sources`` (directories are walked for ``.c`` and ``.asm``), plus the ``inc``
   folder of every source directory as an include path,
 * ``includes``, ``libraries`` (every ``*.lib`` in the listed folders) and
@@ -82,6 +82,7 @@ REPO = FIRMWARE.parent
 DEFAULT_OUT = REPO / "Release"
 VERSION_FILE = FIRMWARE / "version.json"
 BUILD_LOG = FIRMWARE / "build-log.md"
+BOARDS = FIRMWARE / "boards"            # board definitions, by build.mcu id
 SDCC_DIRS = [Path(r"C:\Program Files\SDCC\bin"), Path(r"C:\Program Files (x86)\SDCC\bin")]
 SOURCE_SUFFIXES = {".c", ".asm", ".s", ".S"}
 # the name you pass to --targets -> folder under ShelfKit-Firmware/
@@ -156,50 +157,17 @@ def load_project(root: Path) -> dict:
 
 
 def load_board(root: Path, project: dict) -> dict:
-    """The board definition the extension would pick: boardsDir from .vscode/settings.json."""
+    """The board definition named by the project's ``board`` (its ``build.mcu`` id), from
+    ShelfKit-Firmware/boards/ - one file per chip, shared by every target that uses it."""
     wanted = project.get("board")
-    settings = root / ".vscode" / "settings.json"
-    boards_dir = None
-    if settings.is_file():
+    for candidate in sorted(BOARDS.glob("*.json")):
         try:
-            boards_dir = json.loads(settings.read_text(encoding="utf-8")).get("sdcc.boardsDir")
-        except ValueError:
-            boards_dir = None
-    # the extension's own order: the project's .sdcc/boards wins over sdcc.boardsDir
-    folders = [root / ".sdcc" / "boards"] + ([root / boards_dir] if boards_dir else [])
-    folders.append(root / ".vscode" / "boards")
-    seen = set()
-    for folder in folders:
-        if not folder.is_dir() or folder in seen:
+            board = json.loads(candidate.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
             continue
-        seen.add(folder)
-        for candidate in sorted(folder.glob("*.json")):
-            board = read_board(candidate)
-            if board is not None and board.get("build", {}).get("mcu") == wanted:
-                check_board_copies(candidate, board)
-                return board
-    raise SystemExit(f"no board definition for {wanted!r} in {[str(f) for f in folders]}")
-
-
-def read_board(path: Path) -> dict | None:
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return None
-
-
-def check_board_copies(used: Path, board: dict) -> None:
-    """Every project carries its own copy of its board file (.vscode/boards/, where the
-    extension finds it), so the label, hub and bootloader each hold one. They must stay
-    identical: a build stops when another project's copy of the same board id differs."""
-    wanted = board.get("build", {}).get("mcu")
-    for other in sorted(FIRMWARE.glob("*/*/.vscode/boards/*.json")):
-        if other.resolve() == used.resolve():
-            continue
-        data = read_board(other)
-        if data is not None and data.get("build", {}).get("mcu") == wanted and data != board:
-            raise SystemExit(f"board {wanted!r} differs between {display(used)} and {display(other)}:\n"
-                             "    every project has its own copy - make them identical again")
+        if board.get("build", {}).get("mcu") == wanted:
+            return board
+    raise SystemExit(f"{root.name}: no board definition with build.mcu {wanted!r} in {display(BOARDS)}")
 
 
 def board_flags(board: dict) -> list[str]:

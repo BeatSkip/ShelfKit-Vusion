@@ -45,12 +45,11 @@ The protocol, the frame format, the retry rules and the exact log lines are in
 
 ## Building and flashing
 
-Open **this folder** in VS Code (not the repo root) so the extension finds `sdcc-project.json`, then
-**Ctrl+Shift+B**; output lands in `build/`. *SDCC: Flash* invokes `../tooling/axsem-flasher.py`
-with the hex and your `comPort` setting.
+From the repo root, `python ShelfKit-Firmware/tooling/build-all.py --targets axsem-hub`; the
+hex lands in `Release/`. Over the serial port, flash the app-only image:
 
 ```
-python ../tooling/axsem-flasher.py build/firmware.hex -p COM7
+python ShelfKit-Firmware/tooling/axsem-flasher.py Release/shelfkit-axsem-hub-latest.hex -p COM7
 ```
 
 By hand, from this folder:

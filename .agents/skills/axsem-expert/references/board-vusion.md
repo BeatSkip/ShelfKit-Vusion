@@ -56,13 +56,13 @@ ShelfKit-Firmware/
     shared/       axradio  shelfhw  shelflink(.c)  shelfota  shelfid   (inc/ per module)
     sdk/libmf, sdk/libaxdvk2 ...   vendor SDK (only libmf/include and libaxdvk2/include on the include path)
     lib/*.lib                      prebuilt libmf etc. (patched libmf.lib)
-    <target>/.vscode/boards/axsem-8051.json  board def (one identical copy per target): id axsem-8052f143, 26 MHz, iram 256, xram 8192, code 59389, --model-small
+  boards/axsem-8051.json           board def (shared by label, hub, bootloader): id axsem-8052f143, 26 MHz, iram 256, xram 8192, code 59389, --model-small
   common/shelflink/  sl_proto.c + inc/{shelflink,shelfmsg,shelfver}.h: the frame format, shared with texas/ and silabs/
   texas/label, silabs/label        skeletons for other chips
   tooling/  build-all.py  axsem-flasher.py  ota-send.py  flash-read.py  set-id.py
 ```
 
-- Each target is a self-contained SDCC-MDF project (`sdcc-project.json`). Open the **target folder** in VS Code and press Ctrl+Shift+B. Paths to `../shared`, `../sdk` and `../../common` are relative.
+- Each target is a self-contained project (`sdcc-project.json`, the SDCC-MDF format), built with `python ShelfKit-Firmware/tooling/build-all.py --targets <name> --no-record` for a test build. Paths to `../shared`, `../sdk` and `../../common` are relative; the board is looked up by id in `ShelfKit-Firmware/boards/`.
 - Code that a second target needs belongs in `axsem/shared/`. Board- or panel-specific code stays in the target's `src/`.
 
 ## Memory map of a tag

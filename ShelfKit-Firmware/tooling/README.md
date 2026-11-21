@@ -42,12 +42,13 @@ application's entry installed in the bootloader's jump vector: one flash operati
 for a tag that has neither yet. See
 [axsem/bootloader/README.md](../axsem/bootloader/README.md#installing-the-bootloader-and-the-application-at-once).
 
-It builds each target exactly the way SDCC-MDF does, because it reads the target's own
-`sdcc-project.json` and the board definition that file names:
+It builds each target from its own `sdcc-project.json` (the SDCC-MDF project format) and the
+board definition that file names:
 
 - `build.flags` of the project (this is where the bootloader's `-Wl-bHOME=0xd800` and its 64 KB code
   space live),
-- CPU, memory model and the IRAM/XRAM/code sizes from the project's `.vscode/boards/` (e.g. [`axsem/label/.vscode/boards/`](../axsem/label/.vscode/boards)),
+- CPU, memory model and the IRAM/XRAM/code sizes from the board in [`../boards/`](../boards) whose
+  `build.mcu` is the project's `board`,
 - `sources` (directories are walked for `.c` and `.asm`, and every source directory's `inc/` is added
   to the include path), `includes`, `libraries` (every `*.lib`) and `defines`.
 
@@ -101,23 +102,6 @@ range is everything the firmware writes.
 python ShelfKit-Firmware/tooling/axsem-flasher.py Release/shelfkit-axsem-full-latest.hex -p COM7
 ```
 
-**SDCC: Flash calls this too.** `upload` in each target's `sdcc-project.json` runs this script with
-`${outputHex}` (the file just built) and `${config:comPort}`:
-
-```json
-  "upload": {
-    "tool": "python",
-    "args": [
-      "../tooling/axsem-flasher.py",
-      "${outputHex}",
-      "-p",
-      "${config:comPort}"
-    ]
-  }
-```
-
-The extension anchors the command at the project root, so the relative `../tooling/…` path resolves;
-set `sdcc.comPort` in the target's `.vscode/settings.json` to pick the port.
 
 The flasher talks to the **mask-ROM** bootloader, selected by holding the BOOT pin at reset (the
 adapter's DTR line). That is the only thing that can write the top of the flash, so it is also how

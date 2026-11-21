@@ -25,14 +25,5 @@
     "output_dir": "build",
     "output_name": "firmware",
     "hooks": {}
-  },
-  "upload": {
-    "tool": "python",
-    "args": [
-      "../../tooling/axsem-flasher.py",
-      "${outputHex}",
-      "-p",
-      "${config:comPort}"
-    ]
   }
 }

@@ -2,7 +2,7 @@
 
 The label, hub and bootloader for the AX8052F143 (an 8051 with the AX5043 sub-GHz radio), plus
 everything they share. Each target references the shared folders by relative path (`../shared/…`,
-`../sdk/…`) from its own `sdcc-project.json` and `.vscode/settings.json`, so the repository holds
+`../sdk/…`) from its own `sdcc-project.json`, so the repository holds
 exactly one copy. Before this layout existed, the two firmware targets each carried an identical
 142 MB copy of it (810 files each, verified byte-for-byte identical).
 
@@ -17,17 +17,11 @@ Only `sdk/libmf/include` and `sdk/libaxdvk2/include` are actually on the compile
 The rest of the SDK is kept as the vendor reference the drivers were written from, and because
 `lib/` is built from it.
 
-## Two things to know
+## The board
 
-- The board definition, `axsem-8051.json` (id `axsem-8052f143` from `build.mcu`, 26 MHz,
-  256 B IRAM, 8 KB XRAM, 59389 B code, `--model-small`), lives in each target's
-  `.vscode/boards/`: one identical copy in `label/`, `hub/` and `bootloader/`. `build-all.py`
-  refuses to build when they differ, so change all three. The extension scans `sdcc.boardsDir`
-  as a `custom` source and caches the result, so **reload the VS Code window** after editing it.
-- The extension accepts a relative `sdcc.boardsDir` and resolves it against the active project
-  root. If a target's `.vscode/settings.json` is missing (or the target is opened as part of a
-  multi-root workspace), the board will not be found and the build will fail with an unknown
-  board — keep `"sdcc.boardsDir": ".vscode/boards"` in place.
+`../boards/axsem-8051.json` (id `axsem-8052f143` from `build.mcu`, 26 MHz, 256 B IRAM, 8 KB XRAM,
+59389 B code, `--model-small`) is the one board definition all three targets name in their
+`sdcc-project.json`. Change it there and every target follows.
 
 ## Changing the SDK
 
