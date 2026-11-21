@@ -1,6 +1,6 @@
 # Vusion tag power audit (2026-11-10)
 
-Scope: `ShelfKit-Firmware/ShelfKit-Axsem` and the shared code it links (`shelfhw`, `shelflink`,
+Scope: `ShelfKit-Firmware/axsem/label` and the shared code it links (`shelfhw`, `shelflink`,
 `axradio`). This was a code review plus a compile check. **Nothing here was measured on
 hardware**: every current is a datasheet figure or an estimate, and every change still needs
 a run on a real tag.
@@ -88,18 +88,18 @@ OTA window (it was 42,309), so 484 bytes of headroom remain.
 
 ### Ammeter (changes the reported number, not the tag's behaviour)
 
-- `Shared/firmware/shelfhw/shelfhw.c`: only the idle call is timed, and its span goes to
+- `axsem/shared/shelfhw/shelfhw.c`: only the idle call is timed, and its span goes to
   Sleep or Standby according to what `wtimer_idle()` returned. CPU time is the uptime minus
   those two. Sleep is kept in seconds so it cannot wrap. Radio-on time uses 32-bit
   differences. The API is now `shelfhw_awake_ticks()`, `shelfhw_standby_ticks()`,
   `shelfhw_asleep_s()`, `shelfhw_radio_on_ticks()`.
-- `Shared/firmware/shelflink/shelflink.c`: new 32-bit `sl_tx_frames`, counting every frame
+- `axsem/shared/shelflink/shelflink.c`: new 32-bit `sl_tx_frames`, counting every frame
   actually handed to the transmitter (requests, retries, ACKs).
-- `ShelfKit-Axsem/src/img_rx.c`: `img_rx_panel_ticks()` accumulates refresh time.
-- `ShelfKit-Axsem/src/main.c`: `pow_update()` sums charge in a form that does not overflow and
+- `axsem/label/src/img_rx.c`: `img_rx_panel_ticks()` accumulates refresh time.
+- `axsem/label/src/main.c`: `pow_update()` sums charge in a form that does not overflow and
   adds the transmitter and the panel. The log line and the tapped-poll fields keep their
   format.
-- `ShelfKit-Axsem/include/shelf_config.h`: the currents are now named constants
+- `axsem/label/include/shelf_config.h`: the currents are now named constants
   (`SHELF_PWR_MCU_UA`, `SHELF_PWR_SLEEP_UA`, `SHELF_PWR_RADIO_UA`, `SHELF_PWR_PANEL_UA`,
   `SHELF_PWR_TX_UAS`). **Set `SHELF_PWR_SLEEP_UA` to the measured idle current of the whole
   board**; the others matter much less.
@@ -143,7 +143,7 @@ Smaller things noticed along the way:
   drops back to hourly polling for two days after each wrap. The uptime in the poll payload
   is 16 bits of seconds and wraps every 18 hours regardless.
 - `pwr_pulse()` in `pwr.c` is unused, about 150 bytes if the OTA window gets tight again.
-- `ShelfKit-Axsem/README.md` ("Serial log is off by default") says `SHELF_LOG_UART` is 0. It is 1,
+- `axsem/label/README.md` ("Serial log is off by default") says `SHELF_LOG_UART` is 0. It is 1,
   and `SHELF_LOG_MUTE` is 0, so the tag currently prints everything.
 
 ## What to measure

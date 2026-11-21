@@ -11,7 +11,7 @@ SPI flash sector 1, in the gap the OTA update never touches:
 |---|---|---|
 | `0x000000` | OTA header (magic, length, CRC) | app on `BEGIN`, bootloader after flashing |
 | `0x001000` | **identity record**: magic `SKID`, version, flags, node id (LE), CRC-16 | only when the id is (re)assigned |
-| `0x002000` | configuration record: the idle check-in interval (`SM_OP_SET_POLL`). Magic `SKCF`, version, interval in seconds (LE), a zero, CRC-16. Blank = firmware default (300 s). Written by `shelf_cfg_set_poll()` in `ShelfKit-Axsem/src/shelf_id.c` | 10 bytes |
+| `0x002000` | configuration record: the idle check-in interval (`SM_OP_SET_POLL`). Magic `SKCF`, version, interval in seconds (LE), a zero, CRC-16. Blank = firmware default (300 s). Written by `shelf_cfg_set_poll()` in `axsem/label/src/shelf_id.c` | 10 bytes |
 | `0x003000` | OTA image | app on `BEGIN` |
 
 The record is checked by its own CRC. A torn write, or a flash sector that never
@@ -67,7 +67,7 @@ Sectors above the image window are left alone: they are not this firmware's.
    log says `id? 3F2A new`; a record from a previous boot says `id 0100`.
 2. **First connection**: the tag polls normally, so the hub prints
    `POLL src=3f2a …` and the server sees it like any other tag.
-3. **Assignment**: `Tooling/set-id.py 3F2A 0100` sends one DATA frame
+3. **Assignment**: `tooling/set-id.py 3F2A 0100` sends one DATA frame
    (`SM_OP_SET_ID`). The tag writes the record, **reads it back to verify**, and
    only then re-points the radio's hardware address (`sl_set_local`), so the next
    poll carries the new id. A tag never reports an id it would not survive a reset
@@ -100,7 +100,7 @@ duplicate as "assign the next one first".
 
 ## Inspecting it
 
-`Tooling/flash-read.py` reads back what is actually on the chip, so a "the id does
+`tooling/flash-read.py` reads back what is actually on the chip, so a "the id does
 not stick" report can be settled with evidence instead of guesswork: it prints the
 identity record (`id`, `assigned`/`random`, CRC ok or BAD), the OTA header (pending
 update or blank, header CRC), and whether the reserved sector is in use, then saves
@@ -115,7 +115,7 @@ picture of the metadata in one file.
   frequency, same airtime).
 - **Assignment is one frame, one tag at a time.** The server's Fleet drawer
   (**Wireless identity** → **Assign**, empty field = lowest free id) and
-  `Tooling/set-id.py` both send the same `SM_OP_SET_ID` frame; neither batches.
+  `tooling/set-id.py` both send the same `SM_OP_SET_ID` frame; neither batches.
 - **No id change while a poll is in flight**: the assignment frame's ACK is sent
   by the link layer before the handler runs, exactly like image and OTA frames.
 - Identity generation, assignment over the air and survival across OTA updates have run on real tags.

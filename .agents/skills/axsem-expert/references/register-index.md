@@ -1,6 +1,6 @@
 # Register index (generated)
 
-Generated from `ShelfKit-Firmware/Shared/sdk/libmf/include/ax8052.h`, `ax8052f143.h` and `ax5043.h`.
+Generated from `ShelfKit-Firmware/axsem/sdk/libmf/include/ax8052.h`, `ax8052f143.h` and `ax5043.h`.
 Names are the C identifiers you use in code (`#include <ax8052f143.h>`). Bit layouts are NOT here;
 grep the vendor text (`references/vendor/`) or the topic references for those.
 

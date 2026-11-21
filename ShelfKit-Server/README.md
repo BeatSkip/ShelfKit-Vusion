@@ -154,7 +154,7 @@ command that failed.
 | | USB debugger | Serial bootloader |
 |---|---|---|
 | Needs | the AXSDB debugger on USB; set where `axsdb.exe` is in **Settings** (found by itself in the default install) | a serial adapter with DTR on the chip's BOOT pin and RTS on its reset, on one of the two panes |
-| Runs | `axsdb.exe --eraseall --flashprog <file>`, from AXSDB's own `bin` folder | the protocol of `ShelfKit-Firmware/Tooling/axsem-flasher.py`, in the server: banner, erase, HEX lines, run |
+| Runs | `axsdb.exe --eraseall --flashprog <file>`, from AXSDB's own `bin` folder | the protocol of `ShelfKit-Firmware/tooling/axsem-flasher.py`, in the server: banner, erase, HEX lines, run |
 | Steps | `Programming Serial …` → find the chip, `Bulk erase...` → erase, `Flash program...` → write, `Run program...` → start; the exit code decides success | the same four steps, with a line count while writing |
 | Pane | untouched | closed for the transfer at 38400, reopened afterwards |
 
@@ -345,7 +345,7 @@ identity assignment.
 ### Updating a tag's firmware over the air
 
 **Fleet** → click a tag → under **Firmware update** pick one of the HEX files from `Release/`
-(written by `ShelfKit-Firmware/Tooling/build-all.py`), then **Update firmware**. The `*-full-*.hex` (`shelfkit-axsem-full-latest.hex`)
+(written by `ShelfKit-Firmware/tooling/build-all.py`), then **Update firmware**. The `*-full-*.hex` (`shelfkit-axsem-full-latest.hex`)
 bundles are filtered out on purpose: they carry the bootloader as well and cannot go over the
 air. So are the hub and bootloader images, which are not tag applications.
 
@@ -363,7 +363,7 @@ only listens for `SHELF_LISTEN_WINDOW_S` (2 s) after each poll, so a transfer st
 random moment may wait up to a minute for the next window; the frames are retried for 90 s,
 which covers it.
 
-The shell equivalent is `Tooling/ota-send.py`; both use `shelfkit/firmware.py`, so they cannot
+The shell equivalent is `tooling/ota-send.py`; both use `shelfkit/firmware.py`, so they cannot
 disagree about the opcodes or the CRC.
 
 ### Service labels
@@ -476,7 +476,7 @@ banner — `*** ShelfKit hub, node 0001 net 5a dump=1` — so a hub without `dum
 error and no summary: "identity: blank" would be a lie.
 
 This is the same wire protocol and the same description code as
-`Tooling/flash-read.py` (`shelfkit/flashdump.py` is shared), so the CLI and the page
+`tooling/flash-read.py` (`shelfkit/flashdump.py` is shared), so the CLI and the page
 agree byte for byte. The page needs nothing plugged into the tag, only the hub port,
 and it refuses to start while an image or firmware transfer is running.
 
@@ -496,7 +496,7 @@ tag — alias, notes, map position, counters, last frame — to the new row, so 
 one tag, not two.
 
 The same thing from a shell, without the UI:
-`python ShelfKit-Firmware/Tooling/set-id.py 3F2A 0100`.
+`python ShelfKit-Firmware/tooling/set-id.py 3F2A 0100`.
 
 ### Pushing an image
 
@@ -640,7 +640,7 @@ currently connected. A tag stays on the list while its last POLL is younger than
 timeout (5 minutes by default) and drops off after that. The panel is redrawn only when
 the set changes, and at most once per minute: a refresh takes ~15 s, during which the hub
 cannot answer polls, and the server writes nothing to the hub (its serial line is also the
-panel's reset, see [ShelfKit-Axsem-Hub](../ShelfKit-Firmware/ShelfKit-Axsem-Hub/README.md)).
+panel's reset, see [axsem/hub](../ShelfKit-Firmware/axsem/hub/README.md)).
 
 Off by default; needs a hub built with the serial image command (banner ends in `show=1`).
 

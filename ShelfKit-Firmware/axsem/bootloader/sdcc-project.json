@@ -1,0 +1,40 @@
+{
+  "name": "axsem-bootloader",
+  "board": "axsem-8052f143",
+  "sources": [
+    "src",
+    "../shared/shelfota"
+  ],
+  "includes": [
+    "include",
+    "../sdk/libmf/include",
+    "../shared/shelfota/inc"
+  ],
+  "defines": [],
+  "libraries": [
+    "../lib"
+  ],
+  "components": [
+    "../components"
+  ],
+  "build": {
+    "output_dir": "build",
+    "output_name": "bootloader",
+    "flags": [
+      "--code-size",
+      "65536",
+      "-Wl-bVECTOR=0x0000",
+      "-Wl-bHOME=0xd800"
+    ],
+    "hooks": {}
+  },
+  "upload": {
+    "tool": "python",
+    "args": [
+      "../../tooling/axsem-flasher.py",
+      "${outputHex}",
+      "-p",
+      "${config:comPort}"
+    ]
+  }
+}

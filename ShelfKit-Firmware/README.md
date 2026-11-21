@@ -1,58 +1,82 @@
-# ShelfKit-Firmware — one SDCC-MDF project per board
+# ShelfKit-Firmware — one folder per chip platform
 
-The firmware that runs on the boards. Every target here is a **self-contained SDCC-MDF project**:
-its own `src/`, `include/`, `sdcc-project.json` and `.vscode/`, built with SDCC for the AX8052F143
-through the [SDCC-MDF extension](https://marketplace.visualstudio.com/items?itemName=dzantemir.sdcc-mdf).
-The shared amount of code — the Axsem SDK, the radio layer, the shelf protocol, the hardware helpers,
-the board definition — lives once in [`Shared/`](Shared) and is reached by relative path, so a
-new target adds a project without copying 140 MB of vendor code.
+The firmware that runs on the boards, grouped by chip platform, because each platform has its own
+toolchain, vendor code and radio (a hub can only talk to labels with the same radio):
+
+```
+ShelfKit-Firmware/
+  axsem/                 AX8052F143 (8051 + AX5043 sub-GHz radio), SDCC
+    label/               the shelf label firmware
+    hub/                 the hub firmware
+    bootloader/          serial + OTA bootloader at 0xD800
+    shared/              axradio, shelfhw, shelflink (radio side), shelfota, shelfid
+    sdk/  lib/           the Axsem SDK sources and its prebuilt .lib archives
+    boards/              axsem-8051.json, the SDCC-MDF board definition
+    components/          SDCC-MDF source components (empty)
+  texas/                 TI CC2510 (8051 + 2.4 GHz radio), SDCC
+    label/  boards/
+  silabs/                Silicon Labs EFR32FG22 (Cortex-M33 + 2.4 GHz radio), Arm GCC
+    label/
+  common/                code every platform compiles
+    shelflink/           the ShelfLink frame format: sl_proto.c, shelflink.h, shelfmsg.h, shelfver.h
+  tooling/               build-all.py, the flasher, OTA sender, set-id, flash-read
+  version.json  build-log.md
+```
+
+Every target is a **self-contained project**: its own `src/`, `include/` and `sdcc-project.json`
+(or `gcc-project.json` for the Arm one), and for the SDCC targets a `.vscode/` for the
+[SDCC-MDF extension](https://marketplace.visualstudio.com/items?itemName=dzantemir.sdcc-mdf).
+Everything else is reached by relative path, so a new target adds a project without copying
+140 MB of vendor code. See [axsem/README.md](axsem/README.md) for the Axsem SDK and shared code.
 
 | Folder | Target | What it does |
 |---|---|---|
-| `ShelfKit-Axsem/` | Tag | Polls the hub every couple of minutes (adaptive), receives an image (raw or compressed) straight into the panel controller, refreshes, sleeps; takes OTA firmware updates and a wireless id |
-| `ShelfKit-Axsem-Hub/` | Hub | Always listening, answers every poll, relays host frames (single and batched) to the tag that just spoke, can draw on its own panel, speaks a line protocol on UART at 115200 |
-| `ShelfKit-Texas/` | Tag (skeleton) | TI **CC2510** tags (8051 + 2.4 GHz radio), SDCC. Builds; no radio or panel driver yet, placeholder pins. Needs a 2.4 GHz hub of its own — see [its README](ShelfKit-Texas/README.md) |
-| `ShelfKit-Silabs/` | Tag (skeleton) | Silicon Labs **EFR32FG22** tags (Cortex-M33 + 2.4 GHz radio), Arm GCC (`gcc-project.json`). Builds once `arm-none-eabi-gcc` is installed; no drivers yet, placeholder pins. Needs a 2.4 GHz hub — see [its README](ShelfKit-Silabs/README.md) |
-| `Tooling/` | Host scripts | The flasher, `build-all.py` (every target into `Release/`), the OTA sender, `set-id.py` and `flash-read.py` (see [Tooling/README.md](Tooling/README.md)) |
-| `Bootloader/` | AX8052 serial bootloader | Flash-resident UART bootloader (Axsem V1.1, 38400 baud, at `0xD800`) that erases and programs the application area and jumps to it, and applies an over-the-air image staged in the tag's SPI flash |
+| `axsem/label/` | Label | Polls the hub every couple of minutes (adaptive), receives an image (raw or compressed) straight into the panel controller, refreshes, sleeps; takes OTA firmware updates and a wireless id |
+| `axsem/hub/` | Hub | Always listening, answers every poll, relays host frames (single and batched) to the tag that just spoke, can draw on its own panel, speaks a line protocol on UART at 115200 |
+| `texas/label/` | Label (skeleton) | TI **CC2510** tags (8051 + 2.4 GHz radio), SDCC. Builds; no radio or panel driver yet, placeholder pins. Needs a 2.4 GHz hub of its own — see [its README](texas/label/README.md) |
+| `silabs/label/` | Label (skeleton) | Silicon Labs **EFR32FG22** tags (Cortex-M33 + 2.4 GHz radio), Arm GCC (`gcc-project.json`). Builds once `arm-none-eabi-gcc` is installed; no drivers yet, placeholder pins. Needs a 2.4 GHz hub — see [its README](silabs/label/README.md) |
+| `tooling/` | Host scripts | The flasher, `build-all.py` (every target into `Release/`), the OTA sender, `set-id.py` and `flash-read.py` (see [tooling/README.md](tooling/README.md)) |
+| `axsem/bootloader/` | AX8052 serial bootloader | Flash-resident UART bootloader (Axsem V1.1, 38400 baud, at `0xD800`) that erases and programs the application area and jumps to it, and applies an over-the-air image staged in the tag's SPI flash |
 
-ShelfKit-Axsem runs on the SES-imagotag Vusion 2.6" BWR label (UU340 variant): AX8052F143 — an 8051 core plus a
+axsem/label runs on the SES-imagotag Vusion 2.6" BWR label (UU340 variant): AX8052F143 — an 8051 core plus a
 sub-GHz radio at 26 MHz — a Good Display **GDEW026Z39** panel (296×152, black/white/red, IL0373),
-an NFC chip and a serial flash. `ShelfKit-Axsem/` and `ShelfKit-Axsem-Hub/` run on identical hardware; they differ
+an NFC chip and a serial flash. `axsem/label/` and `axsem/hub/` run on identical hardware; they differ
 in their `src/main.c` and their `include/shelf_config.h`; the tag adds the OTA, identity and
 compressed-image receivers, the hub keeps a smaller image receiver for its own panel.
 
 ## Building one target
 
 **Open the target folder itself, not this folder and not the repo root.** The extension activates on
-a `sdcc-project.json` in the workspace folder, and the `../Shared/…` paths are resolved against
-that folder as the project root.
+a `sdcc-project.json` in the workspace folder, and the `../shared/…`, `../sdk/…` and
+`../../common/…` paths are resolved against that folder as the project root.
 
-1. `File ▸ Open Folder…` → `ShelfKit-Firmware/ShelfKit-Axsem-Hub` (or `ShelfKit-Axsem`).
+1. `File ▸ Open Folder…` → `ShelfKit-Firmware/axsem/hub` (or `axsem/label`).
 2. **Ctrl+Shift+B** — `firmware.ihx`, `.hex`, `.map` and `.mem` land in that target's `build/`.
 3. *SDCC: Flash* runs the `upload` command from `sdcc-project.json`, which is
-   [`Tooling/axsem-flasher.py`](Tooling/axsem-flasher.py) — it wants the serial port in the
-   workspace setting `comPort` (see [Tooling/README.md](Tooling/README.md)).
+   [`tooling/axsem-flasher.py`](tooling/axsem-flasher.py) — it wants the serial port in the
+   workspace setting `comPort` (see [tooling/README.md](tooling/README.md)).
 
-The three files that wire a target to the shared tree, and what they must say from inside
-`ShelfKit-Firmware/<target>/`:
+The three files that wire an Axsem target to the shared tree, and what they must say from inside
+`ShelfKit-Firmware/axsem/<target>/`:
 
 | File | Entries |
 |---|---|
-| `sdcc-project.json` | `sources`/`includes` with `../Shared/firmware/…` and `../Shared/sdk/…`, `libraries: ["../Shared/lib"]`, `components: ["../Shared/components"]`, `upload` args `../Tooling/axsem-flasher.py` |
-| `.vscode/settings.json` | `"sdcc.boardsDir": "../Shared/boards"` — scanned as a `custom` board source; the board id `axsem-8052f143` comes from that board JSON's `build.mcu` |
-| `.vscode/c_cpp_properties.json` | `${workspaceFolder}/../Shared/sdk/libmf/include` for IntelliSense |
+| `sdcc-project.json` | `sources`/`includes` with `../shared/…`, `../sdk/…` and `../../common/shelflink`, `libraries: ["../lib"]`, `components: ["../components"]`, `upload` args `../../tooling/axsem-flasher.py` |
+| `.vscode/settings.json` | `"sdcc.boardsDir": "../boards"` — scanned as a `custom` board source; the board id `axsem-8052f143` comes from that board JSON's `build.mcu` |
+| `.vscode/c_cpp_properties.json` | `${workspaceFolder}/../sdk/libmf/include` and the shared `inc/` folders for IntelliSense |
 
 If you move a target deeper, every one of those grows one `../`. The extension deliberately keeps
 paths outside the project root absolute on the tool command line (paths inside it become relative),
 so no symlinks or junctions are involved.
 
-## Adding another tag type
+## Adding another label type
 
-The point of this folder. A new tag is a new project beside `ShelfKit-Axsem/`, sharing everything that is
-not board-specific:
+A new label on an existing platform is a new project beside `axsem/label/` (for example
+`axsem/label-4in2/`), sharing everything that is not board-specific. A new chip platform is a new
+top-level folder like `texas/`, with its own `label/` (and later `hub/`), `boards/` and `shared/`;
+only `common/` and `tooling/` are shared across platforms.
 
-1. **Copy an existing target**: `ShelfKit-Axsem/` for another tag, `ShelfKit-Axsem-Hub/` for a second hub.
+1. **Copy an existing target**: `axsem/label/` for another label, `axsem/hub/` for a second hub.
 2. **Rename it** in `sdcc-project.json`: `name`, and `build.output_name` if you want a distinct hex
    (default `firmware`).
 3. **Give it an identity** in `include/shelf_config.h`: the fleet-wide `SHELF_NET_ID` and its own
@@ -61,11 +85,11 @@ not board-specific:
    SPI flash (see [tag-identity.md](../Documentation/tag-identity.md)), not set here.
 4. **Choose the panel.** `src/epd.c` is the GDEW026Z39 driver: geometry in `epd.h` (`EPD_W`,
    `EPD_H`, `EPD_PLANE_BYTES`), the init sequence and the BUSY handling in `epd.c`. For a different
-   panel, add the driver to `Shared/firmware/` — that is where code earns its place once a second
+   panel, add the driver to `axsem/shared/` — that is where code earns its place once a second
    target needs it — and leave `src/epd.c` as thin wiring. A mono panel has no red plane, so the
    receiving path (`src/img_rx.c`), the wire format (two planes today) and the hub's frame count have
    to agree; the clean way is a capability byte in the poll.
-5. **Choose the board**, if the MCU is not an AX8052F143: add a board JSON to `Shared/boards/` and
+5. **Choose the board**, if the MCU is not an AX8052F143: add a board JSON to `axsem/boards/` and
    point `board` in `sdcc-project.json` at its `build.mcu`.
 6. **Keep the protocol.** Any tag must speak the same POLL / POLL_RSP / DATA / ACK frames
    ([Documentation/wireless-link.md](../Documentation/wireless-link.md)); the hub and the server only
@@ -81,7 +105,10 @@ not board-specific:
 - `"sdcc.shellPath": "cmd.exe"` in each target's `.vscode/settings.json` works around the extension's
   single-quoted tool paths, which PowerShell cannot call without `&`. After changing it, reload the
   VS Code window — the extension reuses its build terminal.
-- Board definitions are cached by the extension; after editing `Shared/boards/…`, reload the window.
+- Board definitions are cached by the extension; after editing `axsem/boards/…`, reload the window.
 - `build/` is git-ignored and is regenerated; it is safe to delete when paths move under it.
-- Each target's README covers that target's drivers, logs and quirks; the shared code has
-  [Shared/README.md](Shared/README.md).
+- Each target's README covers that target's drivers, logs and quirks; the Axsem SDK and shared
+  code have [axsem/README.md](axsem/README.md).
+- The layout moved on 2026-11-21 (`ShelfKit-Axsem` → `axsem/label`, `ShelfKit-Axsem-Hub` →
+  `axsem/hub`, `Bootloader` → `axsem/bootloader`, `Shared/` split into `axsem/` and `common/`,
+  `Tooling` → `tooling`). The release file names did not change.

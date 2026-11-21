@@ -1,0 +1,41 @@
+{
+  "name": "axsem-hub",
+  "board": "axsem-8052f143",
+  "sources": [
+    "src",
+    "../shared/axradio",
+    "../shared/shelfhw",
+    "../shared/shelflink",
+    "../../common/shelflink"
+  ],
+  "includes": [
+    "include",
+    "../sdk/libmf/include",
+    "../sdk/libaxdvk2/include",
+    "../shared/axradio/inc",
+    "../shared/shelfhw/inc",
+    "../../common/shelflink",
+    "../../common/shelflink/inc"
+  ],
+  "defines": [],
+  "libraries": [
+    "../lib"
+  ],
+  "components": [
+    "../components"
+  ],
+  "build": {
+    "output_dir": "build",
+    "output_name": "firmware",
+    "hooks": {}
+  },
+  "upload": {
+    "tool": "python",
+    "args": [
+      "../../tooling/axsem-flasher.py",
+      "${outputHex}",
+      "-p",
+      "${config:comPort}"
+    ]
+  }
+}

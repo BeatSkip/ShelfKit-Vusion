@@ -1,7 +1,7 @@
 # AX5043 radio
 
 Sources: AND9347/D (AX5043 Programming Manual), the AX5043 datasheets, ax5043.h, ax8052f143.h,
-`Shared/firmware/axradio/`. Grep `vendor/AX5043-programming-manual-AND9347.txt` for any register name: the
+`axsem/shared/axradio/`. Grep `vendor/AX5043-programming-manual-AND9347.txt` for any register name: the
 "Register Details" part has a bit table per register.
 
 ## How the MCU reaches the radio

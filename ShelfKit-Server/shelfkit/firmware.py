@@ -1,9 +1,9 @@
 """OTA firmware images: Intel HEX to binary, the CRC, and the DATA payloads.
 
 One place for the wire format, shared by the server's Reflash action and by
-Tooling/ota-send.py, so the two cannot disagree about an opcode or the CRC. The
-constants mirror `Shared/firmware/shelflink/inc/shelfmsg.h` and
-`Shared/firmware/shelfota/inc/shelfota.h`.
+tooling/ota-send.py, so the two cannot disagree about an opcode or the CRC. The
+constants mirror `common/shelflink/inc/shelfmsg.h` and
+`axsem/shared/shelfota/inc/shelfota.h`.
 """
 
 from __future__ import annotations

@@ -22,7 +22,7 @@ notices a magic sequence and copies — it has no radio code at all.
 Nothing about the hub changes: firmware frames are DATA frames like image chunks,
 so the existing reliable relay (one frame in flight, ACK per frame) carries them.
 
-## SPI flash layout — `ShelfKit-Firmware/Shared/firmware/shelfota/inc/shelfota.h`
+## SPI flash layout — `ShelfKit-Firmware/axsem/shared/shelfota/inc/shelfota.h`
 
 | SPI offset | Contents |
 |---|---|
@@ -70,7 +70,7 @@ boots the application that is still there.
 The CRC is CRC-16/CCITT (poly `0x1021`, init `0xFFFF`) over the image bytes, so
 the sender, the tag and the bootloader share one definition (`ota_crc16`).
 
-## Application side — `ShelfKit-Axsem/src/fw_rx.c`
+## Application side — `axsem/label/src/fw_rx.c`
 
 - No buffers: each chunk goes straight to the flash and is folded into the CRC.
 - `BEGIN` erases up to ~0.3 s worth of sectors, so the sender waits before the
@@ -80,7 +80,7 @@ the sender, the tag and the bootloader share one definition (`ota_crc16`).
 - A transfer that stalls for 10 s is abandoned (the radio has no such thing as a
   half-open connection).
 
-## Bootloader side — `Bootloader/src/main.c`
+## Bootloader side — `axsem/bootloader/src/main.c`
 
 Deliberately plain: bit-banged SPI, one 32-byte buffer, no radio.
 
@@ -115,7 +115,7 @@ SDCC's reentrant support for the shared CRC/header code).
 A tag that has no bootloader yet gets one with the merged HEX from
 `build-all.py` (`shelfkit-axsem-full-*.hex`), which contains both images and already has the
 application's entry in the jump-vector slot — see
-[ShelfKit-Firmware/Bootloader/README.md](../ShelfKit-Firmware/Bootloader/README.md#installing-the-bootloader-and-the-application-at-once).
+[ShelfKit-Firmware/axsem/bootloader/README.md](../ShelfKit-Firmware/axsem/bootloader/README.md#installing-the-bootloader-and-the-application-at-once).
 
 ### The reset after an update
 
@@ -164,8 +164,8 @@ From the server: **Fleet** → click the tag → **Firmware update** → pick th
 From a shell:
 
 ```
-python ShelfKit-Firmware/Tooling/build-all.py                  # Release/shelfkit-axsem-<date>-<hash>.hex
-python ShelfKit-Firmware/Tooling/ota-send.py Release/shelfkit-axsem-…​.hex --addr 0100 -p COM4
+python ShelfKit-Firmware/tooling/build-all.py                  # Release/shelfkit-axsem-<date>-<hash>.hex
+python ShelfKit-Firmware/tooling/ota-send.py Release/shelfkit-axsem-…​.hex --addr 0100 -p COM4
 ```
 
 `ota-send.py` converts the Intel HEX to the binary the tag wants (gap-filling with

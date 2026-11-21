@@ -34,7 +34,7 @@ From `ShelfKit-Server/data/shelfkit.db`, tables `voltage` and `events`:
 
 ## Fault 1: the MCU never entered Sleep
 
-`log_putc()` in `Shared/firmware/shelfhw/shelfhw.c` sets `U0CTRL` bit 3 (U0TXIE) after every
+`log_putc()` in `axsem/shared/shelfhw/shelfhw.c` sets `U0CTRL` bit 3 (U0TXIE) after every
 character. No UART interrupt is enabled, so nothing clears it. libmf links a veto into
 `wtimer_cansleep()` (section `WTCANSLP1`, from `uart0init.c`): `uart_txidle()` reports busy
 while that bit is set. After the first logged character `wtimer_idle()` always chooses
@@ -53,7 +53,7 @@ crystal. It is not: bit 2 is XOSC FRUN, the MCU's own crystal oscillator on **PA
 both driven as digital outputs. The manual says not to enable it without a crystal on those
 pins, and that once enabled it runs until it sees falling edges on its pins or a reset.
 
-The bootloader sets the same bit on every reset (`Bootloader/src/main.c`, the calibration
+The bootloader sets the same bit on every reset (`axsem/bootloader/src/main.c`, the calibration
 sequence), so the oscillator is already running when the application starts. libmf's own
 LPXOSC calibration path only sets bit 3.
 
@@ -70,7 +70,7 @@ In `shelfhw.c`, overridable with `build-all.py --define`:
 | `SHELF_FIX_XOSC` | 1 | 1 = switch the XOSC off at boot. 0 = force it on (old behaviour) |
 | `SHELF_FIX_UART_SLEEP` | 0 | 1 = do not set U0TXIE, so Sleep is possible. 0 = old behaviour, Standby only |
 
-`SHELF_NFC_POLL` and `SHELF_NFC_RAIL_HOLD` in `ShelfKit-Axsem/include/shelf_config.h` can now be
+`SHELF_NFC_POLL` and `SHELF_NFC_RAIL_HOLD` in `axsem/label/include/shelf_config.h` can now be
 overridden the same way. With the sleep fix on, the UART is re-initialised after each wake
 from Sleep (`log_uart_start()`), because Sleep resets it and `log_putc()` waits on it.
 
@@ -134,7 +134,7 @@ Read from the code, consistent with the test, not proven by it:
   its marker at the top of internal RAM, restores the stack pointer and returns.
 - On these tags 0x0000 is the **bootloader**. It knows nothing about a wake from Sleep. On
   every start it resets its own stack, rewrites every port and direction register
-  (`_sdcc_external_startup` in `Bootloader/src/main.c`), runs 128 oscillator calibration
+  (`_sdcc_external_startup` in `axsem/bootloader/src/main.c`), runs 128 oscillator calibration
   cycles, initialises the UART, powers the flash rail and looks for an OTA image, and only
   then jumps to the application with `SP = 7`.
 - `enter_sleep_cont()` clears `GPIOENABLE` before sleeping and the bootloader never sets it

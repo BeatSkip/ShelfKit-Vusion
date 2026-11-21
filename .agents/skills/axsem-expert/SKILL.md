@@ -1,6 +1,6 @@
 ---
 name: ax8052-ax5043-firmware
-description: Use for any firmware work on the AX8052F143 (Axsem/onsemi 8051 MCU with the integrated AX5043 sub-GHz radio). That covers ShelfKit-Firmware (ShelfKit-Axsem tag, ShelfKit-Axsem-Hub, Bootloader), SDCC/8051 C or assembly, libmf, the axradio/easyax5043 engine, AX5043 registers, the radio FIFO, power modes (standby, sleep, deep sleep), the wake-up timers, clocks and oscillators, GPIO, interrupts, flash/OTA, and battery or power debugging. Load it before writing, reviewing or debugging code for this chip, even for a small change.
+description: Use for any firmware work on the AX8052F143 (Axsem/onsemi 8051 MCU with the integrated AX5043 sub-GHz radio). That covers ShelfKit-Firmware (axsem/label, axsem/hub, axsem/bootloader), SDCC/8051 C or assembly, libmf, the axradio/easyax5043 engine, AX5043 registers, the radio FIFO, power modes (standby, sleep, deep sleep), the wake-up timers, clocks and oscillators, GPIO, interrupts, flash/OTA, and battery or power debugging. Load it before writing, reviewing or debugging code for this chip, even for a small change.
 ---
 
 # AX8052F143 + AX5043 firmware
@@ -12,7 +12,7 @@ The AX8052F143 is one die-package with two halves:
 
 The two halves have **separate power states, clocks and resets**. Most bugs on this chip come from forgetting that one half lost its state while the other did not.
 
-This repository (`ShelfKit-Firmware/`) runs it on reused SES-imagotag Vusion 2.6" e-paper shelf tags and on a hub with identical hardware. The toolchain is SDCC 3.6.0, `--model-small`, with the vendor library **libmf** and the AX-RadioLAB-generated engine **easyax5043** (`Shared/firmware/axradio`).
+This repository (`ShelfKit-Firmware/`) runs it on reused SES-imagotag Vusion 2.6" e-paper shelf tags and on a hub with identical hardware. The toolchain is SDCC 3.6.0, `--model-small`, with the vendor library **libmf** and the AX-RadioLAB-generated engine **easyax5043** (`axsem/shared/axradio`).
 
 ## How to use this skill
 
@@ -79,13 +79,13 @@ PDF extraction artefact: the micro sign is lost, so "230 A", "mA" or "ms" in a c
 14. LEDs (PB0 white, PB7 blue, PB6 green, PC4 red) sit behind the e-paper glass. Use **pulses only, never hold one on**.
 
 **Workflow (user rules)**
-15. Test builds: `python ShelfKit-Firmware/Tooling/build-all.py ... --no-record`. Never restore `version.json` or `build-log.md` from git.
-16. Serial flashing: flash the **app-only `Release/shelfkit-axsem-*.hex`** with `Tooling/axsem-flasher.py -p COMx`. **Never flash `shelfkit-axsem-full-*.hex` over serial** unless the user explicitly asks; the full image also targets the bootloader region. App-only is safe: the bootloader redirects the app's reset jump into its vector at 0xD7FE.
+15. Test builds: `python ShelfKit-Firmware/tooling/build-all.py ... --no-record`. Never restore `version.json` or `build-log.md` from git.
+16. Serial flashing: flash the **app-only `Release/shelfkit-axsem-*.hex`** with `tooling/axsem-flasher.py -p COMx`. **Never flash `shelfkit-axsem-full-*.hex` over serial** unless the user explicitly asks; the full image also targets the bootloader region. App-only is safe: the bootloader redirects the app's reset jump into its vector at 0xD7FE.
 17. Commit only when the user asks.
 
 ## Workflow for a change
 
-1. Find where the behaviour lives (target `src/`, or `Shared/firmware/{shelfhw,shelflink,shelfota,shelfid,axradio}`). Read the relevant project doc in `Documentation/` (power-findings, wireless-link, ota-update, nfc-field-detect, pa2-pa5-findings, deepsleep-debugging-fix). Several of them record hard-won hardware facts.
+1. Find where the behaviour lives (target `src/`, or `axsem/shared/{shelfhw,shelflink,shelfota,shelfid,axradio}`). Read the relevant project doc in `Documentation/` (power-findings, wireless-link, ota-update, nfc-field-detect, pa2-pa5-findings, deepsleep-debugging-fix). Several of them record hard-won hardware facts.
 2. Check the memory cost. Build with `build-all.py --no-record` and read the printed sizes, or the `.mem`/`.map` in `build/`. Code limit 59,389 B (the bootloader sits at 0xD800); IRAM and stack are the real constraint.
 3. Think through every power transition your change crosses: what each half (MCU, radio) loses and who restores it.
 4. Verify on hardware with the serial log (115200 on the app, 38400 on the bootloader) when it touches power, radio or boot. State plainly what was and wasn't verified.

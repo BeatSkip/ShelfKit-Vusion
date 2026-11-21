@@ -119,7 +119,7 @@ Ports A, B, C (8, 8, 5 pins on the F143 package) plus port R (the internal radio
 - **AES** engine and a true **RNG**. Not used: `shelfhw_random()` is a software PRNG seeded from wtimer0.
   - RNG registers: `RNGMODE` 0x7080, `RNGBYTE` 0x7081, `RNGCLKSRC0/1` 0x7082/3 (clock sources FRCOSC/LPOSC/**XOSC**... never pick XOSC here).
   - AES registers: `AESMODE` 0x7090, `AESCONFIG` 0x7091, `AESKEYADDR` 0x7092/3, `AESINADDR` 0x7094/5, `AESOUTADDR` 0x7096/7, `AESCURBLOCK` 0x7098. The engine works on XRAM buffers by address.
-  - Library: `libmfcrypto` (`aes128_setup`, `aes_keyexp`, `aes_encrypt`, `aes_decrypt`, DES). The prebuilt `Shared/lib/libmfcrypto.lib` is already on the library path. Its headers are in `Shared/sdk/libmfcrypto/include` (`libmfaes.h`, `libmfcrypto.h`, `ax8052crypto.h`), which is **not** on the include path yet. Add it to `includes` in `sdcc-project.json` to use it.
+  - Library: `libmfcrypto` (`aes128_setup`, `aes_keyexp`, `aes_encrypt`, `aes_decrypt`, DES). The prebuilt `axsem/lib/libmfcrypto.lib` is already on the library path. Its headers are in `axsem/sdk/libmfcrypto/include` (`libmfaes.h`, `libmfcrypto.h`, `ax8052crypto.h`), which is **not** on the include path yet. Add it to `includes` in `sdcc-project.json` to use it.
   - Details: `vendor/AX8052-crypto-programming-manual.txt`, `vendor/LibMFCrypto-user-manual.txt`.
 - **DebugLink** UART-over-debug-pins. Its buffer vetoes Sleep while TX data is pending.
 

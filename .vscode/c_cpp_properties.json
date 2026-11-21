@@ -3,13 +3,14 @@
         {
             "name": "SDCC",
             "includePath": [
-                "${workspaceFolder}/ShelfKit-Firmware/ShelfKit-Axsem-Hub/include",
-                "${workspaceFolder}/ShelfKit-Firmware/ShelfKit-Axsem/include",
-                "${workspaceFolder}/ShelfKit-Firmware/Shared/sdk/libmf/include",
-                "${workspaceFolder}/ShelfKit-Firmware/Shared/sdk/libaxdvk2/include",
-                "${workspaceFolder}/ShelfKit-Firmware/Shared/firmware/axradio/inc",
-                "${workspaceFolder}/ShelfKit-Firmware/Shared/firmware/shelfhw/inc",
-                "${workspaceFolder}/ShelfKit-Firmware/Shared/firmware/shelflink/inc",
+                "${workspaceFolder}/ShelfKit-Firmware/axsem/hub/include",
+                "${workspaceFolder}/ShelfKit-Firmware/axsem/label/include",
+                "${workspaceFolder}/ShelfKit-Firmware/axsem/sdk/libmf/include",
+                "${workspaceFolder}/ShelfKit-Firmware/axsem/sdk/libaxdvk2/include",
+                "${workspaceFolder}/ShelfKit-Firmware/axsem/shared/axradio/inc",
+                "${workspaceFolder}/ShelfKit-Firmware/axsem/shared/shelfhw/inc",
+                "${workspaceFolder}/ShelfKit-Firmware/common/shelflink",
+                "${workspaceFolder}/ShelfKit-Firmware/common/shelflink/inc",
                 "C:/Program Files/SDCC/include",
                 "C:/Program Files/SDCC/non-free/include"
             ],

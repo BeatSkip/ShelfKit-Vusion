@@ -164,7 +164,7 @@ address).
 | InkLayout | Layout language, renderer with overflow warnings, playground, model skill file, CLI (`python -m shelfkit.inklayout render`) |
 | Develop | In-browser editor, virtual tag and phone page, checkpoints, app variables and secrets, and an AI agent (Claude, OpenAI, DeepSeek, Mistral) that proposes changes you review |
 | Storage | One SQLite file: tags, aliases, shelf positions, last frames, battery history, power measurements, settings and the event log |
-| Tag power | Radio in deep sleep, MCU sleeping, panel rail off between polls. **The figures are datasheet models, not measurements.** See [power](ShelfKit-Firmware/ShelfKit-Axsem/README.md#power) and [the deep dive](Documentation/power-deepdive.md) |
+| Tag power | Radio in deep sleep, MCU sleeping, panel rail off between polls. **The figures are datasheet models, not measurements.** See [power](ShelfKit-Firmware/axsem/label/README.md#power) and [the deep dive](Documentation/power-deepdive.md) |
 | Honest gaps | The command queue is in memory, so a restart forgets pending pushes. There is no auth, so keep the admin page on localhost. Tag firmware doesn't yet put its own ID into the NFC link (below). Apps run in the server process. No partial refresh yet. Power still needs metering on a real tag |
 
 ## Getting started
@@ -173,20 +173,20 @@ address).
 
 You need [SDCC](https://sdcc.sourceforge.net/) (verified with 3.6.0). VS Code with the
 [SDCC-MDF extension](https://marketplace.visualstudio.com/items?itemName=dzantemir.sdcc-mdf) is
-optional and handy for single-target builds; open `ShelfKit-Firmware/ShelfKit-Axsem` or `ShelfKit-Axsem-Hub` itself,
+optional and handy for single-target builds; open `ShelfKit-Firmware/axsem/label` or `axsem/hub` itself,
 not the repo root. To build everything at once:
 
 ```
-python ShelfKit-Firmware/Tooling/build-all.py
+python ShelfKit-Firmware/tooling/build-all.py
 ```
 
 This writes `Release/shelfkit-axsem-latest.hex` (tag), `shelfkit-axsem-hub-latest.hex`, `bootloader-latest.hex` and
 `shelfkit-axsem-full-latest.hex`. The last one is tag plus bootloader, for a tag's first flash. Flash with
-[axsem-flasher.py](ShelfKit-Firmware/Tooling/axsem-flasher.py) or from the server's Flash screen.
+[axsem-flasher.py](ShelfKit-Firmware/tooling/axsem-flasher.py) or from the server's Flash screen.
 The tag application nearly fills its 43,006 B OTA window, so new firmware features have to earn
-their bytes. Details are in [Tooling/README.md](ShelfKit-Firmware/Tooling/README.md).
+their bytes. Details are in [tooling/README.md](ShelfKit-Firmware/tooling/README.md).
 
-Two more tag families have buildable skeletons, not working firmware yet: [ShelfKit-Texas](ShelfKit-Firmware/ShelfKit-Texas/README.md) (TI CC2510, SDCC) and [ShelfKit-Silabs](ShelfKit-Firmware/ShelfKit-Silabs/README.md) (EFR32FG22, Arm GCC). Build them with `--targets texas,silabs` (or `every`); both are 2.4 GHz and need a hub of their own.
+Two more tag families have buildable skeletons, not working firmware yet: [texas/label](ShelfKit-Firmware/texas/label/README.md) (TI CC2510, SDCC) and [silabs/label](ShelfKit-Firmware/silabs/label/README.md) (EFR32FG22, Arm GCC). Build them with `--targets texas,silabs` (or `every`); both are 2.4 GHz and need a hub of their own.
 
 ### 2. The server
 
@@ -227,7 +227,7 @@ without the page.
 `Release/` is git-ignored build output, so a release is a git tag plus four HEX files:
 
 ```bash
-python ShelfKit-Firmware/Tooling/build-all.py --version 1.0.0   # names the files -1.0.0
+python ShelfKit-Firmware/tooling/build-all.py --version 1.0.0   # names the files -1.0.0
 git tag -a v1.0.0 -m "ShelfKit 1.0.0" && git push origin main --tags
 ```
 
@@ -239,7 +239,7 @@ tag, because the app-only hex skips the bootloader. The `.map` files stay out.
 
 | Path | What it is |
 |---|---|
-| `ShelfKit-Firmware/` | Firmware projects: `ShelfKit-Axsem/` (tag), `ShelfKit-Axsem-Hub/` (hub), `Bootloader/`, `ShelfKit-Texas/` and `ShelfKit-Silabs/` (skeletons), `Shared/` (SDK, drivers), `Tooling/` (build, flash, OTA, ID scripts) |
+| `ShelfKit-Firmware/` | Firmware projects: `axsem/label/` (tag), `axsem/hub/` (hub), `axsem/bootloader/`, `texas/label/` and `silabs/label/` (skeletons), `axsem/` also holds the Axsem SDK and drivers, `common/` the protocol code every platform shares, `tooling/` (build, flash, OTA, ID scripts) |
 | `ShelfKit-Server/` | The web app, image pipeline, `shelfkit/inkservices/` (app host), `shelfkit/inklayout/` (layout language) and `inkapps/` (the apps). See its [README](ShelfKit-Server/README.md) |
 | `Documentation/` | Protocol, power, NFC, OTA and panel notes, datasheets, plans, screenshots |
 | `Resources/`, `Data/` | Sample images; captured flash dumps |
@@ -272,12 +272,12 @@ web pages are the app.
 | [ses-imagotag-vusion.md](Documentation/ses-imagotag-vusion.md) | One-page context sheet for the tag |
 | [signal-list.md](Documentation/signal-list.md) | Pin map of the Vusion board |
 | [ShelfKit-Server/README.md](ShelfKit-Server/README.md) | The web app in depth: screens, pipeline, API, compression |
-| [Tooling/README.md](ShelfKit-Firmware/Tooling/README.md) | Building, flashing, OTA sending, ID assignment, flash read-back |
+| [tooling/README.md](ShelfKit-Firmware/tooling/README.md) | Building, flashing, OTA sending, ID assignment, flash read-back |
 
 ## Notes
 
 - **License:** the code in each `src/` has no license declared yet. The Axsem SDK under
-  `ShelfKit-Firmware/Shared/` keeps its original terms: compiler headers are GPL with a linking
+  `ShelfKit-Firmware/axsem/sdk/` and `axsem/lib/` keeps its original terms: compiler headers are GPL with a linking
   exception, and the rest is vendor-licensed.
 - The screenshots are the running app with simulated serial data and a stand-in AI service, since
   a screenshot can't include a physical tag. The tag screens in them are the real output of the

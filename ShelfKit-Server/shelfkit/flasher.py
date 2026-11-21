@@ -17,7 +17,7 @@ debugger   Runs  `axsdb.exe --eraseall --flashprog <file.hex>`  from AXSDB's own
            bootloader included, so only a `*-full-*.hex` (bootloader + application) is a
            safe thing to give it. Anything else needs `allow_partial`.
 
-serial     The same protocol as ShelfKit-Firmware/Tooling/axsem-flasher.py (kept as the
+serial     The same protocol as ShelfKit-Firmware/tooling/axsem-flasher.py (kept as the
            command-line tool): hold BOOT (DTR) through a reset (RTS) to enter the mask-ROM
            bootloader at 38400, `?` for the banner, `K` to erase the application, the HEX
            lines, `R` to run. The port belongs to one of the server's panes, so that pane is
@@ -104,7 +104,7 @@ def same_port(a: str, b: str) -> bool:
     return bool(a) and bool(b) and a.strip().casefold() == b.strip().casefold()
 
 
-# Release/ also holds the other chip families' builds (ShelfKit-Texas: CC2510, ShelfKit-Silabs:
+# Release/ also holds the other chip families' builds (texas/label: CC2510, silabs/label:
 # EFR32FG22). They are not AX8052 images: never offer them to an Axsem tag or hub.
 OTHER_FAMILIES = ("shelfkit-texas", "shelfkit-silabs")
 

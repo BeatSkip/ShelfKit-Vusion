@@ -31,7 +31,7 @@ Sources: AND9349/D (AX8052 Programming Manual), AX8052F143 datasheet, SDK header
 
 ## Memory budget (this project)
 
-`Shared/boards/axsem-8051.json`: `--model-small`, `--iram-size 256`, `--xram-size 8192`, `--code-size 59389`.
+`axsem/boards/axsem-8051.json`: `--model-small`, `--iram-size 256`, `--xram-size 8192`, `--code-size 59389`.
 
 - **IRAM**: full. SDCC places `__data` variables, overlay segments and bit variables there, and the **stack grows up from the end of them to 0xFF**. The tag has about 137-154 B of stack left. Every nested call costs 2 B, and every ISR costs its pushes (up to ~13 B for a bank-0 ISR that calls a function). Running out corrupts silently.
 - libmf's `enter_sleep_cont()` stores its resume marker and SP at the top of IRAM (0xFD-0xFF). With a full IRAM the stack can collide with it.

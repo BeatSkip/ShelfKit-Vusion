@@ -1,7 +1,7 @@
 """SPI flash read-back: the frames, the assembly, and what the bytes mean.
 
 Shared by the server's "Read flash" action and by
-`ShelfKit-Firmware/Tooling/flash-read.py`, so both agree about the wire format
+`ShelfKit-Firmware/tooling/flash-read.py`, so both agree about the wire format
 and about how to describe a record.
 
 The tag answers a `SM_OP_FLASH_DUMP` request with `SM_OP_FLASH_DATA` frames; the

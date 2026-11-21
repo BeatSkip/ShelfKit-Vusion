@@ -26,19 +26,19 @@ The cause was a set of state that the AX8052 and AX5043 lose or leave wrong acro
 
 ## Changes
 
-- `Shared/firmware/shelfhw/shelfhw.c`
+- `axsem/shared/shelfhw/shelfhw.c`
   - Added the `radio_deep` flag.
   - The radio interrupt is now disabled when the radio is parked and re-enabled on wake.
   - `shelfhw_radio_wake()` now retries and returns `uint8_t`.
   - It calls `axradio_setup_pincfg2()`.
   - `shelfhw_poll()` restores `GPIOENABLE` and `IE` after a Sleep wake. It also calls `axradio_commsleepexit()` and `axradio_setup_pincfg2()` when the radio is not in deep sleep.
-- `Shared/firmware/shelfhw/inc/shelfhw.h`: new `shelfhw_radio_wake` prototype.
-- `Shared/firmware/axradio/easyax5043.c`: `PLLLOOP = 0x89` on deep-sleep wake. It also gained `axradio_dbg_snapshot()`, a register snapshot (PWRMODE, POWSTAT, PLLLOOP, PLLRANGINGA, FREQA) for diagnosing this kind of problem.
-- `Shared/firmware/axradio/inc/axradio.h`: declares `axradio_dbg_snapshot()`.
-- `ShelfKit-Axsem/src/main.c`: `poll_cb` handles a wake failure, and a `radio ...` register line is logged after each wake.
+- `axsem/shared/shelfhw/inc/shelfhw.h`: new `shelfhw_radio_wake` prototype.
+- `axsem/shared/axradio/easyax5043.c`: `PLLLOOP = 0x89` on deep-sleep wake. It also gained `axradio_dbg_snapshot()`, a register snapshot (PWRMODE, POWSTAT, PLLLOOP, PLLRANGINGA, FREQA) for diagnosing this kind of problem.
+- `axsem/shared/axradio/inc/axradio.h`: declares `axradio_dbg_snapshot()`.
+- `axsem/label/src/main.c`: `poll_cb` handles a wake failure, and a `radio ...` register line is logged after each wake.
 
 ## Notes
 
 - Never write `PCON` from the poll path (the SWRESET bit causes a boot loop).
-- To isolate sleep problems in future, use `SHELF_RADIO_DEEPSLEEP 0` (radio OFF mode) and `SHELF_MCU_SLEEP 0` (MCU Standby only) in `ShelfKit-Axsem/include/shelf_config.h`.
+- To isolate sleep problems in future, use `SHELF_RADIO_DEEPSLEEP 0` (radio OFF mode) and `SHELF_MCU_SLEEP 0` (MCU Standby only) in `axsem/label/include/shelf_config.h`.
 - The diagnostic `radio ...` log line is still in `main.c`. It can be removed once the fix is accepted.

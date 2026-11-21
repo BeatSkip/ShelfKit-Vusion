@@ -1,7 +1,7 @@
 # Wireless link (868 MHz) — design, findings, status
 
-Hub (`ShelfKit-Firmware/ShelfKit-Axsem-Hub`) and tag (`ShelfKit-Firmware/ShelfKit-Axsem`) run on identical hardware and share all radio code in
-`ShelfKit-Firmware/Shared/firmware/`. This document records what was found, how the link works, what was verified on
+Hub (`ShelfKit-Firmware/axsem/hub`) and tag (`ShelfKit-Firmware/axsem/label`) run on identical hardware and share all radio code in
+`ShelfKit-Firmware/axsem/shared/`. This document records what was found, how the link works, what was verified on
 hardware, and what is left.
 
 ## Status (2026-11-08)
@@ -27,8 +27,8 @@ on range. The tag's poll interval is no longer the ~5.6 s of the early bring-up 
 | 1 | The AX8052F143 has the **sub-GHz AX5043** radio on-chip, not a 2.4 GHz radio (the old READMEs say 2.4 GHz — wrong). |
 | 2 | The generated `WirelessDemo/` is one-way (ASYNC_TRANSMIT master, ASYNC_RECEIVE slave), button-triggered, no ACK, and written for the Axsem *Minikit* (LED lib, COM0 display, button on PC4, whole-port writes). Its pin setup would clobber the tag's EPD/NFC/flash pins, so only the radio engine and PHY config were reused. |
 | 3 | PHY (from `config.c`): 868.300 MHz, FSK, 25 kHz deviation, 100 kbit/s, 15 dBm, 26 MHz crystal, sync word `CC AA CC AA`, 3-byte hardware-filtered address, hardware CRC-16. |
-| 4 | **SDCC-MDF links component libraries *after* `libmf.lib`**, so a component that calls libmf would fail. Therefore the shared code is added as plain `sources` entries (`../Shared/firmware/<name>`) plus `includes`, not as `components`. |
-| 5 | **`libmf.lib` as shipped makes the linker exit with status 1.** It was built with `--debug`, so 29 global debug labels (`C$libmftypes.h$351$4$73`, …) are defined by several modules. Any radio firmware links two of them → "Multiple definition", exit 1, which SDCC-MDF reports as a failed build (the `.ihx` is still written). Fixed once by renaming the repeats in place (same length, so archive offsets stayed valid); `ShelfKit-Firmware/Shared/lib/libmf.lib` is committed in patched form. If the library is ever rebuilt from `ShelfKit-Firmware/Shared/sdk/`, that rename has to be re-applied. |
+| 4 | **SDCC-MDF links component libraries *after* `libmf.lib`**, so a component that calls libmf would fail. Therefore the shared code is added as plain `sources` entries (`../axsem/shared/<name>`) plus `includes`, not as `components`. |
+| 5 | **`libmf.lib` as shipped makes the linker exit with status 1.** It was built with `--debug`, so 29 global debug labels (`C$libmftypes.h$351$4$73`, …) are defined by several modules. Any radio firmware links two of them → "Multiple definition", exit 1, which SDCC-MDF reports as a failed build (the `.ihx` is still written). Fixed once by renaming the repeats in place (same length, so archive offsets stayed valid); `ShelfKit-Firmware/axsem/lib/libmf.lib` is committed in patched form. If the library is ever rebuilt from `ShelfKit-Firmware/axsem/sdk/`, that rename has to be re-applied. |
 | 6 | The same label clash also hit the engine itself (inline `enter_critical()` from `libmftypes.h`); `easyax5043.c` now has local static copies of those helpers. |
 | 7 | SDCC 3.6.0: function pointers with several arguments must be `__reentrant`; the shelflink "done" callback therefore takes one struct pointer. |
 | 8 | **Standby needs the wake-up-timer interrupt enabled.** `wtimer_idle(WTFLAG_CANSTANDBY)` enters standby with `EA = 0`; standby only ends if the wake source's enable bit is set in `IE`. The demo uses `IE_3` — that is Timer 1 on the AX8052, not the wake-up timer. The wake-up timer is vector 1 → **`IE_1`**. Without it the tag slept forever after its first poll. Fixed in `shelfhw_poll()` (the radio interrupt, `IE_4`, is enabled by the engine). |
@@ -38,7 +38,7 @@ on range. The tag's poll interval is no longer the ~5.6 s of the early bring-up 
 ## Architecture
 
 ```
-ShelfKit-Firmware/Shared/firmware/
+ShelfKit-Firmware/axsem/shared/
   axradio/    vendor radio engine (easyax5043.c, axradio.h) + PHY config (config.c) + axradio_platform.h glue
   shelfhw/    board bring-up, wake-up timers, LEDs, UART0 TX log (log_*), shelfhw_poll() main-loop step
   shelflink/  shelflink.c   acknowledged request/response state machine
@@ -48,7 +48,7 @@ ShelfKit-Firmware/Shared/firmware/
 <target>/src/main.c               hub: listen + answer;  tag: periodic poll
 ```
 
-Both projects list the three `ShelfKit-Firmware/Shared/firmware/*` folders under `sources` and their `inc/` folders under
+Both projects list the three `ShelfKit-Firmware/axsem/shared/*` folders under `sources` and their `inc/` folders under
 `includes` in `sdcc-project.json` (and in `.vscode/c_cpp_properties.json` for IntelliSense).
 
 ### Radio mode
@@ -98,7 +98,7 @@ Network id `0x5A` (both ends must match).
 ### Timing
 
 The tag's wake-up timer now runs from the 32.768 kHz crystal with prescaler 7, i.e. **512 Hz**
-(`SHELF_WAKE_LPXOSC=1` in `ShelfKit-Axsem/sdcc-project.json`; `SHELFHW_TICKS_PER_S` = 512), measured on hardware
+(`SHELF_WAKE_LPXOSC=1` in `axsem/label/sdcc-project.json`; `SHELFHW_TICKS_PER_S` = 512), measured on hardware
 (prescaler 6 gave ~1024 Hz). The early builds used the on-chip LPOSC at a nominal 640 Hz, which ran
 ~10 % slow; removing that define falls back to it. One timer arm holds 128 s, longer gaps are walked
 down by waking to step a counter.
@@ -186,7 +186,7 @@ POLL src=0100 seq=09 rssi=-36 up=6s att=1 hubrssi=-35
 |---|---|
 | `ShelfKit-Server/shelfkit-server.py hub=COM4 tag=COM3 [--baud N]` | Local web UI: Fleet, Queue, Logs, Diagnostics, Hub (a pane per port with its own log, baud rate, Open/Close, DTR and Reset), Flash and Settings. |
 | `ShelfKit-Server/shelfkit/hubhost.py COM4 serve\|send\|ping ...` | The same image push without a UI, plus `ping` for the hub's command channel. |
-| `ShelfKit-Firmware/Tooling/axsem-flasher.py <hex> -p COMx` | Flash over the AX8052 serial bootloader (works). |
+| `ShelfKit-Firmware/tooling/axsem-flasher.py <hex> -p COMx` | Flash over the AX8052 serial bootloader (works). |
 | `Data/flashdump.py COMx` | Capture the parked dump firmware's hexdump of the SPI flash. |
 
 Build memory (SDCC 3.6.0, release build): hub 30.8 KB, tag 40.9 KB of 59,389 B code; XRAM 4.9 KB (hub) and 7.0 KB (tag) of 8 KB;
@@ -196,7 +196,7 @@ adding features (put buffers in `__xdata`).
 Building: SDCC-MDF builds each target as before (open the target folder, Ctrl+Shift+B). The
 `upload` section of `sdcc-project.json` already points at `axsem-flasher.py`, so *SDCC: Flash* uses it
 (set `sdcc.comPort`). During this session builds were verified with an equivalent manual SDCC script;
-**please run one real SDCC-MDF build per target** to confirm the extension accepts the `../Shared/firmware`
+**please run one real SDCC-MDF build per target** to confirm the extension accepts the `../shared/…` (formerly `../Shared/firmware`)
 source entries and no longer reports a failed link.
 
 ## Open questions / next steps

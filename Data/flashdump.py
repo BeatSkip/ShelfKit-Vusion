@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """flashdump.py - reset the imagotag and capture its serial flash dump.
 
-Boot setup mirrors ShelfKit-Firmware/Tooling/axsem-flasher.py: DTR drives the BOOT pin,
+Boot setup mirrors ShelfKit-Firmware/tooling/axsem-flasher.py: DTR drives the BOOT pin,
 RTS drives RESET. The boot pin selects the boot mode (PB3 on the tag):
 
     boot pin released (DTR low)  + reset pulse  -> application (default)
