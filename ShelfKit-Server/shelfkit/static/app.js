@@ -2720,7 +2720,81 @@ function showSettingsTab(name) {
   ui.settingsActions.hidden = !FORM_TABS.has(name);
   if (name === "ai" && window.aiSettingsShown) window.aiSettingsShown();   // develop.js
   if (name === "develop" && window.devConfigShown) window.devConfigShown(); // develop.js
+  if (name === "gpio") loadGpio();
 }
+
+// ── settings › Raspberry Pi GPIO (only on a Pi) ───────────────────────────
+const gpioUi = {
+  tab: $("settings-gpio-tab"),
+  model: $("gpio-model"),
+  form: $("gpio-form"),
+  panes: $("gpio-panes"),
+  chip: $("gpio-chip"),
+  note: $("gpio-note"),
+};
+
+function gpioField(label, value, locked, role) {
+  const wrap = el("label", null, label);
+  const input = el("input");
+  Object.assign(input, { type: "text", value: value || "", placeholder: "on the adapter",
+    spellcheck: false, autocomplete: "off", inputMode: "numeric", disabled: locked });
+  input.dataset.role = role;
+  wrap.append(input);
+  return wrap;
+}
+
+function renderGpio(info) {
+  setText(gpioUi.model, info.pi ? `Running on a ${info.pi}.` : "");
+  if (document.activeElement !== gpioUi.chip) gpioUi.chip.value = info.chip || "";
+  const rows = (info.panes || []).map((pane) => {
+    const row = el("fieldset", "gpio-pane");
+    row.dataset.pane = pane.name;
+    const legend = el("legend", null, `${pane.name}${pane.port ? ` · ${pane.port}` : " · no port yet"}`);
+    const fields = el("div", "setting-fields");
+    fields.append(gpioField("Reset GPIO", pane.reset, pane.locked, "reset"),
+                  gpioField("BOOT GPIO", pane.boot, pane.locked, "boot"));
+    const status = el("p", pane.error ? "warning" : "hint",
+      pane.error ? pane.error
+        : pane.locked ? `Set on the command line (--gpio-reset / --gpio-boot): ${pane.active || "none"}.`
+        : pane.active ? `In use: ${pane.active}.`
+        : pane.reset || pane.boot ? "Claimed when this pane gets a port."
+        : "RTS and DTR of the serial adapter.");
+    row.append(legend, fields, status);
+    return row;
+  });
+  gpioUi.panes.replaceChildren(...rows);
+}
+
+async function loadGpio() {
+  try {
+    renderGpio(await getJSON("/api/gpio"));
+  } catch (err) {
+    setText(gpioUi.note, `Couldn't load the pins: ${err.message}`);
+  }
+}
+
+gpioUi.form.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const panes = {};
+  for (const row of gpioUi.panes.querySelectorAll("[data-pane]")) {
+    const entry = {};
+    for (const input of row.querySelectorAll("input[data-role]")) {
+      if (input.disabled) continue;
+      entry[input.dataset.role] = input.value.trim();
+    }
+    if (Object.keys(entry).length) panes[row.dataset.pane] = entry;
+  }
+  setText(gpioUi.note, "Saving…");
+  try {
+    const result = await postJSON("/api/gpio", { chip: gpioUi.chip.value.trim(), panes });
+    renderGpio(result);
+    setText(gpioUi.note, result.ok ? "Saved."
+      : result.saved ? `Saved, but the pins couldn't be claimed: ${result.error}`
+      : `Not saved: ${result.error}`);
+  } catch (err) {
+    setText(gpioUi.note, `Couldn't save: ${err.message}`);
+  }
+});
 
 // ── flash ──────────────────────────────────────────────────────────────────
 // The server runs the flash and keeps its steps and output; this screen only shows them.
@@ -3141,6 +3215,8 @@ function render(next) {
   state = next;
   if (!state) return;
   applyPrefs(state.prefs);
+  gpioUi.tab.hidden = !state.pi;                    // the GPIO tab exists only on a Pi
+  if (!state.pi && settingsTab === "gpio") showSettingsTab("general");
   renderChrome();
   draw();
 }
@@ -3405,7 +3481,7 @@ ui.hubTabs.addEventListener("click", (event) => {
 ui.settingsTabs.addEventListener("keydown", (event) => {
   const keys = { ArrowDown: 1, ArrowUp: -1, Home: "first", End: "last" };
   if (!(event.key in keys)) return;
-  const tabs = [...ui.settingsTabs.querySelectorAll("[data-tab]")];
+  const tabs = [...ui.settingsTabs.querySelectorAll("[data-tab]")].filter((tab) => !tab.hidden);
   const at = tabs.indexOf(document.activeElement);
   if (at < 0) return;
   event.preventDefault();

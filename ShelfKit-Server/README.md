@@ -116,6 +116,18 @@ python ShelfKit-Server/shelfkit-server.py hub=/dev/ttyUSB0 tag=/dev/ttyUSB1 --gp
 - **When the server stops** the pins are given back and float. The AX8052's RESET has a pull-up, but a
   10 kΩ pull-up to 3.3 V on each wire keeps a long lead from holding the hub in reset or in boot.
 
+**Using the Pi's own UART** (GPIO14 TX, pin 8; GPIO15 RX, pin 10): first take Linux's console off it, or
+the boot log and a login prompt land on the hub's RX. `sudo raspi-config` > Interface Options > Serial
+Port > login shell **No**, serial hardware **Yes**, then reboot. On a Pi 3, 4 or Zero W also add
+`dtoverlay=disable-bt` to `/boot/firmware/config.txt`, so `/dev/serial0` is the full UART (ttyAMA0)
+rather than the mini UART, whose clock follows the CPU. Check with `cat /proc/cmdline` (no
+`console=serial0`) and `ls -l /dev/serial0`.
+
+On a Raspberry Pi the same pins can be set in the page: **Settings > Raspberry Pi GPIO** (the tab only
+appears when the server runs on a Pi). They are kept in the settings table, claimed as soon as you
+save, and follow a pane to whatever port it is opened on. Pins given on the command line win and show
+there read-only. `GET/POST /api/gpio` is the same thing over HTTP.
+
 `shelfkit/hubhost.py` and `ShelfKit-Firmware/tooling/axsem-flasher.py` take the same `--gpio-reset`,
 `--gpio-boot` and `--gpio-chip`.
 

@@ -37,6 +37,18 @@ class GpioError(RuntimeError):
     pass
 
 
+def pi_model() -> str | None:
+    """'Raspberry Pi 4 Model B Rev 1.4' on a Raspberry Pi, else None."""
+    for path in ("/proc/device-tree/model", "/sys/firmware/devicetree/base/model"):
+        try:
+            with open(path, "rb") as fh:
+                model = fh.read().decode("ascii", "replace").strip("\x00 \n")
+        except OSError:
+            continue
+        return model if "Raspberry Pi" in model else None
+    return None
+
+
 def parse_pin(text: str | int | None) -> tuple[int, bool] | None:
     """'17' -> (17, False); '17:high' -> (17, True) = active high. None/'' -> None."""
     if text is None or str(text).strip() == "":
@@ -99,12 +111,14 @@ class _Line:
                     config={pin: gpiod.LineSettings(direction=Direction.OUTPUT,
                                                     output_value=self._v[released])})
                 self._set = lambda level: self._req.set_value(pin, self._v[level])
+                self._close = self._req.release
             else:                                   # libgpiod v1 (Debian's python3-libgpiod)
                 line = gpiod.Chip(chip).get_line(pin)
                 line.request(consumer=consumer, type=gpiod.LINE_REQ_DIR_OUT,
                              default_val=released)
                 self._req = line
                 self._set = line.set_value
+                self._close = line.release
         except PermissionError:
             raise GpioError(f"no access to {chip}: add the user to the 'gpio' group "
                             f"(sudo usermod -aG gpio $USER) and log in again") from None
@@ -115,6 +129,13 @@ class _Line:
         level = int(asserted) if self.active_high else int(not asserted)
         self._set(level)
 
+    def close(self) -> None:
+        """Give the line back to the kernel (it floats from then on)."""
+        try:
+            self._close()
+        except (OSError, AttributeError, ValueError):
+            pass
+
 
 class PortPins:
     """The reset and boot lines that stand in for one port's RTS and DTR."""
@@ -124,11 +145,21 @@ class PortPins:
         self.chip = find_chip(chip)
         self.lines: dict[str, _Line] = {}
         consumer = f"shelfkit {os.path.basename(port)}"
-        for serial_line, spec in (("rts", reset), ("dtr", boot)):
-            parsed = parse_pin(spec)
-            if parsed is not None:
-                self.lines[serial_line] = _Line(self.chip, parsed[0], parsed[1],
-                                                f"{consumer} {'reset' if serial_line == 'rts' else 'boot'}")
+        try:
+            for serial_line, spec in (("rts", reset), ("dtr", boot)):
+                parsed = parse_pin(spec)
+                if parsed is not None:
+                    self.lines[serial_line] = _Line(
+                        self.chip, parsed[0], parsed[1],
+                        f"{consumer} {'reset' if serial_line == 'rts' else 'boot'}")
+        except GpioError:
+            self.close()                # don't keep half a mapping
+            raise
+
+    def close(self) -> None:
+        for line in self.lines.values():
+            line.close()
+        self.lines = {}
 
     def describe(self) -> str:
         parts = [f"{'reset' if k == 'rts' else 'boot'}=GPIO{v.pin}{':high' if v.active_high else ''}"
@@ -146,10 +177,19 @@ def _key(port: str) -> str:
 
 def configure(port: str, reset=None, boot=None, chip: str | None = None) -> PortPins:
     """Claim the pins for `port` now, so a wiring or permission problem shows at start."""
+    release(port)                       # a port's old pins are free before new ones are claimed
     pins = PortPins(port, reset, boot, chip)
     with _lock:
         _ports[_key(port)] = pins
     return pins
+
+
+def release(port: str | None) -> None:
+    """Forget `port`'s pins and give them back to the kernel."""
+    with _lock:
+        pins = _ports.pop(_key(port), None) if port else None
+    if pins is not None:
+        pins.close()
 
 
 def pin_for(port: str | None, serial_line: str):

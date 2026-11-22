@@ -23,6 +23,7 @@ from urllib.parse import urlparse
 
 from . import hubhost, prefs as prefs_mod
 from .flasher import Flasher, axsdb_problem, resolve_axsdb
+from .gpio_config import GpioConfig
 from .hub_display import HubDisplay
 from .serial_link import DEFAULT_BAUD, PortSpec, SerialWorker, available_ports
 
@@ -249,7 +250,7 @@ class App:
     """The two panes plus the image push, safe to call from request threads."""
 
     def __init__(self, specs: list[PortSpec], auto_open: bool = False, store=None,
-                 display_opts: dict | None = None) -> None:
+                 display_opts: dict | None = None, gpio_locked: set[str] | None = None) -> None:
         self.lock = threading.RLock()
         self._arrivals = itertools.count(1)
         self.status = "ready"
@@ -306,6 +307,10 @@ class App:
             self.keys.append(key)
             self.panes[key] = Pane(key, spec, on_line=lambda text, k=key: self._on_line(k, text))
         self._restore()
+        # Settings > Raspberry Pi GPIO; claimed before any port opens, so a pane's first
+        # open already drives the pins. gpio_locked = panes given --gpio-* on the command line.
+        self.gpio = GpioConfig(self, gpio_locked)
+        self.gpio.apply_all()
         self.hubdisp = HubDisplay(self, display_opts)
         self.hubdisp.start()
         self._hb_lock = threading.Lock()        # one heartbeat at a time
@@ -988,6 +993,7 @@ class App:
                 "hub_caps": self.hub_capabilities(),
                 "hub_display": self.hubdisp.info(),
                 "prefs": self._prefs_view(),
+                "pi": self.gpio.model,           # shows Settings > Raspberry Pi GPIO
                 "flash": self.flash.info(),
             }
 
@@ -1046,6 +1052,7 @@ class App:
             pane.worker.close()  # baud/port changed: reopen with the new settings
         pane.worker.spec.port = pane.spec.port
         pane.worker.spec.baud = pane.spec.baud
+        self.gpio.apply(pane)                # the pane's GPIO pins follow it to a new port
         pane.worker.open()
         with self.lock:
             self.status = f"{pane.spec.name}: {pane.worker.status}"

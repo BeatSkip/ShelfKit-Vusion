@@ -1007,6 +1007,11 @@ tr.failed .state-word, tr.failed .detail { color: var(--red); font-weight: 500; 
 .steps .step-detail { color: var(--ink-2); font-size: var(--t-small); }
 .steps .progress { grid-column: 2 / -1; }
 .setting-fields input.wide { width: min(520px, 100%); }
+.gpio-panes { display: grid; gap: 14px; margin: 4px 0 16px; }
+.gpio-pane { display: grid; gap: 6px; }
+.gpio-pane .setting-fields input { width: 140px; }
+.gpio-pane p { margin: 0; }
+.gpio-settings form > .row { margin-top: 14px; }
 #nav-flash { margin-left: 2px; }
 
 /* narrow ------------------------------------------------------------------- */

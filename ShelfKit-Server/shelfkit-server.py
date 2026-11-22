@@ -136,7 +136,8 @@ def main(argv: list[str] | None = None) -> int:
         display["min_interval_s"] = args.hub_display_interval
     if args.hub_display_title:
         display["title"] = args.hub_display_title
-    app = App(specs, auto_open, store=store, display_opts=display or None)
+    app = App(specs, auto_open, store=store, display_opts=display or None,
+              gpio_locked={s.name for s in specs if gpio_lines.mapped(s.port)})
     inkhost = app.start_inkservices()      # InkServices apps in inkapps/ (needs the store)
     if inkhost is not None:
         inkhost.start_scheduler()          # @app.every timers; stopped by inkhost.close()

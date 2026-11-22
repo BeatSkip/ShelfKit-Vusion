@@ -16,6 +16,7 @@ from shelfkit import gpio_lines, serial_link  # noqa: E402
 
 FAILED: list[str] = []
 LEVELS: dict[int, list[int]] = {}       # pin -> every level it was driven to
+RELEASED: list[int] = []                # pins given back
 
 
 def check(name: str, ok: bool, detail=None) -> None:
@@ -44,13 +45,19 @@ def fake_v2():
             self.output_value = output_value
 
     class Request:
+        def __init__(self, pins):
+            self.pins = pins
+
         def set_value(self, pin, value):
             LEVELS.setdefault(pin, []).append(value.value)
+
+        def release(self):
+            RELEASED.extend(self.pins)
 
     def request_lines(chip, consumer, config):
         for pin, settings in config.items():
             LEVELS.setdefault(pin, []).append(settings.output_value.value)
-        return Request()
+        return Request(list(config))
 
     mod.LineSettings, mod.request_lines, mod.line = LineSettings, request_lines, line
     return {"gpiod": mod, "gpiod.line": line}
@@ -69,6 +76,9 @@ def fake_v1():
 
         def set_value(self, value):
             LEVELS.setdefault(self.pin, []).append(value)
+
+        def release(self):
+            RELEASED.append(self.pin)
 
     class Chip:
         def __init__(self, path):
@@ -109,6 +119,68 @@ def run(flavour: str, modules: dict) -> None:
     check(f"{flavour}: a port without pins leaves the GPIO alone", LEVELS[17] == [1, 0, 1])
 
 
+def settings_tab() -> None:
+    """GpioConfig: what Settings > Raspberry Pi GPIO saves and claims."""
+    from shelfkit import gpio_config
+
+    class Worker:
+        is_open = False
+
+    class Pane:
+        def __init__(self, key, name, port):
+            self.key, self.worker = key, Worker()
+            self.spec = types.SimpleNamespace(name=name, port=port)
+
+    sys.modules.update(fake_v2())
+    gpio_lines._ports.clear()
+    LEVELS.clear()
+    RELEASED.clear()
+    app = types.SimpleNamespace(store=None, panes={"hub": Pane("hub", "hub", "/dev/ttyAMA0"),
+                                                   "tag": Pane("tag", "tag", None)})
+    real_model = gpio_lines.pi_model
+    gpio_lines.pi_model = lambda: None
+    cfg = gpio_config.GpioConfig(app)
+    result = cfg.configure({"chip": "gpiochip0", "panes": {"hub": {"reset": "17", "boot": "27"}}})
+    check("off a Pi the pins are stored but nothing is claimed",
+          result["ok"] and result["pi"] is None and not LEVELS, result)
+
+    gpio_lines.pi_model = lambda: "Raspberry Pi 4 Model B Rev 1.4"
+    cfg = gpio_config.GpioConfig(app)
+    result = cfg.configure({"chip": "gpiochip0", "panes": {"hub": {"reset": "17", "boot": "27"}}})
+    hub = result["panes"][0]
+    check("on a Pi saving claims the hub's pins",
+          result["ok"] and hub["active"] == "reset=GPIO17, boot=GPIO27 on /dev/gpiochip0"
+          and LEVELS == {17: [1], 27: [1]}, result)
+    check("a pane without a port claims nothing yet", result["panes"][1]["active"] is None)
+    result = cfg.configure({"chip": "gpiochip0", "panes": {"hub": {"reset": "17", "boot": "x"}}})
+    check("a bad pin is refused and the old pins stay",
+          not result["ok"] and "boot" in result["error"] and gpio_lines.mapped("/dev/ttyAMA0"))
+    result = cfg.configure({"chip": "gpiochip0", "panes": {"hub": {"reset": "17", "boot": ""},
+                                                          "tag": {"reset": "17:high"}}})
+    check("one GPIO for two lines is refused", not result["ok"] and "twice" in result["error"],
+          result.get("error"))
+    result = cfg.configure({"chip": "gpiochip0", "panes": {"hub": {"reset": "22", "boot": ""}}})
+    check("changing a pin gives the old ones back first",
+          result["ok"] and sorted(RELEASED) == [17, 27]
+          and result["panes"][0]["active"] == "reset=GPIO22 on /dev/gpiochip0", (RELEASED, result))
+    app.panes["hub"].spec.port = "/dev/ttyUSB0"
+    cfg.apply(app.panes["hub"])
+    check("the pins follow the pane to its new port",
+          gpio_lines.mapped("/dev/ttyUSB0") is not None and gpio_lines.mapped("/dev/ttyAMA0") is None)
+    result = cfg.configure({"chip": "gpiochip0", "panes": {"hub": {"reset": "", "boot": ""}}})
+    check("emptying the fields hands the lines back to the adapter",
+          result["ok"] and gpio_lines.mapped("/dev/ttyUSB0") is None)
+
+    gpio_lines.configure("/dev/ttyUSB0", reset="5", chip="gpiochip0")
+    locked = gpio_config.GpioConfig(app, locked={"hub"})
+    result = locked.configure({"panes": {"hub": {"reset": "9"}}})
+    check("command-line pins are shown and cannot be changed",
+          result["panes"][0]["locked"] and result["panes"][0]["reset"] == "5"
+          and gpio_lines.mapped("/dev/ttyUSB0").lines["rts"].pin == 5, result["panes"][0])
+    gpio_lines.pi_model = real_model
+    gpio_lines._ports.clear()
+
+
 def main() -> int:
     check("parse_pin reads N and N:high", gpio_lines.parse_pin("17") == (17, False)
           and gpio_lines.parse_pin("4:high") == (4, True) and gpio_lines.parse_pin("") is None)
@@ -143,6 +215,8 @@ def main() -> int:
         check("a pane without a port is refused", False)
     except gpio_lines.GpioError:
         check("a pane without a port is refused", True)
+
+    settings_tab()
 
     sys.modules.pop("gpiod", None)
     sys.modules["gpiod"] = None             # as if libgpiod is not installed

@@ -24,6 +24,8 @@ long-lived poll connection per browser tab. The API is small and boring:
     GET  /api/aliases.csv      every tag's alias, notes, shelf and slot as a CSV download
     POST /api/aliases          {"csv": "hex_id,alias,..."}  apply a CSV (blank cells clear)
     POST /api/prefs            {"late_after_s": 330, ...}  page settings, validated and stored
+    GET  /api/gpio             Settings > Raspberry Pi GPIO: {pi, chip, panes: [...]}
+    POST /api/gpio             {"chip": "", "panes": {"hub": {"reset": "17", "boot": "27"}}}
     GET  /api/hub-display      the hub panel's tag list: config, ids on the glass, last result
     POST /api/hub-display      {"enabled": true, "timeout_s": 300, "min_interval_s": 60,
                                "title": "...", "show_alias": true, "stats": true,
@@ -154,6 +156,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(self.app.state())
         if path == "/api/hub-display":
             return self._json(self.app.hubdisp.info())
+        if path == "/api/gpio":
+            return self._json(self.app.gpio.info())
         if path == "/api/flash":
             from . import flasher
             from .app import REPO_ROOT
@@ -313,6 +317,9 @@ class Handler(BaseHTTPRequestHandler):
                 self.app.hubdisp.configure(refresh=bool(body.get("refresh")), **{
                     k: v for k, v in body.items() if k != "refresh"})
                 return self._json(self.app.hubdisp.info())
+            if parts == ["api", "gpio"]:
+                # {"chip": "", "panes": {"hub": {"reset": "17", "boot": "27:high"}}}
+                return self._json(self.app.gpio.configure(body))
             if parts == ["api", "cancel"]:
                 self.app.cancel()
                 return self._json(self.app.state())
