@@ -38,6 +38,8 @@ long-lived poll connection per browser tab. The API is small and boring:
     POST /api/pane/<key>/clear
     POST /api/pane/<key>/line      {"line": "dtr"|"rts", "value": true|false}
     POST /api/pane/<key>/toggle    {"line": "dtr"}
+    POST /api/pane/<key>/remove    close it, forget its port and GPIO pins (kept across restarts)
+    POST /api/pane/<key>/add       {"port": "/dev/serial0", "baud": 115200} add it there and open
     POST /api/pane/<key>/reset     one 100 ms RTS pulse
     POST /api/pane/<key>/send      {"text": "P", "hex": false, "eol": "lf"|"cr"|"crlf"|"none"}
                                    debug: write those bytes to the port, echoed in the log
@@ -431,6 +433,11 @@ class Handler(BaseHTTPRequestHandler):
             self.app.open_pane(key, body.get("port"), body.get("baud"))
         elif action == "close":
             self.app.close_pane(key)
+        elif action in ("remove", "add"):
+            result = (self.app.remove_pane(key) if action == "remove"
+                      else self.app.add_pane(key, body.get("port"), body.get("baud")))
+            return self._json({**result, "state": self.app.state()},
+                              HTTPStatus.OK if result["ok"] else HTTPStatus.CONFLICT)
         elif action == "clear":
             self.app.clear_pane(key)
         elif action == "heartbeat":

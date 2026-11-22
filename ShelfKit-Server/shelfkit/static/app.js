@@ -183,6 +183,7 @@ const ui = {
   hubName: $("hub-name"),
   hubSub: $("hub-sub"),
   hubPill: $("hub-pill"),
+  hubRemove: $("hub-remove"),
   hubTabs: $("hub-tabs"),
   hubTabPanel: $("hub-tab-panel"),
   hubRows: $("hub-rows"),
@@ -1356,8 +1357,17 @@ function renderHeadline(all) {
   const hub = hubPane();
   const closed = hub && !hub.open;
   ui.fleetOpenHub.hidden = !closed;
-  ui.fleetOpenHub.textContent = hub?.port ? `Open hub port ${hub.port}` : "Set up the hub port";
+  ui.fleetOpenHub.textContent = hub?.removed ? "Add hub"
+    : hub?.port ? `Open hub port ${hub.port}` : "Set up the hub port";
 
+  if (hub?.removed) {
+    setText(ui.fleetHeadline, "No hub");
+    setClass(ui.fleetSubline, "subline");
+    setText(ui.fleetSubline, all.length
+      ? "These are the tags from the last session. Add a hub so they can check in again."
+      : "Add a hub so ShelfKit can hear your tags.");
+    return;
+  }
   if (closed) {
     setText(ui.fleetHeadline, "The hub port is closed");
     setClass(ui.fleetSubline, "subline");
@@ -2305,10 +2315,120 @@ function paneTitle(pane) {
 function paneKind(pane) {
   return isHubPane(pane) ? "Sub-GHz radio over USB serial" : "Debug port";
 }
-/** Panes the Hubs screen lists: the hub always, the tag port unless Settings hides it. */
+/** Panes the Hubs screen lists: the hub unless removed, the tag port unless Settings hides it. */
 function listedPanes() {
-  return (state?.panes || []).filter((pane) => isHubPane(pane) || prefs.show_tag_port !== false);
+  return (state?.panes || []).filter((pane) => !pane.removed
+    && (isHubPane(pane) || prefs.show_tag_port !== false));
 }
+
+/** Remove the shown hub (or debug port): close it and forget its port and GPIO pins. */
+async function removePane(pane) {
+  try {
+    const result = await postJSON(`/api/pane/${pane.key}/remove`);
+    render(result.state);
+    if (!result.ok) {
+      toast(`Not removed: ${result.error}`, "bad");
+      return;
+    }
+    toast(`${paneTitle(pane)} removed. Tags, aliases and the queue are kept.`);
+    pickHubsView("all");
+  } catch (err) {
+    toast(`Couldn't remove it: ${err.message}`, "bad");
+  }
+}
+
+// ── add hub: a dialog that picks the serial port ───────────────────────────
+const addUi = {
+  dialog: $("add-hub"),
+  form: $("add-hub-form"),
+  ports: $("add-hub-ports"),
+  port: $("add-hub-port"),
+  baud: $("add-hub-baud"),
+  error: $("add-hub-error"),
+  cancel: $("add-hub-cancel"),
+  ok: $("add-hub-ok"),
+};
+
+/** The detected ports as a pick list; a port the other pane holds is shown but disabled. */
+function renderAddHubPorts() {
+  const hub = hubPane();
+  const taken = new Set((state?.panes || [])
+    .filter((pane) => pane.key !== hub?.key && !pane.removed && pane.port)
+    .map((pane) => pane.port.toLowerCase()));
+  const ports = state?.ports || [];
+  if (!ports.length) {
+    addUi.ports.replaceChildren(el("p", "hint", "No serial ports detected. Type the port below."));
+    return;
+  }
+  addUi.ports.replaceChildren(...ports.map(([device, description]) => {
+    const label = el("label", "add-hub-port");
+    const radio = el("input");
+    Object.assign(radio, { type: "radio", name: "add-hub-port", value: device,
+      checked: addUi.port.value === device, disabled: taken.has(device.toLowerCase()) });
+    radio.addEventListener("change", () => { addUi.port.value = device; });
+    const text = el("span", null, device);
+    const sub = el("span", "hint", taken.has(device.toLowerCase())
+      ? "in use by the other port" : description || "");
+    label.append(radio, text, sub);
+    return label;
+  }));
+}
+
+function addHub() {
+  const hub = hubPane();
+  if (!hub?.removed) {
+    toast("ShelfKit talks to one hub for now. Remove the current one first.");
+    return;
+  }
+  addUi.error.hidden = true;
+  addUi.ok.disabled = false;
+  addUi.baud.value = hub.baud || 115200;
+  const free = (state?.ports || []).map(([device]) => device);
+  addUi.port.value = free.includes("/dev/serial0") ? "/dev/serial0" : free[0] || "";
+  renderAddHubPorts();
+  addUi.dialog.showModal();
+  addUi.port.focus();
+}
+
+addUi.port.addEventListener("input", () => {
+  for (const radio of addUi.ports.querySelectorAll("input")) radio.checked = radio.value === addUi.port.value;
+});
+addUi.cancel.addEventListener("click", () => addUi.dialog.close());
+addUi.form.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const hub = hubPane();
+  const port = addUi.port.value.trim();
+  if (!port) {
+    addUi.error.hidden = false;
+    setText(addUi.error, "Pick or type a serial port.");
+    return;
+  }
+  addUi.ok.disabled = true;
+  setText(addUi.ok, "Opening…");
+  try {
+    const response = await fetch(`/api/pane/${hub.key}/add`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ port, baud: Number(addUi.baud.value) || undefined }),
+    });
+    const result = await response.json();
+    if (result.state) render(result.state);
+    if (!result.ok) {
+      addUi.error.hidden = false;
+      setText(addUi.error, result.error || "The port didn't open.");
+      return;
+    }
+    addUi.dialog.close();
+    toast(`Hub added on ${port}.`);
+    pickHubsView(hub.key, "overview");
+  } catch (err) {
+    addUi.error.hidden = false;
+    setText(addUi.error, `Couldn't add the hub: ${err.message}`);
+  } finally {
+    addUi.ok.disabled = false;
+    setText(addUi.ok, "Add hub");
+  }
+});
 function paneHealth(pane) {
   if (pane.status.startsWith("error")) return { word: "Error", cls: "bad" };
   if (!pane.open) return { word: "Closed", cls: "off" };
@@ -2495,6 +2615,9 @@ function renderHubDetail(pane, rows) {
   const hub = isHubPane(pane);
   setText(ui.hubName, paneTitle(pane));
   setText(ui.hubSub, `${paneKind(pane)} · ${pane.port || "no port"} · ${pane.baud} baud`);
+  if (!ui.hubRemove.classList.contains("armed")) {
+    setText(ui.hubRemove, hub ? "Remove hub" : "Remove port");
+  }
   setText(ui.hubPill, health.word);
   setClass(ui.hubPill, `pill ${health.cls}`);
 
@@ -2661,7 +2784,12 @@ function renderChrome() {
   ui.linkState.hidden = open && !dead;
   setClass(ui.linkState, `link-state${open && !dead ? "" : " closed"}`);
   setClass(ui.linkMark, `mark ${open && !dead ? "s-online" : "s-alert"}`);
-  setText(ui.linkText, dead ? "Hub not answering" : open ? `Hub on ${hub.port}` : "Hub port closed");
+  ui.hubsAdd.disabled = !hub?.removed;
+  ui.hubsAdd.title = hub?.removed ? "Pick the serial port of a hub and open it"
+    : "ShelfKit talks to one hub for now. Remove this one first to add another.";
+  if (addUi.dialog.open) renderAddHubPorts();
+  setText(ui.linkText, hub?.removed ? "No hub" : dead ? "Hub not answering"
+    : open ? `Hub on ${hub.port}` : "Hub port closed");
 
   const waiting = (state.queue || []).filter(
     (job) => job.state === "pending" || job.state === "running").length;
@@ -3365,7 +3493,8 @@ ui.fleetAll.addEventListener("change", () => {
 
 ui.fleetOpenHub.addEventListener("click", () => {
   const hub = hubPane();
-  if (hub?.port) command(hub.key, "open", { port: hub.port, baud: hub.baud });
+  if (hub?.removed) addHub();
+  else if (hub?.port) command(hub.key, "open", { port: hub.port, baud: hub.baud });
   else location.hash = "#hub";
 });
 
@@ -3471,8 +3600,11 @@ ui.logsSync.addEventListener("change", draw);
 ui.copyLogs.addEventListener("click", copyLogs);
 ui.hubsAll.addEventListener("click", () => pickHubsView("all"));
 ui.hubsConsole.addEventListener("click", () => pickHubsView(state?.hub || "all", "console"));
-ui.hubsAdd.addEventListener("click", () => {
-  toast("ShelfKit talks to one hub for now. Set its port under Settings > Serial ports.");
+ui.hubsAdd.addEventListener("click", addHub);
+ui.hubRemove.addEventListener("click", () => {
+  const pane = (state?.panes || []).find((item) => item.key === hubsView);
+  if (!pane) return;
+  arm(ui.hubRemove, `Press again to remove ${pane.port || "it"}`, () => removePane(pane));
 });
 ui.hubTabs.addEventListener("click", (event) => {
   const tab = event.target.closest("[data-tab]");

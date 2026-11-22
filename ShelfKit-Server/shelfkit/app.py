@@ -200,6 +200,9 @@ class Pane:
         # Wakes anything waiting for a line (the image push waits for SENT/PONG).
         self.cond = threading.Condition()
         self.hub_seen = False   # it printed a line only a hub prints (RE_HUB_LINE)
+        # Removed on the Hubs screen: no port, not opened, not listed, also across restarts
+        # and over a port on the command line, until "Add hub" brings it back.
+        self.removed = False
         # the last heartbeat: state None (not checked) | "checking" | "ok" | "fail"
         self.heartbeat: dict = {"state": None, "at": None, "ms": None, "why": None}
         # the hub LED setting this hub has confirmed ("OK led 0|1"); None = not sent since
@@ -235,6 +238,7 @@ class Pane:
             "status": worker.status,
             "dtr": worker.dtr,
             "rts": worker.rts,
+            "removed": self.removed,
             # reset/boot on Raspberry Pi GPIO pins instead of RTS/DTR, e.g. "reset=GPIO17, ..."
             "gpio": _gpio_text(self.spec.port),
             "lines": worker.rx_lines,
@@ -319,6 +323,8 @@ class App:
             for key in self.keys:
                 if key == self.tag_key() and not self.prefs["show_tag_port"]:
                     continue                 # hidden in Settings: leave that port alone
+                if self.panes[key].removed:
+                    continue                 # removed on the Hubs screen
                 self.open_pane(key)
 
     # ── persistence ────────────────────────────────────────────────────────
@@ -333,6 +339,10 @@ class App:
         for key, pane in self.panes.items():
             port = saved.get(f"pane.{key}.port")
             baud = saved.get(f"pane.{key}.baud")
+            if saved.get(f"pane.{key}.removed"):
+                pane.removed = True
+                pane.spec.port = pane.worker.spec.port = ""
+                port = None
             if port:
                 pane.spec.port = str(port)
                 pane.worker.spec.port = str(port)
@@ -478,6 +488,9 @@ class App:
         with self.lock:
             pane.spec.port = port
             pane.worker.spec.port = port
+        if port and pane.removed:
+            self._unremove(pane)
+        self.gpio.apply(pane)
         self._save_setting(f"pane.{key}.port", port)
         self._event("settings", None, f"{pane.spec.name} port: {port or 'none'}")
         if was_open and port:
@@ -1052,6 +1065,8 @@ class App:
             pane.worker.close()  # baud/port changed: reopen with the new settings
         pane.worker.spec.port = pane.spec.port
         pane.worker.spec.baud = pane.spec.baud
+        if pane.removed:
+            self._unremove(pane)             # opening a port is adding the hub back
         self.gpio.apply(pane)                # the pane's GPIO pins follow it to a new port
         pane.worker.open()
         with self.lock:
@@ -1076,6 +1091,70 @@ class App:
                                 args=(key, "port opened")).start()
             self._save_setting(f"pane.{key}.baud", pane.spec.baud)
             self._event("open", None, f"{pane.spec.name}={pane.spec.port}")
+
+    def remove_pane(self, key: str) -> dict:
+        """Remove a hub (or the tag debug port): close it, forget its port and free its
+        GPIO pins. Tags, aliases and the queue stay. Kept across restarts, even when the
+        command line names a port for it, until add_pane()."""
+        pane = self.panes.get(key)
+        if pane is None:
+            return {"ok": False, "error": f"no pane {key}"}
+        if self.flash.active and self.flash.pane == key:
+            return {"ok": False, "error": f"{pane.spec.name} is being used to flash. "
+                    "Wait for it to finish"}
+        if key == self.hub_key() and (self.sending or self.display_busy
+                                      or self.dump.get("active")
+                                      or any(j["state"] == "running" for j in self.queue)):
+            return {"ok": False, "error": "The hub is busy with a transfer. Wait for it first"}
+        old_port = pane.spec.port
+        pane.worker.close()
+        with self.lock:
+            pane.removed = True
+            pane.heartbeat = {"state": None, "at": None, "ms": None, "why": None}
+            pane.spec.port = pane.worker.spec.port = ""
+            self.status = f"{pane.spec.name} removed"
+        self.gpio.apply(pane)                # no port: settings pins are given back
+        if old_port and pane.spec.name in self.gpio.locked:
+            from . import gpio_lines
+            gpio_lines.release(old_port)     # pins from the command line, too
+        self._save_setting(f"pane.{key}.port", "")
+        self._save_setting(f"pane.{key}.removed", True)
+        self._event("settings", None, f"{pane.spec.name} removed"
+                    + (f" (was {old_port})" if old_port else ""))
+        return {"ok": True}
+
+    def add_pane(self, key: str, port: str | None, baud=None) -> dict:
+        """Add a hub (or debug port) on `port`: listed again and opened there."""
+        pane = self.panes.get(key)
+        if pane is None:
+            return {"ok": False, "error": f"no pane {key}"}
+        port = (port or "").strip().strip('"')
+        if not port or len(port) > 200:
+            return {"ok": False, "error": "Pick a serial port"}
+        other = [p.spec.port.casefold() for k, p in self.panes.items()
+                 if k != key and not p.removed and p.spec.port]
+        if port.casefold() in other:
+            return {"ok": False, "error": f"{port} is already used by the other port"}
+        if not pane.removed and pane.worker.is_open:
+            return {"ok": False, "error": f"{pane.spec.name} is already on {pane.spec.port}. "
+                    "Remove it first"}
+        was_removed = pane.removed
+        self.open_pane(key, port, baud)      # also un-removes it and claims its GPIO pins
+        if not pane.worker.is_open:
+            status = pane.worker.status
+            if was_removed:                  # stays removed: nothing half-added is listed
+                pane.removed = True
+                pane.spec.port = pane.worker.spec.port = ""
+                self.gpio.apply(pane)
+                self._save_setting(f"pane.{key}.removed", True)
+                self._save_setting(f"pane.{key}.port", "")
+            return {"ok": False, "error": f"{port} didn't open: {status}"}
+        self._event("settings", None, f"{pane.spec.name} added on {port}")
+        return {"ok": True}
+
+    def _unremove(self, pane) -> None:
+        pane.removed = False
+        self._save_setting(f"pane.{pane.key}.removed", False)
 
     def close_pane(self, key: str) -> None:
         pane = self.panes.get(key)

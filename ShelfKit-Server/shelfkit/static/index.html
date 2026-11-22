@@ -529,6 +529,8 @@
                 <span id="hub-sub" class="dim"></span>
               </div>
               <span id="hub-pill" class="pill"></span>
+              <button id="hub-remove" class="danger" type="button"
+                      title="Close the port and forget it and its GPIO pins. Tags, aliases and the queue stay.">Remove hub</button>
             </div>
 
             <div class="tabs" id="hub-tabs" role="tablist" aria-label="Hub details">
@@ -1131,6 +1133,28 @@
   </aside>
 
   <datalist id="port-options"></datalist>
+
+  <dialog id="add-hub" class="add-hub" aria-labelledby="add-hub-title">
+    <form id="add-hub-form" novalidate>
+      <h2 id="add-hub-title">Add hub</h2>
+      <p class="hint">Pick the serial port the hub is connected to. It opens right away.</p>
+      <div id="add-hub-ports" class="add-hub-ports" role="radiogroup" aria-label="Detected serial ports"></div>
+      <div class="setting-fields">
+        <label>Port
+          <input id="add-hub-port" type="text" list="port-options" spellcheck="false"
+                 autocomplete="off" placeholder="/dev/serial0 or COM4">
+        </label>
+        <label>Baud
+          <input id="add-hub-baud" type="number" min="300" step="1" inputmode="numeric">
+        </label>
+      </div>
+      <p id="add-hub-error" class="warning" hidden></p>
+      <div class="row add-hub-actions">
+        <button id="add-hub-cancel" type="button">Cancel</button>
+        <button id="add-hub-ok" class="primary" type="submit">Add hub</button>
+      </div>
+    </form>
+  </dialog>
   <div id="toasts" class="toasts" aria-live="polite"></div>
   <script src="/app.js"></script>
   <script src="/diag.js"></script>

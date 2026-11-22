@@ -131,6 +131,16 @@ there read-only. `GET/POST /api/gpio` is the same thing over HTTP.
 `shelfkit/hubhost.py` and `ShelfKit-Firmware/tooling/axsem-flasher.py` take the same `--gpio-reset`,
 `--gpio-boot` and `--gpio-chip`.
 
+### Adding and removing the hub
+
+**Hubs > (the hub) > Remove hub** closes its port, forgets the port and frees its GPIO pins. Tags,
+aliases and the queue stay. The removal is kept across restarts, even when the command line names
+a port for the hub (`hub=/dev/serial0` in a service file), so a removed hub doesn't come back on
+its own. **Add hub** (top of the Hubs screen, or on Fleet when there is no hub) opens a dialog
+with the detected serial ports, `/dev/serial0` included on a Raspberry Pi. Pick one, or type it,
+and the port opens straight away; a port that won't open leaves the hub removed and says why.
+ShelfKit talks to one hub for now, so Add hub is only available while there is none.
+
 The sidebar shows "Hub port closed" in red whenever the hub's port is closed. Fleet then says so in its headline
 and offers a button that opens it, so an empty shelf never looks like a broken page.
 

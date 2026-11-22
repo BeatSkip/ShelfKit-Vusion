@@ -7,6 +7,7 @@ does not have to poll a queue.
 
 from __future__ import annotations
 
+import os
 import threading
 from dataclasses import dataclass
 from typing import Callable
@@ -34,9 +35,22 @@ class PortSpec:
     baud: int = DEFAULT_BAUD
 
 
+# The Raspberry Pi's names for its header UART (GPIO14/15) and the second one. pyserial
+# lists neither: they are symlinks, and the mini UART behind them (ttyS0) is a "platform"
+# device, which its Linux lister skips.
+PI_UART_ALIASES = ("/dev/serial0", "/dev/serial1")
+
+
 def available_ports() -> list[tuple[str, str]]:
     """(device, description) for everything pyserial can see, for the pickers."""
-    return [(p.device, p.description or "") for p in list_ports.comports()]
+    found = [(p.device, p.description or "") for p in list_ports.comports()]
+    aliases = []
+    for alias in PI_UART_ALIASES:
+        if os.path.exists(alias):
+            target = os.path.realpath(alias)
+            aliases.append((alias, f"Raspberry Pi UART ({os.path.basename(target)})"))
+            found = [(dev, desc) for dev, desc in found if os.path.realpath(dev) != target]
+    return aliases + found
 
 
 def _set_line(ser, line: str, value: bool) -> bool:

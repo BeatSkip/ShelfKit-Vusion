@@ -1012,6 +1012,18 @@ tr.failed .state-word, tr.failed .detail { color: var(--red); font-weight: 500; 
 .gpio-pane .setting-fields input { width: 140px; }
 .gpio-pane p { margin: 0; }
 .gpio-settings form > .row { margin-top: 14px; }
+
+/* Hubs > Add hub */
+.add-hub { width: min(480px, calc(100vw - 32px)); padding: 20px 22px; border: 1px solid var(--rule); border-radius: var(--radius); background: var(--surface); color: var(--ink); box-shadow: 0 18px 40px -18px rgba(0, 0, 0, 0.45); }
+.add-hub::backdrop { background: rgba(0, 0, 0, 0.35); }
+.add-hub h2 { margin: 0 0 6px; }
+.add-hub-ports { display: grid; gap: 2px; margin: 12px 0 14px; max-height: 240px; overflow-y: auto; }
+.add-hub-port { display: grid; grid-template-columns: auto 1fr; column-gap: 10px; align-items: center; padding: 7px 8px; border-radius: var(--radius); cursor: pointer; }
+.add-hub-port:hover { background: var(--raised); }
+.add-hub-port > span:first-of-type { font-family: var(--mono, ui-monospace, monospace); }
+.add-hub-port > .hint { grid-column: 2; margin: 0; }
+.add-hub-port:has(input:disabled) { opacity: 0.55; cursor: default; }
+.add-hub-actions { justify-content: flex-end; margin-top: 16px; gap: 8px; }
 #nav-flash { margin-left: 2px; }
 
 /* narrow ------------------------------------------------------------------- */
