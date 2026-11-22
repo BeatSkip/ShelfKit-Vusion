@@ -103,9 +103,21 @@ void epd_open(void)
     EPD_RST = 1;
     epd_delay_ms(100);
 #else
-    /* Hub: PB5 is the serial RX, so it is left alone. The panel is reset by
-     * power-cycling its rail instead (img_rx.c panel_power_on). */
+    /* Hub: PB5 is the serial RX, so it is left alone. */
     epd_delay_ms(100);
+#if HUB_EPD_SOFT_RESET
+    /* Soft reset over SPI: RST_N (PSR bit 0) low resets the controller's registers and
+     * stops the booster, as the RST pin would; set it again before anything else, because
+     * with RST_N low every driver function is disabled. The full PSR follows below. */
+    epd_cmd(0x00);
+    epd_data(0x0E);
+    epd_delay_ms(10);
+    epd_cmd(0x00);
+    epd_data(0x0F);
+    epd_delay_ms(10);
+#endif
+    /* Without the soft reset the panel is reset by power-cycling its rail
+     * (img_rx.c panel_power_on). */
 #endif
 
     /* Booster soft start */
@@ -156,8 +168,12 @@ void epd_stream_write(const uint8_t __xdata *data, uint8_t len)
 void epd_sleep(void)
 {
     (void)epd_cmd_wait(0x02, 500, 2500);    /* power off */
+#if HUB_EPD_RST_PULSE || !HUB_EPD_SOFT_RESET
     epd_cmd(0x07);                          /* deep sleep */
     epd_data(0xA5);
+#endif
+    /* With the soft reset there is no deep sleep: only the RST pin, which this hub does
+     * not drive, would bring the panel out of it. The caller cuts the rail anyway. */
 }
 
 void epd_upload(uint8_t cmd, const uint8_t *plane, uint16_t len)

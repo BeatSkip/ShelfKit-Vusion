@@ -26,7 +26,8 @@ long-lived poll connection per browser tab. The API is small and boring:
     POST /api/prefs            {"late_after_s": 330, ...}  page settings, validated and stored
     GET  /api/hub-display      the hub panel's tag list: config, ids on the glass, last result
     POST /api/hub-display      {"enabled": true, "timeout_s": 300, "min_interval_s": 60,
-                               "title": "...", "show_alias": true, "refresh": true}
+                               "title": "...", "show_alias": true, "stats": true,
+                               "stats_interval_s": 1800, "rotate": 90, "refresh": true}
     GET  /api/poll?c=a:1:12&e=0  new log lines per pane, new events, and the state
     GET  /api/log              both logs merged, as plain text (copy/download)
     GET  /api/preview.png?t=<key>&kind=original|device   a rendered frame
@@ -307,7 +308,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"result": result, "state": self.app.state()})
             if parts == ["api", "hub-display"]:
                 # {"enabled": true, "timeout_s": 300, "min_interval_s": 60, "title": "...",
-                #  "show_alias": true, "refresh": true (redraw now)}
+                #  "show_alias": true, "stats": true, "stats_interval_s": 1800, "rotate": 90,
+                #  "refresh": true (redraw now)}
                 self.app.hubdisp.configure(refresh=bool(body.get("refresh")), **{
                     k: v for k, v in body.items() if k != "refresh"})
                 return self._json(self.app.hubdisp.info())

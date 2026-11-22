@@ -560,6 +560,7 @@
                   <input id="display-enabled" type="checkbox">
                   List the connected tags on the hub's panel
                 </label>
+                <p class="hint">The panel is drawn landscape: 296 wide, 152 tall.</p>
                 <div class="display-fields">
                   <label class="field-inline">Title
                     <input id="display-title-input" maxlength="24" spellcheck="false">
@@ -570,11 +571,26 @@
                   <label class="field-inline">Shortest redraw gap (seconds)
                     <input id="display-interval" type="number" min="1" step="10">
                   </label>
+                  <label class="field-inline">Turn the picture
+                    <select id="display-rotate">
+                      <option value="90">90° (default)</option>
+                      <option value="270">270° (if it shows upside down)</option>
+                    </select>
+                  </label>
                 </div>
                 <label class="check">
                   <input id="display-alias" type="checkbox">
                   Print each tag's alias next to its ID
                 </label>
+                <label class="check">
+                  <input id="display-stats" type="checkbox">
+                  Add a footer line with the server's CPU, RAM, disk and uptime
+                </label>
+                <div class="display-fields">
+                  <label class="field-inline">Redraw for fresh stats every (minutes, 0 = only when tags change)
+                    <input id="display-stats-interval" type="number" min="0" step="5">
+                  </label>
+                </div>
                 <div class="row">
                   <button id="display-refresh" type="button">Redraw now</button>
                   <span id="display-result" class="hint"></span>

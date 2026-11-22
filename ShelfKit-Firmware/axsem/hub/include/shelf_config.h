@@ -20,6 +20,17 @@
  * PB5 and the panel's RST pin. */
 #define HUB_EPD_RST_PULSE   0
 
+/* 1 = reset the panel over SPI: epd_open() clears and sets RST_N, bit 0 of the IL0373's
+ * panel setting (PSR, 0x00), which resets every register like the RST pin does. For a hub
+ * whose PB5-RST trace is cut, so the RST pin never moves. Because only the RST pin wakes the
+ * IL0373 from deep sleep (DSLP 0x07), the hub then never sends DSLP: it ends a refresh with
+ * power off (POF 0x02) and cuts the panel rail. The rail is no longer cycled as a reset. The
+ * panel's RST input must sit high (pulled up on the board, not floating) for this to work.
+ * Only used with HUB_EPD_RST_PULSE 0. */
+#ifndef HUB_EPD_SOFT_RESET
+#define HUB_EPD_SOFT_RESET  1
+#endif
+
 /* The green activity flashes (a tag polled, an image is starting). 1 = on at boot; the host
  * turns them off and on with "G0" / "G1" (the server's Settings > General > Hub LED). The
  * blue boot pulse and the red fatal-error blink are not affected. */

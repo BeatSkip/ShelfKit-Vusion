@@ -52,7 +52,7 @@ static void panel_power_on(void)
     uint8_t i;
 
     pwr_init();             /* PA5 becomes an output, driven off */
-#if !HUB_EPD_RST_PULSE
+#if !HUB_EPD_RST_PULSE && !HUB_EPD_SOFT_RESET
     for (i = 0; i < 250; i++)   /* no RST line on the hub: a rail cycle is the reset */
         delay(1000);
 #endif

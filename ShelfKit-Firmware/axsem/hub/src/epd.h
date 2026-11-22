@@ -54,7 +54,8 @@ void epd_open(void);
 void epd_stream_begin(uint8_t cmd);
 void epd_stream_write(const uint8_t __xdata *data, uint8_t len);
 
-/* Put the panel into deep sleep (minimal power). */
+/* Power the panel off (POF), then deep sleep - unless the panel is reset over SPI
+ * (HUB_EPD_SOFT_RESET), because only the RST pin leaves deep sleep. */
 void epd_sleep(void);
 
 /* Fill the whole screen with constant plane values and refresh.

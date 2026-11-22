@@ -847,7 +847,7 @@ tr.failed .state-word, tr.failed .detail { color: var(--red); font-weight: 500; 
 .hub-display { flex-grow: 2; }
 .display-fields { display: flex; flex-wrap: wrap; gap: 10px 16px; }
 .field-inline { display: flex; flex-direction: column; gap: 3px; font-size: var(--t-small); color: var(--ink-2); }
-.field-inline input { width: 190px; color: var(--ink); font-size: var(--t-body); }
+.field-inline input, .field-inline select { width: 190px; color: var(--ink); font-size: var(--t-body); }
 .shown-ids { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; }
 
 .facts {

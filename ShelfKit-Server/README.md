@@ -636,11 +636,18 @@ surfaces true to the panel's pixels.
 ## Hub display: connected tags
 
 The hub's own e-paper panel can list the serial numbers (node ids) of the tags that are
-currently connected. A tag stays on the list while its last POLL is younger than the
-timeout (5 minutes by default) and drops off after that. The panel is redrawn only when
-the set changes, and at most once per minute: a refresh takes ~15 s, during which the hub
-cannot answer polls, and the server writes nothing to the hub (its serial line is also the
-panel's reset, see [axsem/hub](../ShelfKit-Firmware/axsem/hub/README.md)).
+currently connected. The panel is mounted **landscape**, so the frame is drawn 296 wide and
+152 tall and turned onto the panel (`rotate` 90 or 270: flip it if the picture is upside
+down). The fleet fills the panel: a header with the title and the tag count, then the ids in
+columns, with the alias next to each when there is room. A footer line adds the server's CPU,
+RAM, disk and uptime (`stats`, on by default) and the time of the drawing.
+
+A tag stays on the list while its last POLL is younger than the timeout (5 minutes by
+default) and drops off after that. The panel is redrawn when the set changes, and with the
+statistics on also every `stats_interval_s` (30 minutes by default; 0 = only when the tags
+change), never more than once per minute: a refresh takes ~15 s, during which the hub cannot
+answer polls, and the server writes nothing to the hub. A hub whose PB5-RST trace is cut resets
+its panel over SPI (see [axsem/hub](../ShelfKit-Firmware/axsem/hub/README.md)).
 
 Off by default; needs a hub built with the serial image command (banner ends in `show=1`).
 
@@ -654,7 +661,8 @@ or at runtime, persisted in the settings table:
 ```
 GET  /api/hub-display
 POST /api/hub-display   {"enabled": true, "timeout_s": 300, "min_interval_s": 60,
-                         "title": "ShelfKit hub", "show_alias": true, "refresh": true}
+                         "title": "ShelfKit hub", "show_alias": true, "stats": true,
+                         "stats_interval_s": 1800, "rotate": 90, "refresh": true}
 ```
 
 Tags poll every 2 minutes and stretch that to 10 on a weak link, so keep `timeout_s` above

@@ -198,6 +198,9 @@ const ui = {
   displayTimeout: $("display-timeout"),
   displayInterval: $("display-interval"),
   displayAlias: $("display-alias"),
+  displayStats: $("display-stats"),
+  displayStatsInterval: $("display-stats-interval"),
+  displayRotate: $("display-rotate"),
   displayRefresh: $("display-refresh"),
   displayResult: $("display-result"),
   displayShown: $("display-shown"),
@@ -2587,6 +2590,12 @@ function renderHub() {
   if (active !== ui.displayTitle) ui.displayTitle.value = display.title ?? "";
   if (active !== ui.displayTimeout) ui.displayTimeout.value = display.timeout_s ?? "";
   if (active !== ui.displayInterval) ui.displayInterval.value = display.min_interval_s ?? "";
+  if (active !== ui.displayStats) ui.displayStats.checked = display.stats !== false;
+  if (active !== ui.displayStatsInterval) {
+    ui.displayStatsInterval.value = display.stats_interval_s == null ? "" : Math.round(display.stats_interval_s / 60);
+  }
+  ui.displayStatsInterval.disabled = display.stats === false;
+  if (active !== ui.displayRotate) ui.displayRotate.value = String(display.rotate ?? 90);
   const blind = caps.show === false;
   ui.displayWarning.hidden = !blind;
   setText(ui.displayWarning, blind
@@ -2615,6 +2624,9 @@ async function saveDisplay(extra) {
       title: ui.displayTitle.value,
       timeout_s: ui.displayTimeout.value,
       min_interval_s: ui.displayInterval.value,
+      stats: ui.displayStats.checked,
+      stats_interval_s: ui.displayStatsInterval.value === "" ? undefined : Number(ui.displayStatsInterval.value) * 60,
+      rotate: Number(ui.displayRotate.value),
       ...extra,
     });
   } catch (err) {
@@ -3411,7 +3423,8 @@ document.addEventListener("click", (event) => {
   pickHubsView(state?.hub || "all", link.dataset.hubTab);
 });
 
-for (const input of [ui.displayEnabled, ui.displayAlias, ui.displayTitle, ui.displayTimeout, ui.displayInterval]) {
+for (const input of [ui.displayEnabled, ui.displayAlias, ui.displayTitle, ui.displayTimeout, ui.displayInterval,
+                     ui.displayStats, ui.displayStatsInterval, ui.displayRotate]) {
   input.addEventListener("change", () => saveDisplay());
 }
 ui.displayRefresh.addEventListener("click", async () => {

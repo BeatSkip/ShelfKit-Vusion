@@ -532,6 +532,22 @@ def main() -> int:
               wait_for(lambda: disp.info()["shown"] == [] and not app.display_busy, 5.0)
               and len(hub.panel) == before + 90, disp.info())
         check("an empty, unchanged panel is left alone", disp.tick() is False)
+        disp.last_drawn = time.time() - 4000             # the stats line is older than 30 min
+        disp.last_push = 0.0
+        before = len(hub.panel)
+        check("stale statistics redraw an unchanged panel",
+              (disp.tick() or wait_for(lambda: len(hub.panel) > before, 5.0))
+              and wait_for(lambda: not app.display_busy, 5.0) and len(hub.panel) == before + 90)
+        disp.configure(stats=False)
+        disp.last_drawn = time.time() - 4000
+        disp.last_push = 0.0
+        check("without statistics an unchanged panel stays", disp.tick() is False)
+        disp.configure(stats=True, rotate=270)
+        from shelfkit import hub_display as hubdisp_mod
+        check("the frame is landscape, turned onto the 152x296 panel",
+              hubdisp_mod.render([0x100]).size == (296, 152)
+              and hubdisp_mod.render([0x100], rotate=270).size == (152, 296))
+        check("a bad rotation is refused", disp.configure(rotate=45)["rotate"] == 270)
         check("the display API answers", get("/api/hub-display")["timeout_s"] == 300)
         post("/api/hub-display", {"enabled": False})
         check("the display API configures", get("/api/hub-display")["enabled"] is False)

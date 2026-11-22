@@ -101,10 +101,17 @@ python ../../ShelfKit-Server/shelfkit/hubhost.py COM4 stats       # CPU/RAM/disk
 ```
 
 **PB5 is both the panel's RST and the serial RX.** With `HUB_EPD_RST_PULSE 0` (default,
-`include/shelf_config.h`) the hub never drives PB5 and resets the panel by cycling its supply
-rail, but while the trace is connected every byte the host sends is still a reset pulse on
-the panel. If the picture is garbled or stops half way, cut the trace between PB5 and the
-panel's RST pin: the rail cycle is then the only reset.
+`include/shelf_config.h`) the hub never drives PB5, but while the trace is connected every byte
+the host sends is still a reset pulse on the panel. If the picture is garbled or stops half way,
+cut the trace between PB5 and the panel's RST pin.
+
+The panel is then **reset over SPI** (`HUB_EPD_SOFT_RESET 1`, the default): `epd_open()` clears
+and sets `RST_N`, bit 0 of the IL0373's panel setting register (`PSR`, `0x00`), which resets the
+controller like the pin does. Only the RST pin can wake the IL0373 from deep sleep, so the hub
+never sends deep sleep (`0x07`); it ends a refresh with power off (`0x02`) and switches the panel
+rail off. The panel's RST input has to sit high after the cut (pulled up, not floating): a
+floating RST that drifts low holds the controller in reset, and no SPI command gets past that.
+`HUB_EPD_SOFT_RESET 0` brings back the older reset by switching the panel rail off for 250 ms.
 
 ## The serial link is the fragile part
 
