@@ -175,6 +175,13 @@ def build_specs(ports: list[str], baud: int) -> tuple[list[PortSpec], bool]:
     return specs, bool(ports)
 
 
+
+def _gpio_text(port: str | None) -> str | None:
+    """'reset=GPIO17, boot=GPIO27 on /dev/gpiochip0' when the port's lines are GPIO pins."""
+    from . import gpio_lines
+    pins = gpio_lines.mapped(port)
+    return pins.describe() if pins else None
+
 class Pane:
     """One port, its worker and its ring buffer of log lines."""
 
@@ -227,6 +234,8 @@ class Pane:
             "status": worker.status,
             "dtr": worker.dtr,
             "rts": worker.rts,
+            # reset/boot on Raspberry Pi GPIO pins instead of RTS/DTR, e.g. "reset=GPIO17, ..."
+            "gpio": _gpio_text(self.spec.port),
             "lines": worker.rx_lines,
             "bytes": worker.rx_bytes,
             "epoch": self.epoch,

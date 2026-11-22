@@ -160,8 +160,12 @@ class Hub:
         # DTR (boot pin) and RTS (reset) low, so opening the port does not reset the hub
         self.ser = serial.Serial()
         self.ser.port, self.ser.baudrate, self.ser.timeout = port, BAUD, 0.2
-        self.ser.dtr = False
-        self.ser.rts = False
+        try:
+            from .serial_link import _set_line
+        except ImportError:         # run as a script next to serial_link.py
+            from serial_link import _set_line
+        _set_line(self.ser, "dtr", False)
+        _set_line(self.ser, "rts", False)
         self.ser.open()
         self.last_result = None  # outcome of the last send_data() attempt, for diagnostics
         self.polls = []         # announcements seen while busy with something else
@@ -363,6 +367,11 @@ def main():
     p.add_argument("--save", help="also save the rendered frame as a PNG")
     sub.add_parser("ping")
     ap.add_argument("--list", action="store_true", help="list serial ports and exit")
+    try:
+        from . import gpio_lines
+    except ImportError:             # run as a script: shelfkit/ is on sys.path
+        import gpio_lines
+    gpio_lines.add_arguments(ap)
     args = ap.parse_args()
 
     if args.list:
@@ -372,6 +381,10 @@ def main():
     if not args.port or not args.cmd:
         ap.error("port and a command (send, serve, show, stats, ping) are required")
 
+    try:
+        gpio_lines.apply_arguments(args, args.port)
+    except gpio_lines.GpioError as exc:
+        ap.error(f"GPIO: {exc}")
     hub = Hub(args.port)
     if not hub.ping():
         print("hub does not answer P - check the port and that the hub firmware is flashed")

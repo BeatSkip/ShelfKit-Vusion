@@ -23,6 +23,12 @@ BOOT pin and RTS is the RESET line, so that is the state which neither resets th
 board nor drops it into the bootloader. Per pane, "DTR" is a level toggle and
 "Reset" is a push button that pulses RTS for 100 ms.
 
+On a Raspberry Pi (or any Linux with a GPIO chip) RESET and BOOT can be wired to GPIO
+pins instead; everything that pulses RTS or holds DTR, the flasher included, then
+drives the pins:
+
+    python ShelfKit-Server/shelfkit-server.py hub=/dev/ttyAMA0 --gpio-reset 17 --gpio-boot 27
+
 [Copy logs] merges both panes by arrival time and puts them on the clipboard;
 [Save log] downloads the same text. [Send] closes the hub pane's port for the
 duration of the transfer (one serial port cannot serve two owners) and reopens
@@ -53,7 +59,7 @@ except ImportError:  # pragma: no cover - environment check
         "pyserial is required:  pip install -r ShelfKit-Server/requirements.txt"
     )
 
-from shelfkit import webapp  # noqa: E402 - after the sys.path fix above
+from shelfkit import gpio_lines, webapp  # noqa: E402 - after the sys.path fix above
 from shelfkit.app import App, build_specs  # noqa: E402
 from shelfkit.serial_link import DEFAULT_BAUD, available_ports  # noqa: E402
 from shelfkit.store import Store  # noqa: E402
@@ -96,6 +102,7 @@ def main(argv: list[str] | None = None) -> int:
                     help="shortest time between two redraws of the hub panel (default 60)")
     ap.add_argument("--hub-display-title", metavar="TEXT", help="header of the hub panel")
     ap.add_argument("--list", action="store_true", help="list serial ports and exit")
+    gpio_lines.add_arguments(ap, panes=True)
     args = ap.parse_args(argv)
 
     if args.list:
@@ -115,6 +122,11 @@ def main(argv: list[str] | None = None) -> int:
                   file=sys.stderr)
 
     specs, auto_open = build_specs(args.ports, args.baud)
+    try:
+        gpio_pins = gpio_lines.apply_arguments(args, {s.name: s.port for s in specs})
+    except gpio_lines.GpioError as exc:
+        print(f"GPIO: {exc}", file=sys.stderr)
+        return 1
     display = {}
     if args.hub_display:
         display["enabled"] = True
@@ -147,6 +159,8 @@ def main(argv: list[str] | None = None) -> int:
     print(f"ShelfKit server on {url}{bind}", flush=True)
     for spec, pane in zip(specs, app.panes.values()):
         print(f"  {spec.name:<6} {spec.port or '(no port)':<12} {pane.worker.status}", flush=True)
+    for pins in gpio_pins:
+        print(f"  GPIO   {pins.port}: {pins.describe()}", flush=True)
     print(f"state: {args.db if store is not None else 'not persisted'}", flush=True)
     if inkhost is not None:
         loaded = inkhost.loaded.values()

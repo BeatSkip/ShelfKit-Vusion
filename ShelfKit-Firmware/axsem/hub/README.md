@@ -52,6 +52,13 @@ hex lands in `Release/`. Over the serial port, flash the app-only image:
 python ShelfKit-Firmware/tooling/axsem-flasher.py Release/shelfkit-axsem-hub-latest.hex -p COM7
 ```
 
+On a Raspberry Pi with RESET and BOOT wired to GPIO pins instead of RTS/DTR (BCM numbers, see
+[the server README](../../../ShelfKit-Server/README.md#reset-and-boot-on-raspberry-pi-gpio-pins)):
+
+```
+python ShelfKit-Firmware/tooling/axsem-flasher.py Release/shelfkit-axsem-hub-latest.hex -p /dev/serial0 --gpio-reset 17 --gpio-boot 27
+```
+
 By hand, from this folder:
 
 ```powershell

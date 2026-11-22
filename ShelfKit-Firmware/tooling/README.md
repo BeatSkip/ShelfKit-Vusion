@@ -107,6 +107,11 @@ The flasher talks to the **mask-ROM** bootloader, selected by holding the BOOT p
 adapter's DTR line). That is the only thing that can write the top of the flash, so it is also how
 `bootloader-*.hex` gets installed in the first place.
 
+On Linux, `--gpio-reset PIN` and `--gpio-boot PIN` drive RESET and BOOT from GPIO pins (BCM numbers on
+a Raspberry Pi; asserted = low, `PIN:high` for the opposite) instead of RTS and DTR. It uses the
+server's `shelfkit/gpio_lines.py` and needs `python3-libgpiod`; see
+[the server README](../../ShelfKit-Server/README.md#reset-and-boot-on-raspberry-pi-gpio-pins).
+
 ## Requirements
 
 ```

@@ -91,6 +91,34 @@ Two ways:
   **Console** tab: type or pick the port, set the baud, press **Open**. **DTR**, **Reset** and
   **Clear log** sit on the same row. The hub's **Overview** tab has an Open/Close button too.
 
+### Reset and BOOT on Raspberry Pi GPIO pins
+
+On a Raspberry Pi (or any Linux with a GPIO chip) the hub's RESET and BOOT (PB3) can go to two GPIO
+pins instead of a USB adapter's RTS and DTR. That way the hub can sit on the Pi's own UART
+(`/dev/serial0`, 3.3 V, header pins 8/10), or on an adapter with only TX/RX/GND wired.
+
+```
+python ShelfKit-Server/shelfkit-server.py hub=/dev/serial0 --gpio-reset 17 --gpio-boot 27
+python ShelfKit-Server/shelfkit-server.py hub=/dev/ttyUSB0 --gpio-reset 17          # BOOT stays on DTR
+python ShelfKit-Server/shelfkit-server.py hub=/dev/ttyUSB0 tag=/dev/ttyUSB1 --gpio-reset 17 --gpio-reset tag:22
+```
+
+- **Pin numbers** are BCM GPIO numbers (GPIO17 = header pin 11, GPIO27 = pin 13), Pi 5 included.
+  A pin with no pane name belongs to the hub pane; `tag:22` puts it on the pane named `tag`.
+- **Levels** copy a USB adapter: asserted = **low**, released = **high**, so the board needs no
+  change. Add `:high` (`--gpio-boot 27:high`) for a line that is active high.
+- **Everything follows**: the Reset button, the DTR toggle, the boot-state learning at startup and the
+  serial flasher drive the pins; the adapter's own RTS/DTR stay released. The Hubs screen names the pins.
+- **Needs** libgpiod's Python binding, `sudo apt install python3-libgpiod` (or `pip install gpiod` in
+  a venv), and access to `/dev/gpiochip*`: the `gpio` group, which the Pi's first user is already in.
+  In a systemd unit add `SupplementaryGroups=gpio dialout`. No root.
+- `--gpio-chip gpiochip0` picks the chip; by default it is the Pi's header chip, found by its label.
+- **When the server stops** the pins are given back and float. The AX8052's RESET has a pull-up, but a
+  10 kΩ pull-up to 3.3 V on each wire keeps a long lead from holding the hub in reset or in boot.
+
+`shelfkit/hubhost.py` and `ShelfKit-Firmware/tooling/axsem-flasher.py` take the same `--gpio-reset`,
+`--gpio-boot` and `--gpio-chip`.
+
 The sidebar shows "Hub port closed" in red whenever the hub's port is closed. Fleet then says so in its headline
 and offers a button that opens it, so an empty shelf never looks like a broken page.
 

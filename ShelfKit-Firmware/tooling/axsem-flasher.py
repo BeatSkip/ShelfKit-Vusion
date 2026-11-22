@@ -3,16 +3,31 @@ import argparse
 import os
 import sys
 import time
+import importlib.util
 import serial
 import serial.tools.list_ports
 from tqdm import tqdm
 
+
+def load_gpio_lines():
+    """The server's gpio_lines.py (reset/boot on Raspberry Pi GPIO), loaded by path."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        "..", "..", "ShelfKit-Server", "shelfkit", "gpio_lines.py")
+    spec = importlib.util.spec_from_file_location("gpio_lines", path)
+    if spec is None or not os.path.exists(path):
+        sys.exit(f"--gpio-* needs {os.path.normpath(path)} (the ShelfKit-Server checkout)")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 class AxsemFlasher:
-    def __init__(self, port, baudrate=38400, timeout=1):
+    def __init__(self, port, baudrate=38400, timeout=1, gpio=None):
         self.port = port
         self.baudrate = baudrate
         self.timeout = timeout
         self.serial = None
+        self.gpio = gpio        # gpio_lines.PortPins: reset/boot on GPIO instead of RTS/DTR
     
     def open(self):
         try:
@@ -36,11 +51,18 @@ class AxsemFlasher:
         if self.serial and self.serial.is_open:
             self.serial.close()
     
+    def _line(self, name, state):
+        pin = self.gpio.lines.get(name) if self.gpio else None
+        if pin is not None:
+            pin.drive(state)
+            state = False           # the adapter's own line stays released
+        setattr(self.serial, name, state)
+
     def set_boot_pin(self, state):
-        self.serial.dtr = state
+        self._line("dtr", state)
     
     def set_reset_pin(self, state):
-        self.serial.rts = state
+        self._line("rts", state)
     
     def enter_boot_mode(self):
         print("Entering boot mode...")
@@ -153,6 +175,12 @@ def main():
     parser.add_argument('-b', '--baudrate', type=int, default=38400,
                         help='Baudrate of the bootloader (default: 38400)')
     parser.add_argument('-l', '--list', action='store_true', help='List available serial ports')
+    parser.add_argument('--gpio-reset', metavar='PIN[:high]',
+                        help='Linux/Raspberry Pi: GPIO (BCM number) wired to RESET, instead of RTS')
+    parser.add_argument('--gpio-boot', metavar='PIN[:high]',
+                        help='Linux/Raspberry Pi: GPIO (BCM number) wired to BOOT, instead of DTR')
+    parser.add_argument('--gpio-chip', metavar='CHIP',
+                        help='gpiochip to use (default: the Raspberry Pi header chip)')
     
     args = parser.parse_args()
     
@@ -164,7 +192,17 @@ def main():
         parser.print_help()
         return 1
     
-    flasher = AxsemFlasher(args.port, args.baudrate)
+    gpio = None
+    if args.gpio_reset or args.gpio_boot:
+        gpio_lines = load_gpio_lines()
+        try:
+            gpio = gpio_lines.configure(args.port, args.gpio_reset, args.gpio_boot, args.gpio_chip)
+        except gpio_lines.GpioError as exc:
+            print(f"GPIO: {exc}")
+            return 1
+        print(f"Reset/boot on GPIO: {gpio.describe()}")
+
+    flasher = AxsemFlasher(args.port, args.baudrate, gpio=gpio)
     success = flasher.flash(args.hex_file)
     
     return 0 if success else 1

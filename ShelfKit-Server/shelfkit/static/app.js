@@ -2531,8 +2531,9 @@ function renderHubDetail(pane, rows) {
         "Show on Fleet", () => { location.hash = "#fleet"; }));
     }
     list.push(
-      hubRow("Handshake lines",
-        `DTR ${pane.dtr ? "held" : "released"} · RTS ${pane.rts ? "held" : "released"}. Reset pulses RTS for 100 ms.`,
+      hubRow("Handshake lines", pane.gpio
+        ? `BOOT ${pane.dtr ? "held" : "released"} · reset ${pane.rts ? "held" : "released"}, on GPIO pins (${pane.gpio}). Reset pulses the pin for 100 ms.`
+        : `DTR ${pane.dtr ? "held" : "released"} · RTS ${pane.rts ? "held" : "released"}. Reset pulses RTS for 100 ms.`,
         "Reset", () => command(pane.key, "reset")),
       hubRow("Serial log", `${plural(pane.lines || 0, "line")} received`, "Open console", open),
     );
@@ -2863,7 +2864,9 @@ function renderFlash() {
     warning = "Set a port for this pane on the Hub screen first.";
     blocked = true;
   } else {
-    warning = `${paneInfo.port} is closed while flashing, then reopened. DTR must reach the chip's BOOT pin and RTS its reset.`;
+    warning = `${paneInfo.port} is closed while flashing, then reopened. ` + (paneInfo.gpio
+      ? `BOOT and reset are driven on GPIO pins (${paneInfo.gpio}).`
+      : "DTR must reach the chip's BOOT pin and RTS its reset.");
     if (paneInfo.key === state.hub) warning += " This is the hub's own port, so the hub stops while it runs.";
   }
   setClass(ui.flashWarning, blocked ? "warning" : "hint");

@@ -14,6 +14,11 @@ from typing import Callable
 import serial
 from serial.tools import list_ports
 
+try:
+    from . import gpio_lines
+except ImportError:     # imported as a script module (hubhost.py run directly)
+    import gpio_lines
+
 # The applications' rate (shelfhw.c). The bootloader on the same wire still runs at
 # 38400, so its few boot lines show up here as noise - see "The two line rates".
 DEFAULT_BAUD = 115200
@@ -37,14 +42,23 @@ def available_ports() -> list[tuple[str, str]]:
 def _set_line(ser, line: str, value: bool) -> bool:
     """Set DTR/RTS, tolerating adapters and URL handlers that refuse it.
 
-    NotImplementedError is in the list because pyserial's virtual ports
+    When the port has GPIO pins for its reset/boot (gpio_lines, --gpio-reset/--gpio-boot
+    on a Raspberry Pi), the pin is driven instead and the adapter's own line is kept
+    released. NotImplementedError is in the list because pyserial's virtual ports
     (loop://, socket://) implement no modem-control lines at all.
     """
+    pin = gpio_lines.pin_for(getattr(ser, "port", None), line)
+    if pin is not None:
+        try:
+            pin.drive(value)
+        except OSError:
+            return False
+        value = False
     try:
         setattr(ser, line, value)
         return True
     except (OSError, ValueError, NotImplementedError, serial.SerialException):
-        return False
+        return pin is not None
 
 
 def _make_serial(spec: PortSpec):
